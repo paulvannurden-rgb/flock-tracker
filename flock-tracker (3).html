@@ -1,0 +1,2575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flock Health Ledger</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222536;
+    --surface3: #2a2e42;
+    --border: #2e3248;
+    --border2: #3d4260;
+    --text: #e8eaf2;
+    --text2: #9198b8;
+    --text3: #5a6080;
+    --accent: #6c8ef5;
+    --accent2: #4f6fe8;
+    --accent-glow: rgba(108,142,245,0.15);
+    --green: #4ade80;
+    --green-bg: #0d2318;
+    --warn: #f59e0b;
+    --danger: #f87171;
+    --danger-bg: #2d1515;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --radius: 0.75rem;
+    --radius-sm: 0.45rem;
+    --radius-lg: 1rem;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; font-size: 14px; line-height: 1.5; }
+  h1,h2,h3,h4 { font-family: 'Inter', sans-serif; font-weight: 600; }
+
+  /* LOGIN */
+  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: radial-gradient(ellipse at 50% 30%, #1a1f35 0%, #0f1117 70%); }
+  .login-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 1.25rem; padding: 2.5rem; width: 100%; max-width: 360px; text-align: center; box-shadow: var(--shadow); }
+  .login-box h1 { font-size: 1.6rem; color: var(--text); margin-bottom: 0.25rem; font-weight: 700; }
+  .login-box p { color: var(--text3); font-size: 0.78rem; margin-bottom: 2rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .login-error { background: var(--danger-bg); color: var(--danger); border-radius: var(--radius-sm); padding: 0.6rem 1rem; font-size: 0.83rem; margin-bottom: 1rem; display: none; }
+  .login-logo { width: 52px; height: 52px; background: var(--accent-glow); border: 1px solid var(--border2); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; font-size: 1.6rem; }
+
+  /* LAYOUT */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); }
+  .header-left { display: flex; align-items: center; gap: 0.75rem; }
+  .header-logo { width: 32px; height: 32px; background: var(--accent-glow); border: 1px solid var(--border2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+  .header-title { font-size: 0.95rem; color: var(--text); font-weight: 600; }
+  .header-sub { font-size: 0.68rem; color: var(--text3); }
+  nav { display: flex; gap: 0.15rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.2rem; }
+  .nav-btn { background: none; border: none; color: var(--text3); padding: 0.35rem 0.65rem; border-radius: 0.35rem; cursor: pointer; font-size: 0.75rem; font-family: 'Inter', sans-serif; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
+  .nav-btn.active { background: var(--surface2); color: var(--accent); }
+  .nav-btn:hover:not(.active) { color: var(--text2); background: var(--surface2); }
+  main { flex: 1; padding: 1.5rem; max-width: 1000px; margin: 0 auto; width: 100%; }
+
+  /* FORMS */
+  .field { margin-bottom: 0.9rem; }
+  .field label { display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.3rem; }
+  input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 0.5rem 0.75rem; font-size: 0.88rem; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); box-shadow: 0 0 0 3px var(--accent-glow); }
+  textarea { resize: vertical; min-height: 70px; }
+  .row { display: flex; gap: 0.75rem; }
+  .row .field { flex: 1; min-width: 0; }
+
+  /* BUTTONS */
+  .btn { border: none; border-radius: var(--radius-sm); padding: 0.5rem 1rem; font-size: 0.83rem; font-family: 'Inter', sans-serif; cursor: pointer; font-weight: 600; transition: all 0.15s; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .btn-primary { background: var(--accent2); color: #fff; }
+  .btn-primary:hover { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+  .btn-secondary { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
+  .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #5a2020; }
+  .btn-danger:hover { background: #3d1a1a; }
+  .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
+  .btn-icon { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text2); padding: 0.3rem 0.55rem; font-size: 0.75rem; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 500; transition: all 0.15s; }
+  .btn-icon:hover { border-color: var(--border2); color: var(--text); background: var(--surface3); }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .card-hover { cursor: pointer; transition: all 0.15s; }
+  .card-hover:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 1rem; color: var(--text); font-weight: 600; }
+  .modal-close { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .modal-close:hover { background: var(--surface3); color: var(--text); }
+  .modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-green { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+  .badge-yellow { background: rgba(245,158,11,0.1); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
+  .badge-red { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
+  .badge-blue { background: rgba(96,165,250,0.1); color: var(--blue); border: 1px solid rgba(96,165,250,0.25); }
+  .badge-purple { background: rgba(167,139,250,0.1); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
+  .badge-gray { background: rgba(148,163,184,0.1); color: var(--text2); border: 1px solid var(--border); }
+
+  /* TABS */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; overflow-x: auto; }
+  .tab { background: none; border: none; color: var(--text3); padding: 0.6rem 0.9rem; font-size: 0.8rem; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; transition: all 0.15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text2); }
+
+  /* FLOCK GRID */
+  .flock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; }
+
+  /* SEARCH BAR */
+  .search-bar { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .search-bar input { flex: 1; min-width: 160px; }
+  .filter-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text3); padding: 0.35rem 0.75rem; border-radius: var(--radius-sm); font-size: 0.75rem; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
+  .filter-btn.active { background: var(--accent-glow); border-color: var(--accent2); color: var(--accent); }
+  .filter-btn:hover:not(.active) { border-color: var(--border2); color: var(--text2); }
+
+  /* RECORD ROWS */
+  .record-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.5rem; transition: border-color 0.15s; }
+  .record-row:hover { border-color: var(--border2); }
+  .record-row:last-child { margin-bottom: 0; }
+  .record-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+  .confirm-inline { display: flex; align-items: center; gap: 0.35rem; }
+  .confirm-inline span { font-size: 0.73rem; color: var(--danger); }
+
+  /* PEDIGREE */
+  .pedigree-tree { overflow-x: auto; padding-bottom: 1rem; }
+  .ped-node { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; font-size: 0.8rem; min-width: 130px; }
+  .ped-node.linked { cursor: pointer; border-color: var(--border2); }
+  .ped-node.linked:hover { border-color: var(--accent); }
+  .ped-node-name { font-weight: 600; color: var(--text); }
+  .ped-node-sub { font-size: 0.68rem; color: var(--text3); margin-top: 0.1rem; }
+  .ped-row { display: flex; gap: 1.5rem; align-items: flex-start; }
+  .ped-col { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  /* WEIGHT CHART */
+  .weight-chart { background: var(--bg); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); }
+  canvas { width: 100% !important; }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); }
+  .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5; }
+  .empty h3 { font-size: 1rem; color: var(--text2); margin-bottom: 0.3rem; font-weight: 600; }
+  .empty p { font-size: 0.83rem; }
+
+  /* LOADING */
+  .loading { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.85rem; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 0.5rem; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* SECTION HEADER */
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .section-title { font-size: 0.85rem; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* PROFILE HEADER */
+  .profile-header { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+  .profile-name { font-size: 1.5rem; color: var(--text); font-weight: 700; }
+  .profile-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; align-items: center; }
+
+  /* OPTGROUP */
+  optgroup { color: var(--text3); font-style: normal; font-size: 0.72rem; }
+  option { color: var(--text); background: var(--bg); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border2); color: var(--text); padding: 0.6rem 1.2rem; border-radius: var(--radius); font-size: 0.83rem; z-index: 999; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; box-shadow: var(--shadow); }
+  #toast.show { opacity: 1; }
+
+  /* DIVIDER */
+  .divider { height: 1px; background: var(--border); margin: 1rem 0; }
+
+  @media (max-width: 600px) {
+    main { padding: 0.75rem; }
+    .flock-grid { grid-template-columns: 1fr 1fr; }
+    nav { display: none; }
+    .mobile-nav { display: flex !important; }
+    header { flex-wrap: wrap; gap: 0.5rem; }
+  }
+  .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 0.4rem 0.5rem; z-index: 50; gap: 0; backdrop-filter: blur(12px); }
+  .mobile-nav-btn { flex: 1; background: none; border: none; color: var(--text3); padding: 0.45rem 0.25rem; font-size: 0.6rem; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; transition: color 0.15s; }
+  .mobile-nav-btn.active { color: var(--accent); }
+  .mobile-nav-btn span:first-child { font-size: 1rem; }
+  @media (max-width: 600px) { main { padding-bottom: 5rem; } }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">🐑</div>
+    <h1>Flock Health Ledger</h1>
+    <p>Hidden Creek Lambs</p>
+    <div class="login-error" id="login-error"></div>
+    <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="Enter flock password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <div class="header-left">
+      <div class="header-logo">🐑</div>
+      <div>
+        <div class="header-title">Flock Health Ledger</div>
+        <div class="header-sub" id="flock-count">Loading…</div>
+      </div>
+    </div>
+    <nav id="main-nav">
+      <button class="nav-btn active" onclick="showPage('flock')" data-page="flock">Flock</button>
+      <button class="nav-btn" onclick="showPage('airams')" data-page="airams">AI Rams</button>
+      <button class="nav-btn" onclick="showPage('breeding')" data-page="breeding">Breeding</button>
+      <button class="nav-btn" onclick="showPage('calendar')" data-page="calendar">Calendar</button>
+      <button class="nav-btn" onclick="showPage('pedigree')" data-page="pedigree">Pedigree</button>
+      <button class="nav-btn" onclick="showPage('export')" data-page="export">Export</button>
+      <button class="nav-btn" onclick="doLogout()">Sign Out</button>
+    </nav>
+    <div style="display:flex;gap:0.5rem;align-items:center">
+      <button class="btn btn-secondary btn-sm" id="header-treatment-btn" onclick="openFlockTreatment()">💉 Flock Treatment</button>
+      <button class="btn btn-primary btn-sm" id="header-action-btn" onclick="openAddLamb()">+ Add Lamb</button>
+    </div>
+  </header>
+
+  <!-- MOBILE NAV -->
+  <div class="mobile-nav" id="mobile-nav">
+    <button class="mobile-nav-btn active" onclick="showPage('flock')" data-page="flock"><span>🐑</span><span>Flock</span></button>
+    <button class="mobile-nav-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span><span>AI Rams</span></button>
+    <button class="mobile-nav-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span><span>Breeding</span></button>
+    <button class="mobile-nav-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span><span>Calendar</span></button>
+    <button class="mobile-nav-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span><span>Pedigree</span></button>
+    <button class="mobile-nav-btn" onclick="showPage('export')" data-page="export"><span>📊</span><span>Export</span></button>
+    <button class="mobile-nav-btn" onclick="doLogout()"><span>🚪</span><span>Out</span></button>
+  </div>
+
+  <main id="main-content">
+    <div class="loading"><span class="spinner"></span>Loading flock…</div>
+  </main>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://fmdnazihkanqflnabkcy.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZG5hemloa2FucWZsbmFia2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTUzMzMsImV4cCI6MjA5MTg3MTMzM30.tzR7CNxZ9RtZgtKkRNC3UUp1_hTjgoI8kL5rt_tRPyk';
+const FLOCK_PASSWORD = 'flock2024';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const BASE_VACCINES = ['CDT (Clostridium/Tetanus)','Overeating Disease','Foot Rot','Caseous Lymphadenitis (CL)','Rabies'];
+const BASE_MEDS = ['Ivermectin (Dewormer)','Fenbendazole','Coccidiostat','Penicillin','LA-200 (Oxytetracycline)','Banamine','Vitamin B12','Selenium/Vit E'];
+const TAG_COLORS = ['#e8a838','#e85e38','#38a8e8','#38e86e','#b438e8','#e838a0','#38e8d4','#6e8fe8'];
+const ROUTES = ['','Subcutaneous (SQ)','Intramuscular (IM)','Oral','Topical','Pour-on','Intravenous (IV)'];
+
+let currentPage = 'flock';
+let currentLambId = null;
+let currentLambTab = 'health';
+let allLambs = [];
+let allAiRams = [];
+let customProducts = { vaccine: [], medication: [] };
+let flockFilter = 'Active';
+let flockTypeFilter = 'All';
+let flockSearch = '';
+let confirmingDelete = null;
+
+// ── AUTH ──────────────────────────────────────────────
+function doLogin() {
+  const pw = document.getElementById('login-password').value;
+  if (pw === FLOCK_PASSWORD) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('app').style.flexDirection = 'column';
+    init();
+  } else {
+    const el = document.getElementById('login-error');
+    el.textContent = 'Incorrect password. Please try again.';
+    el.style.display = 'block';
+  }
+}
+function doLogout() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-password').value = '';
+}
+
+// ── INIT ──────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadLambs(), loadCustomProducts(), loadAiRams()]);
+  showPage('flock');
+}
+
+async function loadLambs() {
+  const { data } = await db.from('lambs').select('*').order('name');
+  allLambs = data || [];
+  document.getElementById('flock-count').textContent = `${allLambs.filter(l=>l.status==='Active').length} active lambs`;
+}
+
+async function loadAiRams() {
+  const { data } = await db.from('ai_rams').select('*').order('name');
+  allAiRams = data || [];
+}
+
+async function loadCustomProducts() {
+  const { data } = await db.from('custom_products').select('*').order('name');
+  customProducts = { vaccine: [], medication: [] };
+  (data || []).forEach(p => { if (customProducts[p.type]) customProducts[p.type].push(p.name); });
+}
+
+// ── NAVIGATION ────────────────────────────────────────
+function showPage(page) {
+  currentPage = page;
+  currentLambId = null;
+  document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  const btn = document.getElementById('header-action-btn');
+  const treatBtn = document.getElementById('header-treatment-btn');
+  btn.style.display = page === 'flock' ? '' : 'none';
+  treatBtn.style.display = page === 'flock' ? '' : 'none';
+  if (page === 'flock') renderFlock();
+  else if (page === 'airams') renderAiRams();
+  else if (page === 'breeding') renderBreeding();
+  else if (page === 'calendar') renderCalendar();
+  else if (page === 'pedigree') renderPedigreeNetwork();
+  else if (page === 'export') renderExport();
+}
+
+function showLamb(id) {
+  currentLambId = id;
+  currentLambTab = 'health';
+  document.getElementById('header-action-btn').style.display = 'none';
+  document.getElementById('header-treatment-btn').style.display = 'none';
+  renderLambDetail();
+}
+
+// ── FLOCK PAGE ────────────────────────────────────────
+function renderFlock() {
+  const statuses = ['Active','Sold','Deceased','All'];
+  const flockTypes = ['All','Show','Breeding','Both'];
+  const filtered = allLambs.filter(l => {
+    const flockType = l.flock_type || (l.sex === 'Wether' ? 'Show' : 'Breeding');
+    const matchStatus = flockFilter === 'All' || l.status === flockFilter;
+    const matchType = flockTypeFilter === 'All' || flockType === flockTypeFilter || flockType === 'Both';
+    const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase());
+    return matchStatus && matchType && matchSearch;
+  });
+
+  let html = `
+    <div class="search-bar">
+      <input placeholder="Search name, tag, scrapie ID…" value="${flockSearch}" oninput="flockSearch=this.value;renderFlock()">
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap">
+        ${statuses.map(s=>`<button class="filter-btn ${flockFilter===s?'active':''}" onclick="flockFilter='${s}';renderFlock()">${s}</button>`).join('')}
+        <div style="width:1px;background:var(--border);margin:0 0.2rem"></div>
+        ${flockTypes.map(t=>`<button class="filter-btn ${flockTypeFilter===t?'active':''}" onclick="flockTypeFilter='${t}';renderFlock()">${t==='All'?'All Flocks':t+' Flock'}</button>`).join('')}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.9rem;display:flex;align-items:center;gap:0.5rem">
+        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">${filtered.length}</span>
+        <span style="font-size:0.75rem;color:var(--text3);font-weight:500">${filtered.length === 1 ? 'animal' : 'animals'}</span>
+      </div>
+      ${flockTypeFilter !== 'All' ? `<span style="font-size:0.78rem;color:var(--text3)">${flockTypeFilter} Flock</span>` : ''}
+      ${flockFilter !== 'All' ? `<span style="font-size:0.78rem;color:var(--text3)">${flockFilter}</span>` : ''}
+      ${flockSearch ? `<span style="font-size:0.78rem;color:var(--text3)">matching "${flockSearch}"</span>` : ''}
+    </div>`;
+
+  if (filtered.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🐑</div><h3>No lambs found</h3><p>Try a different filter or add your first lamb</p></div>`;
+  } else {
+    html += `<div class="flock-grid">`;
+    filtered.forEach(lamb => {
+      const color = lamb.tag_color || TAG_COLORS[0];
+      const statusBadge = lamb.status === 'Active' ? 'badge-green' : lamb.status === 'Sold' ? 'badge-blue' : 'badge-red';
+      const flockType = lamb.flock_type || (lamb.sex === 'Wether' ? 'Show' : 'Breeding');
+      const flockBadge = flockType === 'Show' ? 'badge-purple' : flockType === 'Breeding' ? 'badge-blue' : 'badge-gray';
+      html += `
+        <div class="card card-hover" onclick="showLamb('${lamb.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
+            <div style="min-width:0">
+              <div style="font-size:1rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lamb.name}</div>
+              <div style="display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap;align-items:center">
+                ${lamb.ear_tag?`<span style="font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
+                <span class="badge ${statusBadge}">${lamb.status}</span>
+                <span class="badge ${flockBadge}" style="font-size:0.62rem">${flockType}</span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text3);margin-top:0.35rem">${lamb.sex||''}${lamb.breed?' · '+lamb.breed:''}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>
+            </div>
+            <div style="font-size:0.68rem;color:var(--text3);text-align:right;flex-shrink:0">${lamb.role!=='Standard'?`<div style="color:var(--accent);font-weight:600">${lamb.role}</div>`:''}</div>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+  document.getElementById('main-content').innerHTML = html;
+}
+
+function calcAge(dob) {
+  if (!dob) return '';
+  const days = Math.floor((new Date() - new Date(dob)) / 86400000);
+  if (days < 0) return '';
+  if (days < 30) return `${days}d`;
+  const mo = Math.floor(days / 30.44);
+  if (mo < 24) return `${mo}mo`;
+  return `${Math.floor(mo/12)}yr`;
+}
+
+// ── LAMB DETAIL ───────────────────────────────────────
+async function renderLambDetail() {
+  const lamb = allLambs.find(l => l.id === currentLambId);
+  if (!lamb) { showPage('flock'); return; }
+
+  const color = lamb.tag_color || TAG_COLORS[0];
+  const statusBadge = lamb.status === 'Active' ? 'badge-green' : lamb.status === 'Sold' ? 'badge-blue' : 'badge-red';
+
+  let sireDisplay = '—', damDisplay = '—';
+  if (lamb.sire_id) { const s = allLambs.find(l=>l.id===lamb.sire_id); sireDisplay = s ? `<span class="link" onclick="showLamb('${s.id}')">${s.name}</span>` : lamb.sire_text||'—'; }
+  else if (lamb.ai_sire_id) { const s = allAiRams.find(r=>r.id===lamb.ai_sire_id); sireDisplay = s ? `${s.name} 🧬` : lamb.sire_text||'—'; }
+  else if (lamb.sire_text) sireDisplay = lamb.sire_text;
+  if (lamb.dam_id) { const d = allLambs.find(l=>l.id===lamb.dam_id); damDisplay = d ? `<span class="link" onclick="showLamb('${d.id}')">${d.name}</span>` : lamb.dam_text||'—'; }
+  else if (lamb.dam_text) damDisplay = lamb.dam_text;
+
+  const content = document.getElementById('main-content');
+  content.innerHTML = `
+    <div style="margin-bottom:1rem">
+      <button class="btn btn-secondary btn-sm" onclick="showPage('flock')">← Back to Flock</button>
+    </div>
+    <div class="profile-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
+        <div>
+          <div class="profile-name">${lamb.name}</div>
+          <div class="profile-meta">
+            ${lamb.ear_tag?`<span style="font-size:0.78rem;font-weight:600;padding:0.12rem 0.5rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
+            ${lamb.scrapie_id?`<span class="badge badge-gray">Scrapie: ${lamb.scrapie_id}</span>`:''}
+            <span class="badge ${statusBadge}">${lamb.status}</span>
+            ${lamb.flock_type?`<span class="badge ${lamb.flock_type==='Show'?'badge-purple':lamb.flock_type==='Breeding'?'badge-blue':'badge-gray'}">${lamb.flock_type} Flock</span>`:''}
+            ${lamb.role!=='Standard'?`<span class="badge badge-yellow">${lamb.role}</span>`:''}
+            ${lamb.sex?`<span style="color:var(--text2);font-size:0.83rem">${lamb.sex}</span>`:''}
+            ${lamb.dob?`<span style="color:var(--text3);font-size:0.8rem">Born ${lamb.dob} (${calcAge(lamb.dob)})</span>`:''}
+          </div>
+          ${lamb.genetic_code?`<div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text3)">🧬 ${lamb.genetic_code}</div>`:''}
+          ${lamb.breed?`<div style="margin-top:0.25rem;font-size:0.82rem;color:var(--text3);font-style:italic">${lamb.breed}</div>`:''}
+          <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text3)">
+            Sire: ${sireDisplay} &nbsp;·&nbsp; Dam: ${damDisplay}
+          </div>
+          ${lamb.status!=='Active'&&lamb.status_date?`<div style="margin-top:0.4rem;font-size:0.8rem;color:var(--text3)">${lamb.status} ${lamb.status_date}${lamb.status_note?' — '+lamb.status_note:''}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="openEditLamb('${lamb.id}')">✏️ Edit Profile</button>
+          ${lamb.status==='Active'?`
+            <button class="btn btn-secondary btn-sm" onclick="openStatusChange('${lamb.id}','Sold')" style="color:var(--blue);border-color:#1a3a60">💰 Mark Sold</button>
+            <button class="btn btn-secondary btn-sm" onclick="openStatusChange('${lamb.id}','Deceased')" style="color:#f08080;border-color:#5a2020">✝ Mark Deceased</button>
+          `:`
+            <button class="btn btn-secondary btn-sm" onclick="reactivateLamb('${lamb.id}')" style="color:var(--accent);border-color:var(--border2)">✅ Reactivate</button>
+          `}
+          <div id="delete-lamb-btn">
+            <button class="btn btn-secondary btn-sm" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteLamb('${lamb.id}')">🗑 Delete Lamb</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab ${currentLambTab==='health'?'active':''}" onclick="switchLambTab('health')">💉 Health</button>
+      ${(lamb.flock_type==='Show'||lamb.flock_type==='Both'||!lamb.flock_type&&lamb.sex==='Wether')?`<button class="tab ${currentLambTab==='weight'?'active':''}" onclick="switchLambTab('weight')">⚖️ Weight</button>`:''}
+      ${(lamb.flock_type==='Breeding'||lamb.flock_type==='Both'||(!lamb.flock_type&&lamb.sex!=='Wether'))?`<button class="tab ${currentLambTab==='breeding'?'active':''}" onclick="switchLambTab('breeding')">🐏 Breeding</button>`:''}
+      ${(lamb.flock_type==='Breeding'||lamb.flock_type==='Both'||(!lamb.flock_type&&lamb.sex!=='Wether'))?`<button class="tab ${currentLambTab==='embryo'?'active':''}" onclick="switchLambTab('embryo')">🔬 Embryo</button>`:''}
+      <button class="tab ${currentLambTab==='notes'?'active':''}" onclick="switchLambTab('notes')">📝 Notes</button>
+      <button class="tab ${currentLambTab==='pedigree'?'active':''}" onclick="switchLambTab('pedigree')">🌳 Pedigree</button>
+    </div>
+    <div id="lamb-tab-content"><div class="loading"><span class="spinner"></span>Loading…</div></div>
+  `;
+
+  style_links();
+  loadLambTab();
+}
+
+function style_links() {
+  const style = document.createElement('style');
+  style.textContent = '.link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}';
+  document.head.appendChild(style);
+}
+
+function switchLambTab(tab) {
+  currentLambTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().includes(tab) || t.onclick?.toString().includes(tab)));
+  document.querySelectorAll('.tab').forEach(t => { if(t.getAttribute('onclick')?.includes(`'${tab}'`)) t.classList.add('active'); else t.classList.remove('active'); });
+  loadLambTab();
+}
+
+async function loadLambTab() {
+  const el = document.getElementById('lamb-tab-content');
+  if (!el) return;
+  el.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  if (currentLambTab === 'health') await renderHealthTab(el);
+  else if (currentLambTab === 'weight') await renderWeightTab(el);
+  else if (currentLambTab === 'breeding') await renderBreedingTab(el);
+  else if (currentLambTab === 'embryo') await renderEmbryoTab(el);
+  else if (currentLambTab === 'notes') await renderNotesTab(el);
+  else if (currentLambTab === 'pedigree') renderPedigreeTab(el);
+}
+
+// ── HEALTH TAB ────────────────────────────────────────
+async function renderHealthTab(el) {
+  const { data: records } = await db.from('health_records').select('*').eq('lamb_id', currentLambId).order('date', {ascending:false});
+  const recs = records || [];
+  let html = `
+    <div class="section-header">
+      <div class="section-title">Health Records</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddRecord()">+ Log Record</button>
+    </div>`;
+  if (recs.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">💉</div><h3>No records yet</h3><p>Log a vaccine or medication</p></div>`;
+  } else {
+    recs.forEach(r => {
+      const typeBadge = r.type === 'vaccine' ? 'badge-green' : 'badge-yellow';
+      html += `
+        <div class="record-row" id="rrow-${r.id}">
+          <div style="display:flex;gap:0.75rem;flex:1;align-items:flex-start">
+            <span style="font-size:1.3rem">${r.type==='vaccine'?'💉':'💊'}</span>
+            <div>
+              <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+                <span style="font-weight:600;color:var(--text)">${r.product}</span>
+                <span class="badge ${typeBadge}">${r.type}</span>
+              </div>
+              <div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;display:flex;gap:0.75rem;flex-wrap:wrap">
+                <span>📅 ${r.date}${r.end_date?' → '+r.end_date:''}</span>
+                ${r.dose?`<span>⚖️ ${r.dose}</span>`:''}
+                ${r.route?`<span>💉 ${r.route}</span>`:''}
+              </div>
+              ${r.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;font-style:italic">${r.notes}</div>`:''}
+            </div>
+          </div>
+          <div class="record-actions" id="ract-${r.id}">
+            <button class="btn-icon" onclick="openEditRecord('${r.id}')">✏️</button>
+            <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteRecord('${r.id}')">🗑</button>
+          </div>
+        </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function confirmDeleteRecord(id) {
+  const el = document.getElementById(`ract-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteRecord('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+
+async function deleteRecord(id) {
+  await db.from('health_records').delete().eq('id', id);
+  toast('Record deleted');
+  loadLambTab();
+}
+
+// ── WEIGHT TAB ────────────────────────────────────────
+async function renderWeightTab(el) {
+  const { data } = await db.from('weight_records').select('*').eq('lamb_id', currentLambId).order('date', {ascending:true});
+  const recs = data || [];
+  let html = `
+    <div class="section-header">
+      <div class="section-title">Weight Records</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddWeight()">+ Log Weight</button>
+    </div>`;
+  if (recs.length >= 2) {
+    html += `<div class="weight-chart"><canvas id="weight-canvas" height="180"></canvas></div>`;
+  }
+  if (recs.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">⚖️</div><h3>No weights logged</h3></div>`;
+  } else {
+    [...recs].reverse().forEach(r => {
+      html += `
+        <div class="record-row" id="wrow-${r.id}">
+          <div>
+            <span style="font-weight:600;color:var(--text);font-size:1rem">${r.weight_lbs} lbs</span>
+            <div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem">📅 ${r.date}${r.notes?' — '+r.notes:''}</div>
+          </div>
+          <div class="record-actions" id="wact-${r.id}">
+            <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteWeight('${r.id}')">🗑</button>
+          </div>
+        </div>`;
+    });
+  }
+  el.innerHTML = html;
+  if (recs.length >= 2) drawWeightChart(recs);
+}
+
+function drawWeightChart(recs) {
+  const canvas = document.getElementById('weight-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 400, H = 180;
+  canvas.width = W; canvas.height = H;
+  const pad = { t:20, r:20, b:30, l:45 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const weights = recs.map(r => parseFloat(r.weight_lbs));
+  const minW = Math.min(...weights) * 0.95, maxW = Math.max(...weights) * 1.05;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = '#263d1c'; ctx.lineWidth = 1;
+  for (let i=0;i<=4;i++) {
+    const y = pad.t + iH - (i/4)*iH;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+iW, y); ctx.stroke();
+    ctx.fillStyle='#4a6e38'; ctx.font='10px Source Serif 4,serif'; ctx.textAlign='right';
+    ctx.fillText((minW+(maxW-minW)*i/4).toFixed(0), pad.l-4, y+3);
+  }
+  ctx.beginPath(); ctx.strokeStyle='#6ab84a'; ctx.lineWidth=2;
+  recs.forEach((r,i) => {
+    const x = pad.l + (i/(recs.length-1))*iW;
+    const y = pad.t + iH - ((parseFloat(r.weight_lbs)-minW)/(maxW-minW))*iH;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  recs.forEach((r,i) => {
+    const x = pad.l + (i/(recs.length-1))*iW;
+    const y = pad.t + iH - ((parseFloat(r.weight_lbs)-minW)/(maxW-minW))*iH;
+    ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fillStyle='#6ab84a'; ctx.fill();
+    if (i===0||i===recs.length-1) {
+      ctx.fillStyle='#8aad72'; ctx.font='10px Source Serif 4,serif'; ctx.textAlign='center';
+      ctx.fillText(r.date.slice(5), x, H-pad.b+14);
+    }
+  });
+}
+
+function confirmDeleteWeight(id) {
+  const el = document.getElementById(`wact-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteWeight('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+async function deleteWeight(id) {
+  await db.from('weight_records').delete().eq('id', id);
+  toast('Weight deleted'); loadLambTab();
+}
+
+// ── BREEDING TAB ──────────────────────────────────────
+async function renderBreedingTab(el) {
+  const { data } = await db.from('breeding_records').select('*, breeding_results(*, breeding_result_lambs(*))').eq('lamb_id', currentLambId).order('breeding_date', {ascending:false});
+  const recs = data || [];
+  let html = `
+    <div class="section-header">
+      <div class="section-title">Breeding Records</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddBreeding()">+ Log Breeding</button>
+    </div>`;
+  if (recs.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No breeding records</h3></div>`;
+  } else {
+    recs.forEach(r => {
+      const sire = r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : (r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null);
+      const sireName = sire ? sire.name+(r.ai_sire_id?' 🧬':'') : (r.sire_text || '—');
+      const results = r.breeding_results || [];
+      html += `
+        <div class="card" style="margin-bottom:0.75rem">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="flex:1">
+              <div style="font-weight:600;color:var(--text)">Sire: ${sireName}</div>
+              <div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
+                ${r.breeding_date?`<span>🗓 Bred: ${r.breeding_date}</span>`:''}
+                ${r.expected_lamb_date?`<span>📅 Expected: ${r.expected_lamb_date}</span>`:''}
+                ${(()=>{ const ob = r.outcome==='Confirmed Pregnant'?'badge-green':r.outcome==='Lamb Born'?'badge-blue':r.outcome==='Not Pregnant'||r.outcome==='Failed'?'badge-red':'badge-gray'; return r.outcome&&r.outcome!=='Pending'?`<span class="badge ${ob}" style="font-size:0.65rem">${r.outcome}</span>`:''; })()}
+              </div>
+              ${r.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;font-style:italic">${r.notes}</div>`:''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="openAddBreedingResult('${r.id}')">+ Result</button>
+              <button class="btn-icon" onclick="openEditBreeding('${r.id}')">✏️ Edit</button>
+              <div id="bact-${r.id}"><button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteBreeding('${r.id}')">🗑</button></div>
+            </div>
+          </div>
+          ${results.length > 0 ? `
+            <div style="margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
+              <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">Lambing Results</div>
+              ${results.map(res => {
+                const lambIds = res.breeding_result_lambs || [];
+                return `<div style="padding:0.45rem 0;border-bottom:1px solid var(--border)">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
+                    <div>
+                      <div style="font-size:0.85rem;color:var(--text);display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
+                        ${res.birth_date?`<span>📅 ${res.birth_date}</span>`:''}
+                        ${res.num_born!=null?`<span class="badge badge-green" style="font-size:0.68rem">${res.num_born} born</span>`:''}
+                        ${res.num_alive!=null?`<span class="badge badge-blue" style="font-size:0.68rem">${res.num_alive} alive</span>`:''}
+                        ${res.num_male!=null?`<span style="font-size:0.78rem;color:var(--text3)">${res.num_male}♂</span>`:''}
+                        ${res.num_female!=null?`<span style="font-size:0.78rem;color:var(--text3)">${res.num_female}♀</span>`:''}
+                      </div>
+                      ${res.notes?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem;font-style:italic">${res.notes}</div>`:''}
+                      ${lambIds.length>0?`<div style="margin-top:0.4rem;display:flex;flex-wrap:wrap;gap:0.3rem">
+                        ${lambIds.map(lb => {
+                          const linked = lb.lamb_id ? allLambs.find(l=>l.id===lb.lamb_id) : null;
+                          const name = linked ? `<span class="link" onclick="showLamb('${linked.id}')">${linked.name}</span>` : '';
+                          return `<span style="font-size:0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:0.3rem;padding:0.1rem 0.45rem;color:var(--text2)">
+                            ${lb.ear_tag?`#${lb.ear_tag} `:''}${lb.sex||''}${lb.birth_weight?` · ${lb.birth_weight}lbs`:''}${name?' · '+name:''}
+                          </span>`;
+                        }).join('')}
+                      </div>`:''}
+                    </div>
+                    <div style="display:flex;gap:0.35rem;flex-shrink:0" id="bract-${res.id}">
+                      <button class="btn-icon" onclick="openEditBreedingResult('${res.id}','${r.id}')">✏️</button>
+                      <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteBreedingResult('${res.id}')">🗑</button>
+                    </div>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>` : ''}
+        </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function confirmDeleteBreeding(id) {
+  const el = document.getElementById(`bact-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteBreeding('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+async function deleteBreeding(id) {
+  await db.from('breeding_records').delete().eq('id', id);
+  toast('Record deleted'); loadLambTab();
+}
+
+function openAddBreedingResult(breedingId) { showBreedingResultModal(breedingId, null, []); }
+async function openEditBreedingResult(resultId, breedingId) {
+  const { data: result } = await db.from('breeding_results').select('*').eq('id', resultId).single();
+  const { data: lambRows } = await db.from('breeding_result_lambs').select('*').eq('result_id', resultId).order('created_at');
+  if (result) showBreedingResultModal(breedingId, result, lambRows||[]);
+}
+
+function showBreedingResultModal(breedingId, result, existingLambs) {
+  const isEdit = !!result;
+  window._brLambs = existingLambs ? existingLambs.map(l=>({...l})) : [];
+  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${isEdit ? 'Edit Lambing Result' : 'Log Lambing Result'}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="row">
+      <div class="field"><label>Birth Date</label><input type="date" id="br2-date" value="${result?.birth_date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Total Born</label><input type="number" id="br2-born" value="${result?.num_born??''}" placeholder="e.g. 2" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Born Alive</label><input type="number" id="br2-alive" value="${result?.num_alive??''}" placeholder="e.g. 2" min="0"></div>
+      <div class="field"><label>Males</label><input type="number" id="br2-male" value="${result?.num_male??''}" placeholder="e.g. 1" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Females</label><input type="number" id="br2-female" value="${result?.num_female??''}" placeholder="e.g. 1" min="0"></div>
+      <div class="field"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="br2-notes" placeholder="Birth weights, complications, observations…">${result?.notes||''}</textarea></div>
+    <div class="field">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <label style="margin:0">Individual Lamb IDs</label>
+        <button class="btn-icon" onclick="addBrLambRow()">+ Add Lamb</button>
+      </div>
+      <div id="br-lamb-rows">${renderBrLambRows(flockOptions)}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBreedingResult('${breedingId}','${result?.id||''}')">${isEdit?'Save Changes':'Save Result'}</button>
+    </div>`);
+}
+
+function renderBrLambRows(flockOptions) {
+  if (!window._brLambs || window._brLambs.length === 0) {
+    return `<div id="br-lamb-empty" style="font-size:0.82rem;color:var(--text3);padding:0.4rem 0">No individual lambs added yet</div>`;
+  }
+  return window._brLambs.map((lb, i) => `
+    <div style="display:flex;gap:0.4rem;align-items:flex-end;margin-bottom:0.5rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:80px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Ear Tag</label>
+        <input style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" value="${lb.ear_tag||''}" oninput="window._brLambs[${i}].ear_tag=this.value" placeholder="#tag"></div>
+      <div style="flex:1;min-width:70px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Sex</label>
+        <select style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" onchange="window._brLambs[${i}].sex=this.value">
+          <option ${lb.sex===''||!lb.sex?'selected':''} value="">—</option>
+          <option ${lb.sex==='Ewe'?'selected':''}>Ewe</option>
+          <option ${lb.sex==='Ram'?'selected':''}>Ram</option>
+          <option ${lb.sex==='Wether'?'selected':''}>Wether</option>
+        </select></div>
+      <div style="flex:1;min-width:70px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Birth Wt (lbs)</label>
+        <input type="number" step="0.1" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" value="${lb.birth_weight||''}" oninput="window._brLambs[${i}].birth_weight=this.value" placeholder="lbs"></div>
+      <div style="flex:1.5;min-width:100px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Link to Lamb Profile</label>
+        <select style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" onchange="window._brLambs[${i}].lamb_id=this.value">
+          <option value="">— Optional —</option>${flockOptions}
+        </select></div>
+      <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a;flex-shrink:0;margin-bottom:1px" onclick="removeBrLambRow(${i})">✕</button>
+    </div>`).join('');
+}
+
+const _flockOptionsCache = () => allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+
+function addBrLambRow() {
+  window._brLambs.push({ ear_tag:'', sex:'', birth_weight:'', lamb_id:'' });
+  document.getElementById('br-lamb-rows').innerHTML = renderBrLambRows(_flockOptionsCache());
+}
+
+function removeBrLambRow(i) {
+  window._brLambs.splice(i, 1);
+  document.getElementById('br-lamb-rows').innerHTML = renderBrLambRows(_flockOptionsCache());
+}
+
+async function saveBreedingResult(breedingId, id) {
+  const payload = {
+    breeding_id: breedingId,
+    lamb_id: currentLambId,
+    birth_date: v('br2-date')||null,
+    num_born: v('br2-born')!==''?parseInt(v('br2-born')):null,
+    num_alive: v('br2-alive')!==''?parseInt(v('br2-alive')):null,
+    num_male: v('br2-male')!==''?parseInt(v('br2-male')):null,
+    num_female: v('br2-female')!==''?parseInt(v('br2-female')):null,
+    notes: v('br2-notes')
+  };
+  let resultId = id;
+  if (id) {
+    await db.from('breeding_results').update(payload).eq('id', id);
+    toast('Result updated');
+  } else {
+    const { data } = await db.from('breeding_results').insert(payload).select().single();
+    resultId = data?.id;
+    toast('Result saved');
+  }
+  // Save individual lamb rows — delete existing then re-insert
+  if (resultId) {
+    await db.from('breeding_result_lambs').delete().eq('result_id', resultId);
+    const lambRows = (window._brLambs||[]).filter(lb => lb.ear_tag || lb.lamb_id);
+    if (lambRows.length > 0) {
+      await db.from('breeding_result_lambs').insert(lambRows.map(lb => ({
+        result_id: resultId,
+        ear_tag: lb.ear_tag||null,
+        sex: lb.sex||null,
+        birth_weight: lb.birth_weight ? parseFloat(lb.birth_weight) : null,
+        lamb_id: lb.lamb_id||null
+      })));
+    }
+  }
+  window._brLambs = [];
+  closeModal(); loadLambTab();
+}
+
+function confirmDeleteBreedingResult(id) {
+  const el = document.getElementById(`bract-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteBreedingResult('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+async function deleteBreedingResult(id) {
+  await db.from('breeding_results').delete().eq('id', id);
+  toast('Result deleted'); loadLambTab();
+}
+
+// ── EMBRYO TAB ────────────────────────────────────────
+async function renderEmbryoTab(el) {
+  const lamb = allLambs.find(l=>l.id===currentLambId);
+  let html = '';
+  if (lamb.role === 'Embryo Donor' || lamb.role === 'Both') {
+    const { data: flushes } = await db.from('embryo_flushes').select('*, embryo_transfers(*)').eq('donor_id', currentLambId).order('flush_date', {ascending:false});
+    html += `
+      <div class="section-header">
+        <div class="section-title">🔬 Flush Records (Donor)</div>
+        <button class="btn btn-primary btn-sm" onclick="openAddFlush()">+ Log Flush</button>
+      </div>`;
+    if (!flushes || flushes.length === 0) {
+      html += `<div class="empty" style="padding:1.5rem"><div class="empty-icon">🔬</div><h3>No flush records</h3></div>`;
+    } else {
+      flushes.forEach(f => {
+        const transfers = f.embryo_transfers || [];
+        html += `<div class="card" style="margin-bottom:0.75rem">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-weight:600;color:var(--text)">Flush: ${f.flush_date}</div>
+              <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.notes?' — '+f.notes:''}</div>
+              ${(()=>{ const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null); const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||null); return sireName ? `<div style="font-size:0.82rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="openAddTransfer('${f.id}')">+ Transfer</button>
+              <button class="btn-icon" onclick="openEditFlush('${f.id}')">✏️ Edit</button>
+              <div id="flush-del-${f.id}"><button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteFlush('${f.id}')">🗑 Delete</button></div>
+            </div>
+          </div>
+          ${transfers.length>0?`<div style="margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">`:''}
+          ${transfers.map(t=>{
+            const recip = t.recipient_id ? allLambs.find(l=>l.id===t.recipient_id) : null;
+            const recipName = recip ? recip.name : (t.recipient_text||'—');
+            const outcomeBadge = t.outcome==='Confirmed Pregnant'?'badge-green':t.outcome==='Lamb Born'?'badge-blue':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'badge-red':'badge-gray';
+            return `<div style="padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
+              <div style="flex:1">
+                <div style="font-size:0.85rem;color:var(--text);font-weight:600">Recipient: ${recipName}</div>
+                <div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
+                  ${t.implant_date?`<span>📅 ${t.implant_date}</span>`:''}
+                  ${t.num_transferred!=null?`<span>🔬 ${t.num_transferred} transferred</span>`:''}
+                  <span class="badge ${outcomeBadge}" style="font-size:0.65rem">${t.outcome||'Pending'}</span>
+                  ${t.notes?`<span style="font-style:italic">${t.notes}</span>`:''}
+                </div>
+                ${t.lamb_born?`<div style="margin-top:0.35rem;font-size:0.78rem;color:var(--text2);display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
+                  <span>🐑 Lambing result:</span>
+                  ${t.lamb_birth_date?`<span>📅 ${t.lamb_birth_date}</span>`:''}
+                  ${t.lamb_count!=null?`<span class="badge badge-green" style="font-size:0.65rem">${t.lamb_count} born</span>`:''}
+                  ${t.lamb_notes?`<span style="font-style:italic;color:var(--text3)">${t.lamb_notes}</span>`:''}
+                </div>`:''}
+              </div>
+              <div style="display:flex;gap:0.35rem;flex-shrink:0" id="tact-${t.id}">
+                <button class="btn-icon" onclick="openEditTransfer('${t.id}','${f.id}')">✏️</button>
+                <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteTransfer('${t.id}')">🗑</button>
+              </div>
+            </div>`;
+          }).join('')}
+          ${transfers.length>0?'</div>':''}
+        </div>`;
+      });
+    }
+  }
+  if (lamb.role === 'Embryo Recipient' || lamb.role === 'Both') {
+    const { data: transfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date, donor_id)').eq('recipient_id', currentLambId);
+    html += `<div class="section-header" style="margin-top:1rem"><div class="section-title">🐑 Received Embryos (Recipient)</div></div>`;
+    if (!transfers || transfers.length === 0) {
+      html += `<div class="empty" style="padding:1.5rem"><div class="empty-icon">🐑</div><h3>No transfers recorded</h3></div>`;
+    } else {
+      transfers.forEach(t => {
+        const donor = t.embryo_flushes?.donor_id ? allLambs.find(l=>l.id===t.embryo_flushes.donor_id) : null;
+        html += `<div class="record-row">
+          <div>
+            <div style="font-weight:600;color:var(--text)">From: ${donor?donor.name:'Unknown donor'}</div>
+            <div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem">Flush: ${t.embryo_flushes?.flush_date||'—'} · Implant: ${t.implant_date||'—'} · ${t.outcome||'Pending'}</div>
+          </div>
+        </div>`;
+      });
+    }
+  }
+  if (lamb.role === 'Standard') {
+    html = `<div class="empty"><div class="empty-icon">🔬</div><h3>Not an embryo donor or recipient</h3><p>Edit profile to change role</p></div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── NOTES TAB ─────────────────────────────────────────
+async function renderNotesTab(el) {
+  const { data } = await db.from('lamb_notes').select('*').eq('lamb_id', currentLambId).order('date', {ascending:false});
+  const notes = data || [];
+  let html = `
+    <div class="section-header">
+      <div class="section-title">Ongoing Notes</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddNote()">+ Add Note</button>
+    </div>`;
+  if (notes.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">📝</div><h3>No notes yet</h3></div>`;
+  } else {
+    notes.forEach(n => {
+      html += `
+        <div class="record-row" id="note-${n.id}">
+          <div style="flex:1">
+            <div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.3rem">📅 ${n.date}</div>
+            <div style="color:var(--text);font-size:0.92rem">${n.note}</div>
+          </div>
+          <div class="record-actions" id="nact-${n.id}">
+            <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" onclick="confirmDeleteNote('${n.id}')">🗑</button>
+          </div>
+        </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+function confirmDeleteNote(id) {
+  const el = document.getElementById(`nact-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteNote('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+async function deleteNote(id) {
+  await db.from('lamb_notes').delete().eq('id', id);
+  toast('Note deleted'); loadLambTab();
+}
+
+// ── PEDIGREE TAB ──────────────────────────────────────
+function renderPedigreeTab(el) {
+  const lamb = allLambs.find(l=>l.id===currentLambId);
+
+  function getNode(id, aiId, text) {
+    if (id) { const l = allLambs.find(x=>x.id===id); if(l) return l; }
+    if (aiId) { const r = allAiRams.find(x=>x.id===aiId); if(r) return { name: r.name+' 🧬', id: null, ai_id: r.id, ear_tag: null, dob: null, sex: 'Ram', sire_id: null, ai_sire_id: null, sire_text: null, dam_id: null, dam_text: null }; }
+    if (text) return { name: text, id: null, ear_tag: null, dob: null };
+    return null;
+  }
+
+  function buildTree(lamb, depth) {
+    if (!lamb || depth > 4) return '';
+    const sire = getNode(lamb.sire_id, lamb.ai_sire_id, lamb.sire_text);
+    const dam = getNode(lamb.dam_id, null, lamb.dam_text);
+    const clickable = lamb.id ? `class="ped-node linked" onclick="showLamb('${lamb.id}')"` : `class="ped-node"`;
+    const nodeHtml = `<div ${clickable}>
+      <div class="ped-node-name">${lamb.name}</div>
+      ${lamb.ear_tag?`<div class="ped-node-sub">#${lamb.ear_tag}</div>`:''}
+      ${lamb.sex?`<div class="ped-node-sub">${lamb.sex}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>`:''}
+    </div>`;
+    if (depth >= 3 || (!sire && !dam)) return nodeHtml;
+    return `<div class="ped-row">
+      ${nodeHtml}
+      <div class="ped-connector">→</div>
+      <div class="ped-col">
+        ${sire ? `<div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;margin-bottom:0.2rem">Sire</div>${buildTree(sire, depth+1)}</div>` : ''}
+        ${dam ? `<div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;margin-bottom:0.2rem">Dam</div>${buildTree(dam, depth+1)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = `<div class="pedigree-tree">${buildTree(lamb, 0)}</div>`;
+}
+
+// ── AI RAMS PAGE ──────────────────────────────────────
+function sireOptions(selectedId) {
+  const flockRams = allLambs.filter(l => l.sex === 'Ram');
+  const flockOpts = flockRams.map(l => `<option value="lamb:${l.id}" ${selectedId==='lamb:'+l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  const aiOpts = allAiRams.map(r => `<option value="ai:${r.id}" ${selectedId==='ai:'+r.id?'selected':''}>${r.name}${r.registration_no?' ('+r.registration_no+')':''} 🧬</option>`).join('');
+  return `<option value="">— Select sire —</option>
+    ${flockRams.length ? `<optgroup label="Flock Rams">${flockOpts}</optgroup>` : ''}
+    ${allAiRams.length ? `<optgroup label="AI Rams">${aiOpts}</optgroup>` : ''}`;
+}
+
+function parseSireSelection(val) {
+  if (!val) return { sire_id: null, ai_sire_id: null };
+  if (val.startsWith('lamb:')) return { sire_id: val.replace('lamb:',''), ai_sire_id: null };
+  if (val.startsWith('ai:')) return { sire_id: null, ai_sire_id: val.replace('ai:','') };
+  return { sire_id: null, ai_sire_id: null };
+}
+
+function getSireDisplay(sire_id, ai_sire_id, sire_text) {
+  if (sire_id) { const s = allLambs.find(l=>l.id===sire_id); return s ? s.name : sire_text||'—'; }
+  if (ai_sire_id) { const s = allAiRams.find(r=>r.id===ai_sire_id); return s ? `${s.name} 🧬` : sire_text||'—'; }
+  return sire_text || '—';
+}
+
+function renderAiRams() {
+  let html = `
+    <div class="section-header">
+      <div class="section-title" style="font-size:1.15rem">AI Rams</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddAiRam()">+ Add AI Ram</button>
+    </div>`;
+  if (allAiRams.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No AI rams yet</h3><p>Add AI rams to use them in breeding and embryo records</p></div>`;
+  } else {
+    html += `<div class="flock-grid">`;
+    allAiRams.forEach(ram => {
+      html += `
+        <div class="card" style="position:relative">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;color:var(--text)">${ram.name}</div>
+              <div style="display:flex;gap:0.4rem;margin-top:0.3rem;flex-wrap:wrap">
+                ${ram.registration_no?`<span class="badge badge-purple">${ram.registration_no}</span>`:''}
+                ${ram.breed?`<span style="font-size:0.78rem;color:var(--text3)">${ram.breed}</span>`:''}
+              </div>
+              ${ram.genetic_code?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem">🧬 ${ram.genetic_code}</div>`:''}
+              ${ram.scrapie_id?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem">Scrapie: ${ram.scrapie_id}</div>`:''}
+              ${(()=>{ const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null; const sireName = sire ? sire.name+' 🧬' : ram.sire_name||null; return sireName ? `<div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
+              ${(()=>{ const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null; const damName = dam ? dam.name+(dam.ear_tag?' #'+dam.ear_tag:'') : ram.dam_name||null; return damName ? `<div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem">Dam: ${damName}</div>` : ''; })()}
+              ${ram.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;font-style:italic">${ram.notes}</div>`:''}
+            </div>
+            <span style="font-size:1.6rem;opacity:0.5">🐏</span>
+          </div>
+          <div style="display:flex;gap:0.4rem;margin-top:0.85rem">
+            <button class="btn-icon" onclick="openEditAiRam('${ram.id}')">✏️ Edit</button>
+            <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a" id="airam-del-${ram.id}" onclick="confirmDeleteAiRam('${ram.id}')">🗑 Delete</button>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+  document.getElementById('main-content').innerHTML = html;
+}
+
+function confirmDeleteAiRam(id) {
+  const el = document.getElementById(`airam-del-${id}`);
+  el.outerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteAiRam('${id}')">Yes</button><button class="btn-icon" onclick="renderAiRams()">No</button></div>`;
+}
+async function deleteAiRam(id) {
+  await db.from('ai_rams').delete().eq('id', id);
+  toast('AI ram deleted'); await loadAiRams(); renderAiRams();
+}
+
+function openAddAiRam() { showAiRamModal(null); }
+function openEditAiRam(id) { showAiRamModal(allAiRams.find(r=>r.id===id)); }
+
+function showAiRamModal(ram) {
+  const isEdit = !!ram;
+  const aiRamOptions = allAiRams.filter(r => r.id !== ram?.id).map(r => `<option value="${r.id}" ${ram?.sire_ai_id===r.id?'selected':''}>${r.name}${r.registration_no?' ('+r.registration_no+')':''}</option>`).join('');
+  const eweOptions = allLambs.filter(l => l.sex === 'Ewe').map(l => `<option value="${l.id}" ${ram?.dam_lamb_id===l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${isEdit?'Edit AI Ram':'Add AI Ram'}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="row">
+      <div class="field"><label>Name *</label><input id="ar-name" value="${ram?.name||''}" placeholder="e.g. Rambo 4Z"></div>
+      <div class="field"><label>Registration #</label><input id="ar-reg" value="${ram?.registration_no||''}" placeholder="Registry number"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Breed</label><input id="ar-breed" value="${ram?.breed||''}" placeholder="e.g. Suffolk"></div>
+      <div class="field"><label>Scrapie ID</label><input id="ar-scrapie" value="${ram?.scrapie_id||''}" placeholder="Scrapie ID"></div>
+    </div>
+    <div class="field"><label>Genetic Code</label><input id="ar-genetic" value="${ram?.genetic_code||''}" placeholder="Free text"></div>
+    <div class="field"><label>Sire (AI Ram)</label>
+      <select id="ar-sire-id"><option value="">— Select AI ram —</option>${aiRamOptions}</select>
+    </div>
+    <div class="field"><label>Sire (if not in system)</label>
+      <input id="ar-sire" value="${ram?.sire_name||''}" placeholder="Sire name or ID">
+    </div>
+    <div class="field"><label>Dam (Flock Ewe)</label>
+      <select id="ar-dam-id"><option value="">— Select ewe —</option>${eweOptions}</select>
+    </div>
+    <div class="field"><label>Dam (if not in system)</label>
+      <input id="ar-dam" value="${ram?.dam_name||''}" placeholder="Dam name or ID">
+    </div>
+    <div class="field"><label>Notes</label><textarea id="ar-notes">${ram?.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAiRam('${ram?.id||''}')">${isEdit?'Save Changes':'Add AI Ram'}</button>
+    </div>`);
+}
+
+async function saveAiRam(id) {
+  const name = document.getElementById('ar-name').value.trim();
+  if (!name) { toast('Name is required'); return; }
+  const payload = {
+    name, registration_no: v('ar-reg'), breed: v('ar-breed'), scrapie_id: v('ar-scrapie'),
+    genetic_code: v('ar-genetic'), notes: v('ar-notes'),
+    sire_ai_id: v('ar-sire-id')||null, sire_name: v('ar-sire'),
+    dam_lamb_id: v('ar-dam-id')||null, dam_name: v('ar-dam')
+  };
+  if (id) { await db.from('ai_rams').update(payload).eq('id', id); toast('AI ram updated'); }
+  else { await db.from('ai_rams').insert(payload); toast('AI ram added'); }
+  closeModal(); await loadAiRams(); renderAiRams();
+}
+
+// ── BREEDING PAGE ─────────────────────────────────────
+async function renderBreeding() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const { data, error } = await db.from('breeding_records').select('*').order('breeding_date', {ascending:false});
+  const recs = data || [];
+  let html = `<div class="section-header"><div class="section-title" style="font-size:1.15rem">Breeding Records — All Flock</div></div>`;
+  if (recs.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No breeding records yet</h3><p>Open a lamb profile to log breeding</p></div>`;
+  } else {
+    recs.forEach(r => {
+      const lamb = allLambs.find(l => l.id === r.lamb_id);
+      const sire = r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : (r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null);
+      const sireName = sire ? sire.name+(r.ai_sire_id?' 🧬':'') : (r.sire_text||'—');
+      html += `<div class="record-row" style="cursor:pointer" onclick="showLamb('${r.lamb_id}')">
+        <div>
+          <div style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'} ${lamb?.ear_tag?`<span style="color:var(--text3);font-size:0.82rem">#${lamb.ear_tag}</span>`:''}</div>
+          <div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;display:flex;gap:0.75rem;flex-wrap:wrap">
+            <span>Sire: ${sireName}</span>
+            ${r.breeding_date?`<span>🗓 ${r.breeding_date}</span>`:''}
+            ${r.expected_lamb_date?`<span>📅 Due: ${r.expected_lamb_date}</span>`:''}
+            ${r.outcome&&r.outcome!=='Pending'?`<span class="badge ${r.outcome==='Lamb Born'?'badge-blue':r.outcome==='Confirmed Pregnant'?'badge-green':'badge-red'}" style="font-size:0.68rem">${r.outcome}</span>`:''}
+          </div>
+        </div>
+        <span style="color:var(--text3)">→</span>
+      </div>`;
+    });
+  }
+  document.getElementById('main-content').innerHTML = html;
+}
+
+// ── EXPORT PAGE ───────────────────────────────────────
+function renderExport() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="section-header"><div class="section-title" style="font-size:1.15rem">Export Data</div></div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;max-width:400px">
+      <div class="card">
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">🐑 Full Flock Export</div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All lambs with profile data, status, sire/dam info</div>
+        <button class="btn btn-primary btn-sm" onclick="exportFlock()">Download Spreadsheet</button>
+      </div>
+      <div class="card">
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">💉 Health Records Export</div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All vaccine and medication records across flock</div>
+        <button class="btn btn-primary btn-sm" onclick="exportHealth()">Download Spreadsheet</button>
+      </div>
+      <div class="card">
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">⚖️ Weight Records Export</div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All weight logs with dates</div>
+        <button class="btn btn-primary btn-sm" onclick="exportWeights()">Download Spreadsheet</button>
+      </div>
+      <div class="card">
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">🐏 Breeding Records Export</div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All breeding and lambing records</div>
+        <button class="btn btn-primary btn-sm" onclick="exportBreeding()">Download Spreadsheet</button>
+      </div>
+    </div>`;
+}
+
+async function exportFlock() {
+  const rows = allLambs.map(l => {
+    const sire = l.sire_id ? allLambs.find(x=>x.id===l.sire_id) : null;
+    const dam = l.dam_id ? allLambs.find(x=>x.id===l.dam_id) : null;
+    return { Name:l.name, 'Ear Tag':l.ear_tag||'', 'Scrapie ID':l.scrapie_id||'', 'Genetic Code':l.genetic_code||'', DOB:l.dob||'', Sex:l.sex||'', Breed:l.breed||'', Role:l.role||'Standard', Status:l.status||'Active', 'Status Date':l.status_date||'', 'Status Note':l.status_note||'', Sire:sire?sire.name:(l.sire_text||''), Dam:dam?dam.name:(l.dam_text||''), Notes:l.notes||'' };
+  });
+  downloadXLSX(rows, 'flock-export');
+  toast('Flock exported!');
+}
+
+async function exportHealth() {
+  const { data } = await db.from('health_records').select('*, lambs(name,ear_tag)').order('date',{ascending:false});
+  const rows = (data||[]).map(r=>({ Lamb:r.lambs?.name||'', 'Ear Tag':r.lambs?.ear_tag||'', Type:r.type, Product:r.product, 'Start Date':r.date, 'End Date':r.end_date||'', Dose:r.dose||'', Route:r.route||'', Notes:r.notes||'' }));
+  downloadXLSX(rows, 'health-records');
+  toast('Health records exported!');
+}
+
+async function exportWeights() {
+  const { data } = await db.from('weight_records').select('*, lambs(name,ear_tag)').order('date',{ascending:false});
+  const rows = (data||[]).map(r=>({ Lamb:r.lambs?.name||'', 'Ear Tag':r.lambs?.ear_tag||'', 'Weight (lbs)':r.weight_lbs, Date:r.date, Notes:r.notes||'' }));
+  downloadXLSX(rows, 'weight-records');
+  toast('Weight records exported!');
+}
+
+async function exportBreeding() {
+  const { data } = await db.from('breeding_records').select('*, lambs(name,ear_tag)').order('breeding_date',{ascending:false});
+  const rows = (data||[]).map(r=>{
+    const sire = r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : (r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null);
+    return { Lamb:r.lambs?.name||'', 'Ear Tag':r.lambs?.ear_tag||'', Sire:sire?sire.name+(r.ai_sire_id?' (AI)':''):(r.sire_text||''), 'Breeding Date':r.breeding_date||'', 'Expected Lamb Date':r.expected_lamb_date||'', 'Outcome':r.outcome||'', Notes:r.notes||'' };
+  });
+  downloadXLSX(rows, 'breeding-records');
+  toast('Breeding records exported!');
+}
+
+function downloadXLSX(rows, filename) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  XLSX.writeFile(wb, `${filename}-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ── MODALS ────────────────────────────────────────────
+function showModal(html) {
+  let overlay = document.getElementById('modal-overlay');
+  if (!overlay) { overlay = document.createElement('div'); overlay.id='modal-overlay'; overlay.className='modal-overlay'; overlay.onclick=e=>{if(e.target===overlay)closeModal();}; document.body.appendChild(overlay); }
+  overlay.innerHTML = `<div class="modal">${html}</div>`;
+  overlay.style.display = 'flex';
+}
+function closeModal() {
+  const o = document.getElementById('modal-overlay');
+  if (o) o.style.display = 'none';
+}
+
+// ── ADD/EDIT LAMB ─────────────────────────────────────
+function openAddLamb() { showLambModal(null); }
+function openEditLamb(id) { showLambModal(allLambs.find(l=>l.id===id)); }
+
+function showLambModal(lamb) {
+  const isEdit = !!lamb;
+  const lambOptions = allLambs.map(l=>`<option value="${l.id}" ${lamb&&lamb.dam_id===l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  const sireOpts = sireOptions(lamb?.sire_id ? 'lamb:'+lamb.sire_id : (lamb?.ai_sire_id ? 'ai:'+lamb.ai_sire_id : ''));
+  const defaultFlockType = lamb?.flock_type || (lamb?.sex === 'Wether' ? 'Show' : 'Breeding');
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${isEdit?'Edit Lamb':'Add Lamb to Flock'}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="row"><div class="field"><label>Name *</label><input id="lm-name" value="${lamb?.name||''}" placeholder="e.g. Daisy"></div>
+    <div class="field"><label>Ear Tag</label><input id="lm-tag" value="${lamb?.ear_tag||''}" placeholder="e.g. A04"></div></div>
+    <div class="row"><div class="field"><label>Scrapie ID</label><input id="lm-scrapie" value="${lamb?.scrapie_id||''}" placeholder="Scrapie ID"></div>
+    <div class="field"><label>Genetic Code</label><input id="lm-genetic" value="${lamb?.genetic_code||''}" placeholder="Free text"></div></div>
+    <div class="row"><div class="field"><label>Date of Birth</label><input type="date" id="lm-dob" value="${lamb?.dob||''}"></div>
+    <div class="field"><label>Sex</label><select id="lm-sex" onchange="autoSetFlockType()"><option ${lamb?.sex==='Ewe'?'selected':''}>Ewe</option><option ${lamb?.sex==='Ram'?'selected':''}>Ram</option><option ${lamb?.sex==='Wether'?'selected':''}>Wether</option></select></div></div>
+    <div class="row"><div class="field"><label>Breed</label><input id="lm-breed" value="${lamb?.breed||''}" placeholder="e.g. Suffolk"></div>
+    <div class="field"><label>Role</label><select id="lm-role">
+      <option ${(!lamb||lamb.role==='Standard')?'selected':''}>Standard</option>
+      <option ${lamb?.role==='Embryo Donor'?'selected':''}>Embryo Donor</option>
+      <option ${lamb?.role==='Embryo Recipient'?'selected':''}>Embryo Recipient</option>
+      <option ${lamb?.role==='Both'?'selected':''}>Both</option>
+    </select></div></div>
+    <div class="row">
+      <div class="field"><label>Flock</label><select id="lm-flock-type">
+        <option ${defaultFlockType==='Breeding'?'selected':''} value="Breeding">Breeding Flock</option>
+        <option ${defaultFlockType==='Show'?'selected':''} value="Show">Show Flock</option>
+        <option ${defaultFlockType==='Both'?'selected':''} value="Both">Both Flocks</option>
+      </select></div>
+      <div class="field"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Sire</label><select id="lm-sire-id">${sireOpts}</select></div>
+      <div class="field"><label>Sire (if not in system)</label><input id="lm-sire-text" value="${lamb?.sire_text||''}" placeholder="Sire name/ID"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Dam</label><select id="lm-dam-id"><option value="">— Select or type below —</option>${lambOptions}</select></div>
+      <div class="field"><label>Dam (if not in system)</label><input id="lm-dam-text" value="${lamb?.dam_text||''}" placeholder="Dam name/ID"></div>
+    </div>
+    <div class="field"><label>Notes / Breed details</label><textarea id="lm-notes">${lamb?.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLamb('${lamb?.id||''}')">${isEdit?'Save Changes':'Add Lamb'}</button>
+    </div>`);
+
+  if (lamb?.sire_id) document.getElementById('lm-sire-id').value = lamb.sire_id;
+  if (lamb?.dam_id) document.getElementById('lm-dam-id').value = lamb.dam_id;
+}
+
+function autoSetFlockType() {
+  const sex = document.getElementById('lm-sex')?.value;
+  const flockType = document.getElementById('lm-flock-type');
+  if (flockType && sex === 'Wether') flockType.value = 'Show';
+}
+
+async function saveLamb(id) {
+  const name = document.getElementById('lm-name').value.trim();
+  if (!name) { toast('Name is required'); return; }
+  const colorIdx = allLambs.length % TAG_COLORS.length;
+  const { sire_id, ai_sire_id } = parseSireSelection(v('lm-sire-id'));
+  const flock_type = v('lm-flock-type') || (v('lm-sex') === 'Wether' ? 'Show' : 'Breeding');
+  const payload = {
+    name, ear_tag: v('lm-tag'), scrapie_id: v('lm-scrapie'), genetic_code: v('lm-genetic'),
+    dob: v('lm-dob')||null, sex: v('lm-sex'), breed: v('lm-breed'), role: v('lm-role'),
+    flock_type, sire_id, ai_sire_id, sire_text: v('lm-sire-text'),
+    dam_id: v('lm-dam-id')||null, dam_text: v('lm-dam-text'), notes: v('lm-notes'),
+    tag_color: id ? undefined : TAG_COLORS[colorIdx]
+  };
+  if (id) { await db.from('lambs').update(payload).eq('id', id); toast('Lamb updated'); }
+  else { await db.from('lambs').insert(payload); toast('Lamb added'); }
+  closeModal();
+  await loadLambs();
+  if (id) renderLambDetail(); else renderFlock();
+}
+
+// ── STATUS CHANGE ─────────────────────────────────────
+function openStatusChange(id, status) {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">Mark as ${status}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Date</label><input type="date" id="sc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="field"><label>Notes ${status==='Sold'?'(buyer, price, etc.)':'(cause, notes)'}</label><textarea id="sc-note" placeholder="Optional notes…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStatus('${id}','${status}')">${status==='Sold'?'Mark Sold':'Mark Deceased'}</button>
+    </div>`);
+}
+async function saveStatus(id, status) {
+  await db.from('lambs').update({ status, status_date: v('sc-date'), status_note: v('sc-note') }).eq('id', id);
+  toast(`Marked as ${status}`); closeModal(); await loadLambs(); renderLambDetail();
+}
+
+async function reactivateLamb(id) {
+  await db.from('lambs').update({ status: 'Active', status_date: null, status_note: null }).eq('id', id);
+  toast('Lamb reactivated'); await loadLambs(); renderLambDetail();
+}
+
+function confirmDeleteLamb(id) {
+  const el = document.getElementById('delete-lamb-btn');
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
+      <span style="font-size:0.75rem;color:#c08080;text-align:right">Permanently delete this lamb<br>and all their records?</span>
+      <div style="display:flex;gap:0.35rem">
+        <button class="btn btn-danger btn-sm" onclick="deleteLamb('${id}')">Yes, Delete</button>
+        <button class="btn-icon" onclick="renderLambDetail()">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function deleteLamb(id) {
+  // Clear any references to this lamb as a sire or dam on other lambs
+  await db.from('lambs').update({ sire_id: null }).eq('sire_id', id);
+  await db.from('lambs').update({ dam_id: null }).eq('dam_id', id);
+  // Clear as sire on breeding records
+  await db.from('breeding_records').update({ sire_id: null }).eq('sire_id', id);
+  // Clear as dam on AI rams
+  await db.from('ai_rams').update({ dam_lamb_id: null }).eq('dam_lamb_id', id);
+  // Now delete
+  const { error } = await db.from('lambs').delete().eq('id', id);
+  if (error) { toast('Error deleting — check for linked records'); console.error(error); return; }
+  toast('Lamb deleted'); await loadLambs(); showPage('flock');
+}
+
+// ── HEALTH RECORD ─────────────────────────────────────
+function openAddRecord(rec) {
+  const isEdit = !!rec;
+  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
+  const meds = [...BASE_MEDS, ...customProducts.medication];
+  const type = rec?.type || 'vaccine';
+  const opts = (type === 'vaccine' ? vaccines : meds).map(o=>`<option ${rec?.product===o?'selected':''}>${o}</option>`).join('');
+  window._recType = type;
+  window._recProducts = isEdit ? [] : [{ product:'', customName:'', saveCustom:false }];
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${isEdit?'Edit Record':'Log Health Record'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Type</label>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn ${type==='vaccine'?'btn-primary':'btn-secondary'}" style="flex:1" onclick="switchRecordType('vaccine')">💉 Vaccine</button>
+        <button class="btn ${type==='medication'?'btn-primary':'btn-secondary'}" style="flex:1" onclick="switchRecordType('medication')">💊 Medication</button>
+      </div>
+    </div>
+    ${isEdit ? `
+      <div class="field" id="rec-product-field"><label>Product *</label>
+        <select id="rec-product" onchange="checkCustomProduct()">
+          <option value="">— Select —</option>
+          <optgroup label="Standard">${opts}</optgroup>
+          <optgroup label="My Products">${(type==='vaccine'?customProducts.vaccine:customProducts.medication).map(o=>`<option ${rec?.product===o?'selected':''}>${o}</option>`).join('')}</optgroup>
+          <option value="__custom__">+ Add custom product…</option>
+        </select>
+      </div>
+      <div class="field" id="rec-custom-field" style="display:none"><label>Custom Product Name</label>
+        <input id="rec-custom-name" placeholder="Enter product name">
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer">
+          <input type="checkbox" id="rec-save-custom" style="accent-color:var(--accent);width:14px;height:14px">
+          <span style="font-size:0.82rem;color:var(--text2)">Save to my product list</span>
+        </label>
+      </div>
+    ` : `
+      <div id="rec-products-list"></div>
+      <button class="btn-icon" style="margin-bottom:0.75rem" onclick="addRecProduct()">+ Add Another Product</button>
+    `}
+    <div class="row">
+      <div class="field"><label>Start Date *</label><input type="date" id="rec-date" value="${rec?.date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="rec-end-date" value="${rec?.end_date||''}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Dose</label><input id="rec-dose" value="${rec?.dose||''}" placeholder="e.g. 2ml"></div>
+      <div class="field"><label>Route</label><select id="rec-route">${ROUTES.map(r=>`<option ${rec?.route===r?'selected':''}>${r}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="rec-notes" value="${rec?.notes||''}" placeholder="Lot number, reactions…"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRecord('${rec?.id||''}')">${isEdit?'Save Changes':'Save Record'}</button>
+    </div>
+  `);
+  if (!isEdit) renderRecProductsList();
+}
+
+function buildProductDropdown(selectedVal) {
+  const type = window._recType || 'vaccine';
+  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
+  const meds = [...BASE_MEDS, ...customProducts.medication];
+  const opts = (type==='vaccine'?vaccines:meds).map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('');
+  const customOpts = (type==='vaccine'?customProducts.vaccine:customProducts.medication).map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('');
+  return `<option value="">— Select —</option><optgroup label="Standard">${opts}</optgroup>${customOpts?`<optgroup label="My Products">${customOpts}</optgroup>`:''}<option value="__custom__">+ Add custom product…</option>`;
+}
+
+function renderRecProductsList() {
+  const el = document.getElementById('rec-products-list');
+  if (!el) return;
+  el.innerHTML = window._recProducts.map((p, i) => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.6rem 0.75rem;margin-bottom:0.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
+        <span style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Product ${i+1}</span>
+        ${i>0?`<button class="btn-icon" style="color:#c07070;border-color:#5a2a2a;font-size:0.72rem;padding:0.15rem 0.4rem" onclick="removeRecProduct(${i})">✕ Remove</button>`:''}
+      </div>
+      <select style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;font-family:'Source Serif 4',serif" onchange="window._recProducts[${i}].product=this.value;window._recProducts[${i}].customName='';renderRecProductsList()">
+        ${buildProductDropdown(p.product)}
+      </select>
+      ${p.product==='__custom__'?`
+        <input style="width:100%;margin-top:0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;box-sizing:border-box" placeholder="Enter product name" value="${p.customName||''}" oninput="window._recProducts[${i}].customName=this.value">
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;cursor:pointer">
+          <input type="checkbox" ${p.saveCustom?'checked':''} onchange="window._recProducts[${i}].saveCustom=this.checked" style="accent-color:var(--accent);width:13px;height:13px">
+          <span style="font-size:0.78rem;color:var(--text2)">Save to my product list</span>
+        </label>
+      `:''}
+    </div>`).join('');
+}
+
+function addRecProduct() {
+  window._recProducts.push({ product:'', customName:'', saveCustom:false });
+  renderRecProductsList();
+}
+
+function removeRecProduct(i) {
+  window._recProducts.splice(i, 1);
+  renderRecProductsList();
+}
+
+function switchRecordType(type) {
+  window._recType = type;
+  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
+  const meds = [...BASE_MEDS, ...customProducts.medication];
+  const opts = (type==='vaccine'?vaccines:meds).map(o=>`<option>${o}</option>`).join('');
+  // Update single product dropdown (edit mode)
+  const prodEl = document.getElementById('rec-product');
+  if (prodEl) prodEl.innerHTML = `<option value="">— Select —</option><optgroup label="Standard">${opts}</optgroup><option value="__custom__">+ Add custom product…</option>`;
+  // Update multi-product list (add mode)
+  if (window._recProducts) { window._recProducts.forEach(p => p.product=''); renderRecProductsList(); }
+  document.querySelectorAll('.modal .btn').forEach(b => {
+    if (b.textContent.includes('Vaccine')) b.className = `btn ${type==='vaccine'?'btn-primary':'btn-secondary'}`;
+    if (b.textContent.includes('Medication')) b.className = `btn ${type==='medication'?'btn-primary':'btn-secondary'}`;
+  });
+}
+
+function checkCustomProduct() {
+  const val = document.getElementById('rec-product')?.value;
+  const el = document.getElementById('rec-custom-field');
+  if (el) el.style.display = val === '__custom__' ? '' : 'none';
+}
+
+async function openEditRecord(id) {
+  const { data } = await db.from('health_records').select('*').eq('id', id).single();
+  if (data) openAddRecord(data);
+}
+
+async function saveRecord(id) {
+  const type = window._recType || 'vaccine';
+  const date = v('rec-date');
+  const endDate = v('rec-end-date') || null;
+  const dose = v('rec-dose');
+  const route = v('rec-route');
+  const notes = v('rec-notes');
+
+  if (id) {
+    // Edit single record
+    const productSel = document.getElementById('rec-product').value;
+    let product = productSel === '__custom__' ? v('rec-custom-name') : productSel;
+    if (!product) { toast('Select a product'); return; }
+    if (productSel === '__custom__' && document.getElementById('rec-save-custom').checked) {
+      await db.from('custom_products').insert({ type, name: product });
+      await loadCustomProducts();
+    }
+    await db.from('health_records').update({ lamb_id: currentLambId, type, product, date, end_date: endDate, dose, route, notes }).eq('id', id);
+    toast('Record updated');
+  } else {
+    // Add multiple products
+    const products = window._recProducts || [];
+    const resolved = [];
+    for (const p of products) {
+      const name = p.product === '__custom__' ? p.customName.trim() : p.product;
+      if (!name) continue;
+      if (p.product === '__custom__' && p.saveCustom) {
+        await db.from('custom_products').insert({ type, name });
+      }
+      resolved.push(name);
+    }
+    if (resolved.length === 0) { toast('Select at least one product'); return; }
+    await db.from('health_records').insert(resolved.map(product => ({ lamb_id: currentLambId, type, product, date, end_date: endDate, dose, route, notes })));
+    if (resolved.length > 1) { await loadCustomProducts(); toast(`${resolved.length} records saved`); }
+    else toast('Record saved');
+  }
+  window._recProducts = [];
+  closeModal(); loadLambTab();
+}
+
+// ── WEIGHT ────────────────────────────────────────────
+function openAddWeight() {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">Log Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Weight (lbs) *</label><input type="number" id="wt-lbs" step="0.1" placeholder="e.g. 45.5"></div>
+      <div class="field"><label>Date *</label><input type="date" id="wt-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="wt-notes" placeholder="Optional notes"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWeight()">Save Weight</button>
+    </div>`);
+}
+async function saveWeight() {
+  const lbs = v('wt-lbs');
+  if (!lbs) { toast('Enter a weight'); return; }
+  await db.from('weight_records').insert({ lamb_id: currentLambId, weight_lbs: parseFloat(lbs), date: v('wt-date'), notes: v('wt-notes') });
+  toast('Weight saved'); closeModal(); loadLambTab();
+}
+
+// ── BREEDING ──────────────────────────────────────────
+function openAddBreeding(rec) {
+  const isEdit = !!rec;
+  const currentSire = rec?.sire_id ? 'lamb:'+rec.sire_id : (rec?.ai_sire_id ? 'ai:'+rec.ai_sire_id : '');
+  const outcomes = ['Pending','Confirmed Pregnant','Not Pregnant','Lamb Born','Failed'];
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${isEdit?'Edit Breeding':'Log Breeding'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Sire</label><select id="br-sire-id">${sireOptions(currentSire)}</select></div>
+    <div class="field"><label>Sire (if not in system)</label><input id="br-sire-text" value="${rec?.sire_text||''}" placeholder="Sire name or ID"></div>
+    <div class="row">
+      <div class="field"><label>Breeding Date</label><input type="date" id="br-date" value="${rec?.breeding_date||''}" oninput="calcExpectedLamb()"></div>
+      <div class="field"><label>Expected Lamb Date <span style="color:var(--text3);font-size:0.75rem">(auto +147 days)</span></label><input type="date" id="br-expected" value="${rec?.expected_lamb_date||''}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Outcome</label><select id="br-outcome">
+        ${outcomes.map(o=>`<option ${(rec?.outcome||'Pending')===o?'selected':''}>${o}</option>`).join('')}
+      </select></div>
+      <div class="field"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="br-notes">${rec?.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBreeding('${rec?.id||''}')">${isEdit?'Save Changes':'Save Record'}</button>
+    </div>`);
+  if (rec?.sire_id) document.getElementById('br-sire-id').value = rec.sire_id;
+}
+async function openEditBreeding(id) {
+  const { data } = await db.from('breeding_records').select('*').eq('id', id).single();
+  if (data) openAddBreeding(data);
+}
+async function saveBreeding(id) {
+  const { sire_id, ai_sire_id } = parseSireSelection(v('br-sire-id'));
+  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes') };
+  if (id) { await db.from('breeding_records').update(payload).eq('id', id); toast('Updated'); }
+  else { await db.from('breeding_records').insert(payload); toast('Breeding logged'); }
+  closeModal(); loadLambTab();
+}
+
+// ── EMBRYO ────────────────────────────────────────────
+function openAddFlush() { showFlushModal(null); }
+
+async function openEditFlush(id) {
+  const { data } = await db.from('embryo_flushes').select('*').eq('id', id).single();
+  if (data) showFlushModal(data);
+}
+
+function showFlushModal(flush) {
+  const isEdit = !!flush;
+  const currentSire = flush?.sire_id ? 'lamb:'+flush.sire_id : (flush?.ai_sire_id ? 'ai:'+flush.ai_sire_id : '');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${isEdit ? 'Edit Flush' : 'Log Embryo Flush'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Flush Date *</label><input type="date" id="fl-date" value="${flush?.flush_date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Embryos Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="e.g. 8"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Embryos Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="e.g. 6"></div>
+      <div class="field"></div>
+    </div>
+    <div class="field"><label>Sire</label><select id="fl-sire-id">${sireOptions(currentSire)}</select></div>
+    <div class="field"><label>Sire (if not in system)</label><input id="fl-sire-text" value="${flush?.sire_text||''}" placeholder="Sire name or ID"></div>
+    <div class="field"><label>Notes</label><textarea id="fl-notes" placeholder="Vet, protocol, notes…">${flush?.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFlush('${flush?.id||''}')">${isEdit ? 'Save Changes' : 'Save Flush'}</button>
+    </div>`);
+}
+
+async function saveFlush(id) {
+  const date = v('fl-date');
+  if (!date) { toast('Date required'); return; }
+  const { sire_id, ai_sire_id } = parseSireSelection(v('fl-sire-id'));
+  const payload = { donor_id: currentLambId, flush_date: date, embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes') };
+  if (id) { await db.from('embryo_flushes').update(payload).eq('id', id); toast('Flush updated'); }
+  else { await db.from('embryo_flushes').insert(payload); toast('Flush recorded'); }
+  closeModal(); loadLambTab();
+}
+
+function confirmDeleteFlush(id) {
+  const el = document.getElementById(`flush-del-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteFlush('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+
+async function deleteFlush(id) {
+  await db.from('embryo_flushes').delete().eq('id', id);
+  toast('Flush deleted'); loadLambTab();
+}
+
+function openAddTransfer(flushId) { showTransferModal(flushId, null); }
+
+async function openEditTransfer(transferId, flushId) {
+  const { data } = await db.from('embryo_transfers').select('*').eq('id', transferId).single();
+  if (data) showTransferModal(flushId, data);
+}
+
+function showTransferModal(flushId, transfer) {
+  const isEdit = !!transfer;
+  const outcomes = ['Pending','Confirmed Pregnant','Not Pregnant','Lamb Born','Failed'];
+  const recipOptions = allLambs.filter(l=>l.role==='Embryo Recipient'||l.role==='Both').map(l=>`<option value="${l.id}" ${transfer?.recipient_id===l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  const isLambBorn = transfer?.outcome === 'Lamb Born' || transfer?.lamb_born;
+  window._trLambs = [];
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${isEdit?'Edit Transfer':'Log Embryo Transfer'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Recipient (from flock)</label><select id="tr-recip-id"><option value="">— Select recipient —</option>${recipOptions}</select></div>
+    <div class="field"><label>Recipient (if not in system)</label><input id="tr-recip-text" value="${transfer?.recipient_text||''}" placeholder="Recipient name/ID"></div>
+    <div class="row">
+      <div class="field"><label>Implant Date</label><input type="date" id="tr-date" value="${transfer?.implant_date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label># Embryos Transferred</label><input type="number" id="tr-num" value="${transfer?.num_transferred||''}" placeholder="e.g. 1" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Outcome</label><select id="tr-outcome" onchange="toggleLambBornFields()">
+        ${outcomes.map(o=>`<option ${(transfer?.outcome||'Pending')===o?'selected':''}>${o}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="tr-notes" value="${transfer?.notes||''}" placeholder="Optional notes"></div>
+    <div id="tr-lamb-fields" style="display:${isLambBorn?'block':'none'}">
+      <div style="border-top:1px solid var(--border);margin:0.75rem 0;padding-top:0.75rem">
+        <div style="font-size:0.78rem;color:var(--accent);font-weight:600;margin-bottom:0.75rem">🐑 Lambing Result</div>
+        <div class="row">
+          <div class="field"><label>Birth Date</label><input type="date" id="tr-birth-date" value="${transfer?.lamb_birth_date||''}"></div>
+          <div class="field"><label>Lambs Born</label><input type="number" id="tr-lamb-count" value="${transfer?.lamb_count||''}" placeholder="e.g. 2" min="0"></div>
+        </div>
+        <div class="field"><label>Notes</label><textarea id="tr-lamb-notes" placeholder="Birth weights, complications…">${transfer?.lamb_notes||''}</textarea></div>
+        <div class="field">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+            <label style="margin:0">Individual Lamb IDs</label>
+            <button class="btn-icon" onclick="addTrLambRow()">+ Add Lamb</button>
+          </div>
+          <div id="tr-lamb-rows">${renderTrLambRows()}</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTransfer('${flushId}','${transfer?.id||''}')">${isEdit?'Save Changes':'Save Transfer'}</button>
+    </div>`);
+
+  // Load existing lamb rows if editing
+  if (isEdit && transfer?.id) {
+    db.from('embryo_transfer_lambs').select('*').eq('transfer_id', transfer.id).order('created_at').then(({data}) => {
+      window._trLambs = (data||[]).map(l=>({...l}));
+      const el = document.getElementById('tr-lamb-rows');
+      if (el) el.innerHTML = renderTrLambRows();
+    });
+  }
+}
+
+function renderTrLambRows() {
+  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  if (!window._trLambs || window._trLambs.length === 0) {
+    return `<div style="font-size:0.82rem;color:var(--text3);padding:0.4rem 0">No individual lambs added yet</div>`;
+  }
+  return window._trLambs.map((lb, i) => `
+    <div style="display:flex;gap:0.4rem;align-items:flex-end;margin-bottom:0.5rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:80px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Ear Tag</label>
+        <input style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" value="${lb.ear_tag||''}" oninput="window._trLambs[${i}].ear_tag=this.value" placeholder="#tag"></div>
+      <div style="flex:1;min-width:70px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Sex</label>
+        <select style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" onchange="window._trLambs[${i}].sex=this.value">
+          <option ${!lb.sex?'selected':''} value="">—</option>
+          <option ${lb.sex==='Ewe'?'selected':''}>Ewe</option>
+          <option ${lb.sex==='Ram'?'selected':''}>Ram</option>
+          <option ${lb.sex==='Wether'?'selected':''}>Wether</option>
+        </select></div>
+      <div style="flex:1;min-width:70px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Birth Wt (lbs)</label>
+        <input type="number" step="0.1" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" value="${lb.birth_weight||''}" oninput="window._trLambs[${i}].birth_weight=this.value" placeholder="lbs"></div>
+      <div style="flex:1.5;min-width:100px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Link to Lamb Profile</label>
+        <select style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.6rem;font-size:0.85rem" onchange="window._trLambs[${i}].lamb_id=this.value">
+          <option value="">— Optional —</option>${flockOptions}
+        </select></div>
+      <button class="btn-icon" style="color:#c07070;border-color:#5a2a2a;flex-shrink:0;margin-bottom:1px" onclick="removeTrLambRow(${i})">✕</button>
+    </div>`).join('');
+}
+
+function addTrLambRow() {
+  window._trLambs.push({ ear_tag:'', sex:'', birth_weight:'', lamb_id:'' });
+  const el = document.getElementById('tr-lamb-rows');
+  if (el) el.innerHTML = renderTrLambRows();
+}
+
+function removeTrLambRow(i) {
+  window._trLambs.splice(i, 1);
+  const el = document.getElementById('tr-lamb-rows');
+  if (el) el.innerHTML = renderTrLambRows();
+}
+
+function toggleLambBornFields() {
+  const outcome = document.getElementById('tr-outcome')?.value;
+  const fields = document.getElementById('tr-lamb-fields');
+  if (fields) fields.style.display = outcome === 'Lamb Born' ? 'block' : 'none';
+}
+
+async function saveTransfer(flushId, id) {
+  const outcome = v('tr-outcome') || 'Pending';
+  const lambBorn = outcome === 'Lamb Born';
+  const payload = {
+    flush_id: flushId,
+    donor_id: currentLambId,
+    recipient_id: v('tr-recip-id')||null,
+    recipient_text: v('tr-recip-text'),
+    implant_date: v('tr-date')||null,
+    num_transferred: v('tr-num') ? parseInt(v('tr-num')) : null,
+    outcome,
+    notes: v('tr-notes'),
+    lamb_born: lambBorn,
+    lamb_birth_date: lambBorn ? (v('tr-birth-date')||null) : null,
+    lamb_count: lambBorn && v('tr-lamb-count') ? parseInt(v('tr-lamb-count')) : null,
+    lamb_notes: lambBorn ? v('tr-lamb-notes') : null
+  };
+  let transferId = id;
+  if (id) {
+    await db.from('embryo_transfers').update(payload).eq('id', id);
+    toast('Transfer updated');
+  } else {
+    const { data } = await db.from('embryo_transfers').insert(payload).select().single();
+    transferId = data?.id;
+    toast('Transfer recorded');
+  }
+  // Save individual lamb rows using dedicated table
+  if (transferId && lambBorn) {
+    await db.from('embryo_transfer_lambs').delete().eq('transfer_id', transferId);
+    const lambRows = (window._trLambs||[]).filter(lb => lb.ear_tag || lb.lamb_id);
+    if (lambRows.length > 0) {
+      await db.from('embryo_transfer_lambs').insert(lambRows.map(lb => ({
+        transfer_id: transferId,
+        ear_tag: lb.ear_tag||null,
+        sex: lb.sex||null,
+        birth_weight: lb.birth_weight ? parseFloat(lb.birth_weight) : null,
+        lamb_id: lb.lamb_id||null
+      })));
+    }
+  }
+  window._trLambs = [];
+  closeModal(); loadLambTab();
+}
+
+function confirmDeleteTransfer(id) {
+  const el = document.getElementById(`tact-${id}`);
+  el.innerHTML = `<div class="confirm-inline"><span>Delete?</span><button class="btn btn-danger btn-sm" onclick="deleteTransfer('${id}')">Yes</button><button class="btn-icon" onclick="loadLambTab()">No</button></div>`;
+}
+
+async function deleteTransfer(id) {
+  await db.from('embryo_transfers').delete().eq('id', id);
+  toast('Transfer deleted'); loadLambTab();
+}
+
+// ── NOTES ─────────────────────────────────────────────
+function openAddNote() {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">Add Note</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Date</label><input type="date" id="nt-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="field"><label>Note *</label><textarea id="nt-note" placeholder="Enter note…" style="min-height:100px"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNote()">Save Note</button>
+    </div>`);
+}
+async function saveNote() {
+  const note = v('nt-note');
+  if (!note) { toast('Note cannot be empty'); return; }
+  await db.from('lamb_notes').insert({ lamb_id: currentLambId, note, date: v('nt-date') });
+  toast('Note saved'); closeModal(); loadLambTab();
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+// ── FLOCK TREATMENT ───────────────────────────────────
+function openFlockTreatment() {
+  const activelambs = allLambs.filter(l => l.status === 'Active');
+  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
+  const meds = [...BASE_MEDS, ...customProducts.medication];
+  window._ftType = 'vaccine';
+
+  const lambCheckboxes = activelambs.map(l => `
+    <label style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.5rem;border-radius:0.4rem;cursor:pointer;border:1px solid var(--border);margin-bottom:0.35rem;background:var(--bg)">
+      <input type="checkbox" class="ft-lamb-check" value="${l.id}" checked style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+      <span style="font-size:0.88rem;color:var(--text)">${l.name}</span>
+      ${l.ear_tag ? `<span style="font-size:0.75rem;color:var(--text3)">#${l.ear_tag}</span>` : ''}
+    </label>`).join('');
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">💉 Flock Treatment</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="field"><label>Type</label>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-primary" style="flex:1" id="ft-vax-btn" onclick="switchFTType('vaccine')">💉 Vaccine</button>
+        <button class="btn btn-secondary" style="flex:1" id="ft-med-btn" onclick="switchFTType('medication')">💊 Medication</button>
+      </div>
+    </div>
+    <div class="field"><label>Product *</label>
+      <select id="ft-product" onchange="checkFTCustom()">
+        <option value="">— Select —</option>
+        <optgroup label="Standard">${vaccines.map(o=>`<option>${o}</option>`).join('')}</optgroup>
+        ${customProducts.vaccine.length ? `<optgroup label="My Products">${customProducts.vaccine.map(o=>`<option>${o}</option>`).join('')}</optgroup>` : ''}
+        <option value="__custom__">+ Add custom product…</option>
+      </select>
+    </div>
+    <div class="field" id="ft-custom-field" style="display:none"><label>Custom Product Name</label>
+      <input id="ft-custom-name" placeholder="Enter product name">
+      <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer">
+        <input type="checkbox" id="ft-save-custom" style="accent-color:var(--accent);width:14px;height:14px">
+        <span style="font-size:0.82rem;color:var(--text2)">Save to my product list</span>
+      </label>
+    </div>
+    <div class="row">
+      <div class="field"><label>Start Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="ft-end-date"></div>
+      <div class="field"><label>Dose</label><input id="ft-dose" placeholder="e.g. 2ml"></div>
+    </div>
+    <div class="field"><label>Route</label><select id="ft-route">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select></div>
+    <div class="field"><label>Notes</label><input id="ft-notes" placeholder="Lot number, instructions…"></div>
+    <div class="field">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <label style="margin:0">Select Lambs *</label>
+        <div style="display:flex;gap:0.4rem">
+          <button class="btn-icon" onclick="document.querySelectorAll('.ft-lamb-check').forEach(c=>c.checked=true)">All</button>
+          <button class="btn-icon" onclick="document.querySelectorAll('.ft-lamb-check').forEach(c=>c.checked=false)">None</button>
+        </div>
+      </div>
+      <div style="max-height:200px;overflow-y:auto;padding-right:0.25rem">${lambCheckboxes}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFlockTreatment()">Save Treatment</button>
+    </div>`);
+}
+
+function switchFTType(type) {
+  window._ftType = type;
+  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
+  const meds = [...BASE_MEDS, ...customProducts.medication];
+  const opts = (type === 'vaccine' ? vaccines : meds);
+  const customList = (type === 'vaccine' ? customProducts.vaccine : customProducts.medication);
+  document.getElementById('ft-product').innerHTML = `
+    <option value="">— Select —</option>
+    <optgroup label="Standard">${opts.map(o=>`<option>${o}</option>`).join('')}</optgroup>
+    ${customList.length ? `<optgroup label="My Products">${customList.map(o=>`<option>${o}</option>`).join('')}</optgroup>` : ''}
+    <option value="__custom__">+ Add custom product…</option>`;
+  document.getElementById('ft-vax-btn').className = `btn ${type==='vaccine'?'btn-primary':'btn-secondary'}`;
+  document.getElementById('ft-med-btn').className = `btn ${type==='medication'?'btn-primary':'btn-secondary'}`;
+  document.getElementById('ft-custom-field').style.display = 'none';
+}
+
+function checkFTCustom() {
+  document.getElementById('ft-custom-field').style.display =
+    document.getElementById('ft-product').value === '__custom__' ? '' : 'none';
+}
+
+async function saveFlockTreatment() {
+  const type = window._ftType || 'vaccine';
+  const productSel = document.getElementById('ft-product').value;
+  let product = productSel === '__custom__' ? v('ft-custom-name') : productSel;
+  if (!product) { toast('Select a product'); return; }
+
+  const selected = [...document.querySelectorAll('.ft-lamb-check:checked')].map(c => c.value);
+  if (selected.length === 0) { toast('Select at least one lamb'); return; }
+
+  if (productSel === '__custom__' && document.getElementById('ft-save-custom').checked) {
+    await db.from('custom_products').insert({ type, name: product });
+    await loadCustomProducts();
+  }
+
+  const date = v('ft-date');
+  const endDate = v('ft-end-date') || null;
+  const dose = v('ft-dose');
+  const route = v('ft-route');
+  const notes = v('ft-notes');
+
+  const records = selected.map(lambId => ({ lamb_id: lambId, type, product, date, end_date: endDate, dose, route, notes }));
+  await db.from('health_records').insert(records);
+
+  toast(`Treatment logged for ${selected.length} lamb${selected.length !== 1 ? 's' : ''}`);
+  closeModal();
+}
+
+// ── PEDIGREE NETWORK ──────────────────────────────────
+let pedNodes = {};
+let pedCanvas = null;
+let pedCtx = null;
+let pedScale = 1;
+let pedOffsetX = 0;
+let pedOffsetY = 0;
+let pedDragging = null;
+let pedPanStart = null;
+
+// Selection state per category
+let pedCatSelected = {
+  ewes: new Set(),
+  recips: new Set(),
+  airams: new Set(),
+  wethers: new Set(),
+  rams: new Set()
+};
+
+function renderPedigreeNetwork() {
+  document.getElementById('main-content').innerHTML = buildPedUI();
+  initPedSelectionCounts();
+}
+
+function buildPedUI() {
+  const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.role !== 'Embryo Recipient' && l.role !== 'Both');
+  const recips = allLambs.filter(l => l.role === 'Embryo Recipient' || l.role === 'Both');
+  const rams = allLambs.filter(l => l.sex === 'Ram');
+  const wethers = allLambs.filter(l => l.sex === 'Wether');
+  const airams = allAiRams;
+
+  const cats = [
+    { key: 'ewes', label: '♀ Ewes', color: '#e870a0', animals: ewes },
+    { key: 'recips', label: '🐑 Recipients', color: '#9060d0', animals: recips },
+    { key: 'airams', label: '🧬 AI Rams', color: '#7040c0', animals: airams },
+    { key: 'rams', label: '♂ Rams', color: '#4080d0', animals: rams },
+    { key: 'wethers', label: '⚥ Wethers', color: '#608060', animals: wethers },
+  ];
+
+  const catPanels = cats.map(cat => {
+    if (cat.animals.length === 0) return '';
+    const selCount = pedCatSelected[cat.key].size;
+    const allSel = selCount === cat.animals.length;
+    return `
+      <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem;min-width:180px;flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+          <span style="font-size:0.85rem;font-weight:600;color:${cat.color}">${cat.label}</span>
+          <div style="display:flex;gap:0.3rem">
+            <button class="btn-icon" onclick="pedCatSelectAll('${cat.key}');redrawPedFromUI()" style="font-size:0.72rem;padding:0.2rem 0.5rem">${allSel?'Deselect All':'Select All'}</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.3rem;max-height:200px;overflow-y:auto">
+          ${cat.animals.map(a => `
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.35rem;border:1px solid ${pedCatSelected[cat.key].has(a.id)?cat.color+'80':'var(--border)'};background:${pedCatSelected[cat.key].has(a.id)?cat.color+'18':'transparent'}">
+              <input type="checkbox" value="${a.id}" ${pedCatSelected[cat.key].has(a.id)?'checked':''} onchange="pedToggleCat('${cat.key}','${a.id}',this.checked);redrawPedFromUI()" style="accent-color:${cat.color};width:13px;height:13px;flex-shrink:0">
+              <span style="font-size:0.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}${a.ear_tag?' <span style=\'color:var(--text3);font-size:0.75rem\'>#'+a.ear_tag+'</span>':''}</span>
+            </label>`).join('')}
+        </div>
+        <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--text3)">${selCount} / ${cat.animals.length} selected</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+        <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--text2)">Pedigree Network</div>
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+          <button class="btn-icon" onclick="pedSelectAllCats();redrawPedFromUI()">Select All</button>
+          <button class="btn-icon" onclick="pedClearAllCats();redrawPedFromUI()">Clear All</button>
+          <button class="btn-icon" onclick="pedZoom(1.2)">＋ Zoom In</button>
+          <button class="btn-icon" onclick="pedZoom(0.8)">－ Zoom Out</button>
+          <button class="btn-icon" onclick="pedResetView()">Reset View</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem" id="ped-cat-panels">
+        ${catPanels}
+      </div>
+    </div>
+    <div style="position:relative;border:1.5px solid var(--border);border-radius:var(--radius);overflow:auto;background:var(--bg);max-height:600px;min-height:200px" id="ped-canvas-wrap">
+      <div style="text-align:center;padding:3rem;color:var(--text3);font-family:'Source Serif 4',serif">Select animals above to build the pedigree network</div>
+    </div>
+    <div style="margin-top:0.6rem;font-size:0.75rem;color:var(--text3);display:flex;gap:1.5rem;flex-wrap:wrap">
+      <span>🟢 Sire &nbsp; 🔵 Dam &nbsp; 🟠 AI sire</span>
+      <span>Click + drag to pan · Ctrl+Scroll to zoom · Use zoom buttons · Click lamb to open profile</span>
+    </div>`;
+}
+
+function initPedSelectionCounts() {
+  redrawPedFromUI();
+}
+
+function pedToggleCat(cat, id, checked) {
+  if (checked) pedCatSelected[cat].add(id);
+  else pedCatSelected[cat].delete(id);
+  // Refresh just the count label without full rebuild
+  refreshPedCatPanels();
+}
+
+function pedCatSelectAll(cat) {
+  const animals = getPedCatAnimals(cat);
+  if (pedCatSelected[cat].size === animals.length) pedCatSelected[cat].clear();
+  else animals.forEach(a => pedCatSelected[cat].add(a.id));
+  document.getElementById('ped-cat-panels').outerHTML = `<div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem" id="ped-cat-panels">${buildCatPanelsHTML()}</div>`;
+}
+
+function pedSelectAllCats() {
+  ['ewes','recips','airams','rams','wethers'].forEach(cat => {
+    getPedCatAnimals(cat).forEach(a => pedCatSelected[cat].add(a.id));
+  });
+  refreshPedCatPanels();
+}
+
+function pedClearAllCats() {
+  ['ewes','recips','airams','rams','wethers'].forEach(cat => pedCatSelected[cat].clear());
+  refreshPedCatPanels();
+}
+
+function getPedCatAnimals(cat) {
+  if (cat === 'ewes') return allLambs.filter(l => l.sex === 'Ewe' && l.role !== 'Embryo Recipient' && l.role !== 'Both');
+  if (cat === 'recips') return allLambs.filter(l => l.role === 'Embryo Recipient' || l.role === 'Both');
+  if (cat === 'rams') return allLambs.filter(l => l.sex === 'Ram');
+  if (cat === 'wethers') return allLambs.filter(l => l.sex === 'Wether');
+  if (cat === 'airams') return allAiRams;
+  return [];
+}
+
+function buildCatPanelsHTML() {
+  const cats = [
+    { key: 'ewes', label: '♀ Ewes', color: '#e870a0' },
+    { key: 'recips', label: '🐑 Recipients', color: '#9060d0' },
+    { key: 'airams', label: '🧬 AI Rams', color: '#7040c0' },
+    { key: 'rams', label: '♂ Rams', color: '#4080d0' },
+    { key: 'wethers', label: '⚥ Wethers', color: '#608060' },
+  ];
+  return cats.map(cat => {
+    const animals = getPedCatAnimals(cat.key);
+    if (animals.length === 0) return '';
+    const selCount = pedCatSelected[cat.key].size;
+    const allSel = selCount === animals.length;
+    return `
+      <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem;min-width:180px;flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+          <span style="font-size:0.85rem;font-weight:600;color:${cat.color}">${cat.label}</span>
+          <button class="btn-icon" onclick="pedCatSelectAll('${cat.key}');redrawPedFromUI()" style="font-size:0.72rem;padding:0.2rem 0.5rem">${allSel?'Deselect All':'Select All'}</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.3rem;max-height:200px;overflow-y:auto">
+          ${animals.map(a => `
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.25rem 0.4rem;border-radius:0.35rem;border:1px solid ${pedCatSelected[cat.key].has(a.id)?cat.color+'80':'var(--border)'};background:${pedCatSelected[cat.key].has(a.id)?cat.color+'18':'transparent'}">
+              <input type="checkbox" value="${a.id}" ${pedCatSelected[cat.key].has(a.id)?'checked':''} onchange="pedToggleCat('${cat.key}','${a.id}',this.checked);redrawPedFromUI()" style="accent-color:${cat.color};width:13px;height:13px;flex-shrink:0">
+              <span style="font-size:0.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}${a.ear_tag?' <span style=\'color:var(--text3);font-size:0.75rem\'>#'+a.ear_tag+'</span>':''}</span>
+            </label>`).join('')}
+        </div>
+        <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--text3)">${selCount} / ${animals.length} selected</div>
+      </div>`;
+  }).join('');
+}
+
+function refreshPedCatPanels() {
+  const el = document.getElementById('ped-cat-panels');
+  if (el) el.innerHTML = buildCatPanelsHTML();
+}
+
+function redrawPedFromUI() {
+  const allSelected = [];
+  ['ewes','recips','rams','wethers'].forEach(cat => {
+    getPedCatAnimals(cat).filter(a => pedCatSelected[cat].has(a.id)).forEach(a => {
+      allSelected.push({ ...a, _type: 'lamb', _cat: cat });
+    });
+  });
+  getPedCatAnimals('airams').filter(a => pedCatSelected['airams'].has(a.id)).forEach(a => {
+    allSelected.push({ ...a, _type: 'airam', _cat: 'airams' });
+  });
+
+  // Only include explicitly selected animals — no auto-include
+  // AI rams must be selected in the AI Rams panel to appear
+
+  // Sanitize — clear any sire_id or dam_id that points to a lamb not in allLambs
+  // This handles deleted animals that still have stale references
+  const validLambIds = new Set(allLambs.map(l => l.id));
+  const validAiRamIds = new Set(allAiRams.map(r => r.id));
+  allSelected.forEach(a => {
+    if (a.sire_id && !validLambIds.has(a.sire_id)) a.sire_id = null;
+    if (a.dam_id && !validLambIds.has(a.dam_id)) a.dam_id = null;
+    if (a.ai_sire_id && !validAiRamIds.has(a.ai_sire_id)) a.ai_sire_id = null;
+    if (a.sire_ai_id && !validAiRamIds.has(a.sire_ai_id)) a.sire_ai_id = null;
+    if (a.dam_lamb_id && !validLambIds.has(a.dam_lamb_id)) a.dam_lamb_id = null;
+  });
+
+  if (allSelected.length === 0) {
+    const wrap = document.getElementById('ped-canvas-wrap');
+    if (wrap) wrap.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--text3);font-family:'Source Serif 4',serif">Select animals above to build the pedigree network</div>`;
+    return;
+  }
+
+  layoutAndDrawPed(allSelected);
+}
+
+function layoutAndDrawPed(animals) {
+  const NODE_W = 160, NODE_H = 60, HGAP = 40, VGAP = 80;
+  const byId = {};
+  animals.forEach(a => { byId[a.id] = a; });
+
+  // Build children map
+  const childrenOf = {};
+  const hasParent = new Set();
+  animals.forEach(a => {
+    const parents = [
+      a.sire_id, a.dam_id, a.ai_sire_id,
+      a._type==='airam' ? a.sire_ai_id : null,
+      a._type==='airam' ? a.dam_lamb_id : null
+    ].filter(pid => pid && byId[pid]);
+    parents.forEach(pid => {
+      if (!childrenOf[pid]) childrenOf[pid] = [];
+      if (!childrenOf[pid].includes(a.id)) childrenOf[pid].push(a.id);
+      hasParent.add(a.id);
+    });
+  });
+
+  const roots = animals.filter(a => !hasParent.has(a.id));
+  // Split: real roots have children; isolated have no connections at all
+  const realRoots = roots.filter(a => childrenOf[a.id] && childrenOf[a.id].length > 0);
+  const isolated = roots.filter(a => !childrenOf[a.id] || childrenOf[a.id].length === 0);
+
+  const positions = {};
+  const placed = new Set();
+  let xCursor = 20;
+
+  function placeNode(id, depth, visited = new Set()) {
+    if (placed.has(id) || visited.has(id)) return;
+    visited.add(id); placed.add(id);
+    const kids = (childrenOf[id] || []).filter(c => !placed.has(c));
+    const y = 20 + depth * (NODE_H + VGAP);
+    if (kids.length === 0) {
+      positions[id] = { x: xCursor, y };
+      xCursor += NODE_W + HGAP;
+      return;
+    }
+    const startX = xCursor;
+    kids.forEach(kid => placeNode(kid, depth + 1, new Set(visited)));
+    const firstKid = positions[kids[0]];
+    const lastKid = positions[kids[kids.length - 1]];
+    if (firstKid && lastKid) {
+      positions[id] = { x: (firstKid.x + lastKid.x + NODE_W) / 2 - NODE_W / 2, y };
+    } else {
+      positions[id] = { x: startX, y };
+      xCursor += NODE_W + HGAP;
+    }
+  }
+
+  // Only place real connected trees
+  realRoots.forEach(a => { placeNode(a.id, 0); xCursor += HGAP; });
+  // Place any remaining connected but missed animals
+  animals.filter(a => !placed.has(a.id) && !isolated.includes(a)).forEach(a => placeNode(a.id, 0));
+
+  // Place isolated animals in a grid below
+  const treeMaxY = Object.values(positions).length > 0 ? Math.max(...Object.values(positions).map(p => p.y + NODE_H)) : 0;
+  const treeMaxX = Object.values(positions).length > 0 ? Math.max(...Object.values(positions).map(p => p.x + NODE_W)) : 800;
+  const hasTree = treeMaxY > 0;
+  const gridY = hasTree ? treeMaxY + VGAP * 1.5 : 20;
+  const colsPerRow = Math.max(1, Math.floor(Math.max(treeMaxX, NODE_W * 5) / (NODE_W + HGAP)));
+  isolated.forEach((a, i) => {
+    positions[a.id] = {
+      x: 20 + (i % colsPerRow) * (NODE_W + HGAP),
+      y: gridY + Math.floor(i / colsPerRow) * (NODE_H + VGAP)
+    };
+  });
+
+  const totalW = Math.max(...Object.values(positions).map(p => p.x + NODE_W)) + 40;
+  const totalH = Math.max(...Object.values(positions).map(p => p.y + NODE_H)) + 40;
+
+  const catColors = { ewes:'#9333b0', recips:'#6020a0', airams:'#4020c0', rams:'#2050c0', wethers:'#306040' };
+
+  // Build SVG lines
+  let lines = '';
+  // Separator between tree and isolated grid
+  if (hasTree && isolated.length > 0) {
+    const sepY = treeMaxY + VGAP * 0.6;
+    lines += `<line x1="0" y1="${sepY}" x2="9999" y2="${sepY}" stroke="#2a3f22" stroke-width="1" stroke-dasharray="6,4"/>`;
+    lines += `<text x="20" y="${sepY - 6}" fill="#4a6e38" font-size="12" font-family="system-ui,sans-serif">── Unlinked animals ──</text>`;
+  }
+  const lineColors = { sire:'#4a8a2a', dam:'#3070b8', ai:'#d08020' };
+  animals.forEach(a => {
+    const child = positions[a.id];
+    if (!child) return;
+    const cx = child.x + NODE_W/2, cy = child.y;
+
+    function svgLine(parentId, color) {
+      const par = positions[parentId];
+      if (!par) return;
+      const px = par.x + NODE_W/2, py = par.y + NODE_H;
+      const midY = py + (cy - py)/2;
+      lines += `<path d="M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}" fill="none" stroke="${color}" stroke-width="2"/>`;
+    }
+    if (a.sire_id && positions[a.sire_id]) svgLine(a.sire_id, lineColors.sire);
+    if (a.dam_id && positions[a.dam_id]) svgLine(a.dam_id, lineColors.dam);
+    if (a.ai_sire_id && positions[a.ai_sire_id]) svgLine(a.ai_sire_id, lineColors.ai);
+    if (a._type==='airam' && a.sire_ai_id && positions[a.sire_ai_id]) svgLine(a.sire_ai_id, lineColors.ai);
+    if (a._type==='airam' && a.dam_lamb_id && positions[a.dam_lamb_id]) svgLine(a.dam_lamb_id, lineColors.dam);
+  });
+
+  // Build nodes as absolutely positioned divs
+  let nodes = '';
+  animals.forEach(a => {
+    const pos = positions[a.id];
+    if (!pos) return;
+    const color = catColors[a._cat] || '#4020c0';
+    const tag = a.ear_tag ? '#'+a.ear_tag : (a.registration_no||'');
+    const cursor = a._type === 'lamb' ? 'pointer' : 'default';
+    const onclick = a._type === 'lamb' ? `onclick="showLamb('${a.id}')"` : '';
+    nodes += `<div ${onclick} title="${a.name}${tag?' '+tag:''}" style="
+      position:absolute;
+      left:${pos.x}px;top:${pos.y}px;
+      width:${NODE_W}px;height:${NODE_H}px;
+      background:${color};
+      border-radius:8px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:4px 10px;box-sizing:border-box;
+      cursor:${cursor};
+      user-select:none;
+    ">
+      <div style="color:#fff;font-size:15px;font-weight:700;font-family:system-ui,sans-serif;text-align:center;line-height:1.2;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
+      ${tag ? `<div style="color:rgba(255,255,255,0.75);font-size:11px;font-family:system-ui,sans-serif;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tag}</div>` : ''}
+    </div>`;
+  });
+
+  const wrap = document.getElementById('ped-canvas-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div style="position:relative;width:${totalW}px;height:${totalH}px;min-width:100%;transform-origin:top left">
+      <svg style="position:absolute;top:0;left:0;width:${totalW}px;height:${totalH}px;pointer-events:none" viewBox="0 0 ${totalW} ${totalH}" preserveAspectRatio="none">
+        ${lines}
+      </svg>
+      ${nodes}
+    </div>`;
+  pedZoomLevel = 1;
+  setTimeout(setupPedScrollZoom, 50);
+}
+
+let pedZoomLevel = 1;
+
+function pedZoom(factor) {
+  pedZoomLevel = Math.max(0.3, Math.min(3, pedZoomLevel * factor));
+  const inner = document.querySelector('#ped-canvas-wrap > div');
+  if (inner) {
+    inner.style.transform = `scale(${pedZoomLevel})`;
+    inner.style.transformOrigin = 'top left';
+  }
+}
+
+function pedResetView() {
+  pedZoomLevel = 1;
+  const w = document.getElementById('ped-canvas-wrap');
+  const inner = w ? w.querySelector('div') : null;
+  if (inner) { inner.style.transform = 'scale(1)'; }
+  if (w) { w.scrollLeft = 0; w.scrollTop = 0; }
+}
+
+function setupPedScrollZoom() {
+  const wrap = document.getElementById('ped-canvas-wrap');
+  if (!wrap) return;
+
+  // Ctrl+scroll to zoom
+  wrap.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      pedZoom(e.deltaY < 0 ? 1.1 : 0.9);
+    }
+  }, { passive: false });
+
+  // Mouse drag to pan
+  let dragging = false;
+  let dragStartX = 0, dragStartY = 0;
+  let scrollStartX = 0, scrollStartY = 0;
+
+  wrap.addEventListener('mousedown', e => {
+    // Only drag on the background, not on node divs
+    if (e.target !== wrap && e.target.tagName !== 'svg' && e.target.tagName !== 'path' && !e.target.closest('svg')) {
+      if (e.target.style && e.target.style.position === 'absolute') return; // clicking a node
+    }
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    scrollStartX = wrap.scrollLeft;
+    scrollStartY = wrap.scrollTop;
+    wrap.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    wrap.scrollLeft = scrollStartX - (e.clientX - dragStartX);
+    wrap.scrollTop = scrollStartY - (e.clientY - dragStartY);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; wrap.style.cursor = 'grab'; }
+  });
+
+  wrap.style.cursor = 'grab';
+}
+// ── CALENDAR ──────────────────────────────────────────
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calFilter = 'all';    // 'all' | 'breeding' | 'lambing' | 'treatment'
+let calLambFilter = '';   // '' = whole flock, or lamb id
+let calEvents = [];
+
+async function renderCalendar() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  await loadCalendarEvents();
+  drawCalendar();
+}
+
+async function loadCalendarEvents() {
+  calEvents = [];
+
+  // Breeding dates & expected lamb dates
+  const { data: breeding } = await db.from('breeding_records').select('*');
+  (breeding||[]).forEach(r => {
+    if (r.breeding_date) calEvents.push({ date: r.breeding_date, type: 'breeding', label: `🐏 Bred`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
+    if (r.expected_lamb_date) calEvents.push({ date: r.expected_lamb_date, type: 'lambing', label: `📅 Due`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
+    if (r.actual_lamb_date) calEvents.push({ date: r.actual_lamb_date, type: 'lambing', label: `🐑 Lambed`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
+  });
+
+  // Health records (treatments)
+  const { data: health } = await db.from('health_records').select('*');
+  (health||[]).forEach(r => {
+    calEvents.push({ date: r.date, type: 'treatment', label: r.type === 'vaccine' ? `💉 ${r.product}` : `💊 ${r.product}`, lamb_id: r.lamb_id });
+  });
+
+  // Embryo flushes
+  const { data: flushes } = await db.from('embryo_flushes').select('*');
+  (flushes||[]).forEach(f => {
+    if (f.flush_date) {
+      const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null);
+      const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||'');
+      calEvents.push({ date: f.flush_date, type: 'embryo', label: `🔬 Flush`, lamb_id: f.donor_id, sire_text: sireName, extra: `${f.embryos_collected||0} embryos` });
+    }
+  });
+
+  // Embryo transfers
+  const { data: transfers } = await db.from('embryo_transfers').select('*');
+  (transfers||[]).forEach(t => {
+    if (t.implant_date) {
+      calEvents.push({ date: t.implant_date, type: 'embryo', label: `🐑 Transfer`, lamb_id: t.recipient_id||t.donor_id, extra: t.outcome||'Pending' });
+    }
+  });
+}
+
+function jumpToMostRecentEvent() {
+  const today = new Date().toISOString().slice(0, 10);
+  const relevant = calEvents.filter(e => {
+    if (!e.date) return false;
+    if (calFilter !== 'all' && e.type !== calFilter) return false;
+    if (calLambFilter && e.lamb_id !== calLambFilter) return false;
+    return true;
+  });
+  if (relevant.length === 0) return;
+
+  // Prefer the closest upcoming date, otherwise the most recent past date
+  const upcoming = relevant.filter(e => e.date >= today).sort((a,b) => a.date.localeCompare(b.date));
+  const past = relevant.filter(e => e.date < today).sort((a,b) => b.date.localeCompare(a.date));
+  const best = upcoming.length > 0 ? upcoming[0] : past[0];
+
+  const [y, m] = best.date.split('-');
+  calYear = parseInt(y);
+  calMonth = parseInt(m) - 1;
+}
+
+function drawCalendar() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Filter events
+  let filtered = calEvents.filter(e => {
+    if (!e.date) return false;
+    const [y, m] = e.date.split('-');
+    if (parseInt(y) !== calYear || parseInt(m) !== calMonth + 1) return false;
+    if (calFilter !== 'all' && e.type !== calFilter) return false;
+    if (calLambFilter && e.lamb_id !== calLambFilter) return false;
+    return true;
+  });
+
+  // Group by date
+  const byDate = {};
+  filtered.forEach(e => {
+    if (!byDate[e.date]) byDate[e.date] = [];
+    byDate[e.date].push(e);
+  });
+
+  const lambOptions = allLambs.map(l => `<option value="${l.id}" ${calLambFilter===l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+
+  const filterBtns = [
+    { key: 'all', label: 'All' },
+    { key: 'breeding', label: '🐏 Breeding' },
+    { key: 'lambing', label: '🐑 Lambing' },
+    { key: 'treatment', label: '💉 Treatments' },
+    { key: 'embryo', label: '🔬 Embryo' },
+  ].map(f => `<button class="filter-btn ${calFilter===f.key?'active':''}" onclick="calFilter='${f.key}';jumpToMostRecentEvent();drawCalendar()">${f.label}</button>`).join('');
+
+  let html = `
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap;gap:0.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="btn btn-secondary btn-sm" onclick="calMonth--;if(calMonth<0){calMonth=11;calYear--;}drawCalendar()">‹</button>
+          <span style="font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--text);min-width:160px;text-align:center">${monthNames[calMonth]} ${calYear}</span>
+          <button class="btn btn-secondary btn-sm" onclick="calMonth++;if(calMonth>11){calMonth=0;calYear++;}drawCalendar()">›</button>
+          <button class="btn btn-secondary btn-sm" onclick="calYear=new Date().getFullYear();calMonth=new Date().getMonth();drawCalendar()">Today</button>
+        </div>
+        <select style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.75rem;font-size:0.85rem;font-family:'Source Serif 4',serif" onchange="calLambFilter=this.value;drawCalendar()">
+          <option value="">Whole Flock</option>
+          ${lambOptions}
+        </select>
+      </div>
+      <div class="search-bar" style="margin-bottom:0.85rem">${filterBtns}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div style="text-align:center;font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;padding:0.3rem 0">${d}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px" id="cal-grid">`;
+
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div style="min-height:80px;background:var(--bg);border-radius:0.35rem;opacity:0.3"></div>`;
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = dateStr === today;
+    const dayEvents = byDate[dateStr] || [];
+
+    // Deduplicate treatments on same day — show count instead
+    const treatments = dayEvents.filter(e => e.type === 'treatment');
+    const nonTreatments = dayEvents.filter(e => e.type !== 'treatment');
+    const uniqueTreatmentProducts = [...new Set(treatments.map(e => e.label))];
+
+    html += `<div style="min-height:80px;background:var(--surface);border-radius:0.35rem;padding:0.3rem;border:1.5px solid ${isToday?'var(--accent)':'var(--border)'};position:relative;overflow:hidden">
+      <div style="font-size:0.8rem;font-weight:${isToday?700:400};color:${isToday?'var(--accent)':'var(--text2)'};margin-bottom:0.2rem">${day}</div>
+      ${nonTreatments.map(e => {
+        const lamb = allLambs.find(l => l.id === e.lamb_id);
+        const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
+        const sireName = sire ? sire.name : (e.sire_text||'');
+        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':'#3a3010';
+        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':'#e8c040';
+        return `<div onclick="showCalEventDetail('${dateStr}')" style="font-size:0.68rem;background:${color};color:${textColor};border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.label}${lamb?' — '+lamb.name:''}${sireName?' x '+sireName:''}">
+          ${e.label}${lamb?` <span style="opacity:0.8">${lamb.name}</span>`:''}
+        </div>`;
+      }).join('')}
+      ${uniqueTreatmentProducts.map(prod => {
+        const count = treatments.filter(e=>e.label===prod).length;
+        return `<div onclick="showCalEventDetail('${dateStr}')" style="font-size:0.68rem;background:#3a3010;color:#e8c040;border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${prod}">
+          ${prod}${count>1?` <span style="opacity:0.7">(${count})</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  html += `</div>`;
+
+  // Upcoming events list below calendar
+  const upcoming = calEvents.filter(e => {
+    if (!e.date || e.date < today) return false;
+    if (calFilter !== 'all' && e.type !== calFilter) return false;
+    if (calLambFilter && e.lamb_id !== calLambFilter) return false;
+    return true;
+  }).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 10);
+
+  if (upcoming.length > 0) {
+    html += `<div style="margin-top:1.5rem">
+      <div class="section-title" style="margin-bottom:0.75rem">Upcoming Events</div>`;
+    upcoming.forEach(e => {
+      const lamb = allLambs.find(l => l.id === e.lamb_id);
+      const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
+      const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
+      const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':'badge-yellow';
+      html += `<div class="record-row" style="cursor:pointer" onclick="${lamb?`showLamb('${lamb.id}')`:``}">
+        <div style="display:flex;gap:0.75rem;align-items:center;flex:1">
+          <div style="text-align:center;min-width:40px">
+            <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--accent);font-weight:700">${parseInt(e.date.split('-')[2])}</div>
+            <div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">${monthNames[parseInt(e.date.split('-')[1])-1].slice(0,3)}</div>
+          </div>
+          <div>
+            <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+              <span style="font-weight:600;color:var(--text)">${e.label}</span>
+              <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type}</span>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem">
+              ${lamb?lamb.name:''}${sireName?' × '+sireName:''}
+            </div>
+          </div>
+        </div>
+        ${lamb?`<span style="color:var(--text3);font-size:0.8rem">→</span>`:''}
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  document.getElementById('main-content').innerHTML = html;
+
+  // Restore lamb filter select value
+  const sel = document.querySelector('#main-content select');
+  if (sel) sel.value = calLambFilter;
+}
+
+function showCalEventDetail(dateStr) {
+  const dayEvents = calEvents.filter(e => e.date === dateStr && (calFilter==='all'||e.type===calFilter) && (!calLambFilter||e.lamb_id===calLambFilter));
+  if (dayEvents.length === 0) return;
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const [y,m,d] = dateStr.split('-');
+  let html = `
+    <div class="modal-header">
+      <div class="modal-title">${parseInt(d)} ${monthNames[parseInt(m)-1]} ${y}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>`;
+  dayEvents.forEach(e => {
+    const lamb = allLambs.find(l => l.id === e.lamb_id);
+    const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
+    const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
+    const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':'badge-yellow';
+    html += `<div class="record-row" style="${lamb?'cursor:pointer':''}" onclick="${lamb?`closeModal();showLamb('${lamb.id}')`:``}">
+      <div style="flex:1">
+        <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+          <span style="font-weight:600;color:var(--text)">${e.label}</span>
+          <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type}</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">
+          ${lamb?`<span style="color:var(--text2)">${lamb.name}</span>${lamb.ear_tag?' #'+lamb.ear_tag:''}`:''} ${sireName?'× '+sireName:''} ${e.extra?`<span style="color:var(--text3)">· ${e.extra}</span>`:''}
+        </div>
+      </div>
+      ${lamb?`<span style="color:var(--text3)">→</span>`:''}
+    </div>`;
+  });
+  showModal(html);
+}
+
+function calcExpectedLamb() {
+  const dateVal = document.getElementById('br-date')?.value;
+  if (!dateVal) return;
+  const d = new Date(dateVal);
+  d.setDate(d.getDate() + 147);
+  const el = document.getElementById('br-expected');
+  if (el) el.value = d.toISOString().slice(0, 10);
+}
+</script>
