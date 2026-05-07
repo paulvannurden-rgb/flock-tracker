@@ -374,6 +374,17 @@ function showPage(page) {
   else if (page === 'export') renderExport();
 }
 
+function showLambAtTab(id, tab) {
+  currentLambId = id;
+  currentLambTab = tab;
+  const btn = document.getElementById('header-action-btn');
+  if (btn) btn.style.display = 'none';
+  ['sidebar-treatment-btn','sidebar-bulk-breed-btn','sidebar-bulk-pregcheck-btn','sidebar-bulk-weight-btn'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  renderLambDetail();
+}
+
 function showLamb(id) {
   currentLambId = id;
   currentLambTab = 'health';
@@ -1744,7 +1755,7 @@ async function renderAnalytics() {
             const lamb = allLambs.find(l=>l.id===r.lamb_id);
             const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
             const isPastDue = r.expected_lamb_date && r.expected_lamb_date < today;
-            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLamb('${r.lamb_id}')">
+            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLambAtTab('${r.lamb_id}','breeding')">
               <div>
                 <span style="font-weight:600;font-size:0.85rem">${lamb?.name||'Unknown'}</span>
                 <span style="color:var(--text3);font-size:0.78rem"> · Breeding ${r.breeding_date} · ${sire?.name||r.sire_text||'—'}</span>
@@ -1762,7 +1773,7 @@ async function renderAnalytics() {
             const recipName = recip?.name || t.recipient_text || '—';
             const checkDate = t.implant_date ? new Date(new Date(t.implant_date).getTime()+45*24*60*60*1000).toISOString().slice(0,10) : null;
             const isPastDue = checkDate && checkDate < today;
-            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLamb('${flush?.donor_id||t.donor_id}')">
+            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLambAtTab('${flush?.donor_id||t.donor_id}','embryo')">
               <div>
                 <span style="font-weight:600;font-size:0.85rem">${recipName}</span>
                 <span style="color:var(--text3);font-size:0.78rem"> · Transfer ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</span>
@@ -1779,27 +1790,36 @@ async function renderAnalytics() {
       <!-- FLUSH TYPE COMPARISON -->
       ${(ivfStats || moetStats) ? `
       <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Flush Type Comparison</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.85rem;margin-bottom:1.5rem">
         ${flushTypeCard(moetStats, moetFlushes)}
         ${flushTypeCard(ivfStats, ivfFlushes)}
       </div>` : ''}
 
-      <!-- CONCEPTION RATES -->
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Ewe</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">${eweCards||'<div style="color:var(--text3);font-size:0.85rem">No breeding records in range</div>'}</div>
+      <!-- TWO COLUMN LAYOUT -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
 
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Sire</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">${sireCards||'<div style="color:var(--text3);font-size:0.85rem">No breeding records in range</div>'}</div>
+        <!-- LEFT COLUMN: CONCEPTION -->
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Ewe</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.25rem">${eweCards||'<div style="color:var(--text3);font-size:0.85rem">No breeding records in range</div>'}</div>
 
-      <!-- RETENTION RATES -->
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Embryo Retention Rate — By Donor</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">${donorCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Sire</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.25rem">${sireCards||'<div style="color:var(--text3);font-size:0.85rem">No breeding records in range</div>'}</div>
+        </div>
 
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Embryo Retention Rate — By Recipient</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">${recipCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
+        <!-- RIGHT COLUMN: RETENTION -->
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Donor</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.25rem">${donorCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
 
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Embryo Retention Rate — By Sire</div>
-      <div class="flock-grid" style="margin-bottom:1.5rem">${flushSireCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>`;
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Recipient</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.25rem">${recipCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
+
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Sire</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.25rem">${flushSireCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
+        </div>
+
+      </div>`;
   }
 
   window._buildAnalyticsHTML = buildAnalyticsHTML;
