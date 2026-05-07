@@ -1172,11 +1172,10 @@ async function adjustInventory(ramId, location, entryIdHint, direction) {
 
   // Always look up fresh from allSemenInventory by ram+location
   const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === location);
-  const entryId = entry ? entry.id : entryIdHint;
 
   if (entry) {
     const newCount = Math.max(0, (entry.straws || 0) + adj);
-    await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entryId);
+    await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entry.id);
     entry.straws = newCount;
   } else {
     if (adj <= 0) { toast('No inventory to deduct'); return; }
