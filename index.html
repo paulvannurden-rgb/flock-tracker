@@ -1151,7 +1151,7 @@ async function openManageInventory(ramId) {
         <span style="font-size:0.75rem;color:var(--text3)">straws</span>
       </div>
       <div style="display:flex;gap:0.35rem;align-items:center">
-        <input type="number" id="inv-adj-${loc}" value="1" min="1" style="width:55px;padding:0.3rem 0.4rem;font-size:0.82rem" placeholder="qty">
+        <input type="number" id="inv-adj-${loc}" value="1" min="0.5" step="0.5" style="width:65px;padding:0.3rem 0.4rem;font-size:0.82rem" placeholder="qty">
         <button class="btn btn-primary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',1)">+ Add</button>
         <button class="btn btn-secondary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',-1)" ${count===0?'disabled':''}>− Use</button>
       </div>
@@ -1167,7 +1167,7 @@ async function openManageInventory(ramId) {
         <select id="inv-from-loc" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">${locOptions}</select>
         <span style="color:var(--text3)">→</span>
         <select id="inv-to-loc" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">${locOptions}</select>
-        <input type="number" id="inv-transfer-qty" value="1" min="1" style="width:55px;padding:0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <input type="number" id="inv-transfer-qty" value="1" min="0.5" step="0.5" style="width:65px;padding:0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
         <span style="font-size:0.78rem;color:var(--text3)">straws</span>
         <button class="btn btn-primary btn-sm" onclick="transferInventory('${ramId}')">Transfer</button>
       </div>
@@ -1184,7 +1184,7 @@ async function openManageInventory(ramId) {
 async function transferInventory(ramId) {
   const fromLoc = document.getElementById('inv-from-loc')?.value;
   const toLoc = document.getElementById('inv-to-loc')?.value;
-  const qty = parseInt(document.getElementById('inv-transfer-qty')?.value) || 1;
+  const qty = parseFloat(document.getElementById('inv-transfer-qty')?.value) || 1;
 
   if (fromLoc === toLoc) { toast('Select different locations'); return; }
 
@@ -1220,7 +1220,7 @@ async function transferInventory(ramId) {
 }
 
 async function adjustInventory(ramId, location, entryIdHint, direction) {
-  const qty = parseInt(document.getElementById(`inv-adj-${location}`)?.value) || 1;
+  const qty = parseFloat(document.getElementById(`inv-adj-${location}`)?.value) || 1;
   const adj = direction * qty;
 
   // Always look up fresh from allSemenInventory by ram+location
@@ -1763,7 +1763,7 @@ function openAddBreeding(rec) {
     <div id="br-semen-section" style="${hasSemenInv||!aiSireId?'':'display:none'}">
       <div class="row">
         <div class="field"><label>Semen Location</label><select id="br-semen-loc">${semenOpts}</select></div>
-        <div class="field"><label>Straws Used</label><input type="number" id="br-straws-used" value="${rec?.straws_used||1}" min="0" placeholder="e.g. 1"></div>
+        <div class="field"><label>Straws Used</label><input type="number" id="br-straws-used" value="${rec?.straws_used||1}" min="0" step="0.5" placeholder="e.g. 1"></div>
       </div>
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
@@ -1815,7 +1815,7 @@ async function saveBreeding(id) {
     const savedId = data?.id;
     if (ai_sire_id && savedId) {
       const loc = v('br-semen-loc');
-      const straws = parseInt(v('br-straws-used')) || 0;
+      const straws = parseFloat(v('br-straws-used')) || 0;
       if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', savedId);
     }
     toast('Breeding logged');
@@ -1853,7 +1853,7 @@ function showFlushModal(flush) {
     <div id="fl-semen-section" style="${hasSemenInv?'':'display:none'}">
       <div class="row">
         <div class="field"><label>Semen Location</label><select id="fl-semen-loc">${semenOpts}</select></div>
-        <div class="field"><label>Straws Used</label><input type="number" id="fl-straws-used" value="1" min="0" placeholder="e.g. 1"></div>
+        <div class="field"><label>Straws Used</label><input type="number" id="fl-straws-used" value="1" min="0" step="0.5" placeholder="e.g. 1"></div>
       </div>
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
@@ -1892,7 +1892,7 @@ async function saveFlush(id) {
     const savedId = data?.id;
     if (ai_sire_id && savedId) {
       const loc = v('fl-semen-loc');
-      const straws = parseInt(v('fl-straws-used')) || 0;
+      const straws = parseFloat(v('fl-straws-used')) || 0;
       if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', savedId);
     }
     toast('Flush recorded');
