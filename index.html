@@ -1016,10 +1016,24 @@ function renderPedigreeTab(el) {
 function sireOptions(selectedId) {
   const flockRams = allLambs.filter(l => l.sex === 'Ram');
   const flockOpts = flockRams.map(l => `<option value="lamb:${l.id}" ${selectedId==='lamb:'+l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
-  const aiOpts = allAiRams.map(r => `<option value="ai:${r.id}" ${selectedId==='ai:'+r.id?'selected':''}>${r.name}${r.registration_no?' ('+r.registration_no+')':''} 🧬</option>`).join('');
+
+  // Sort AI rams — those with inventory first
+  const ramsWithInv = allAiRams.filter(r => allSemenInventory.some(i => i.ai_ram_id === r.id && i.straws > 0));
+  const ramsWithoutInv = allAiRams.filter(r => !allSemenInventory.some(i => i.ai_ram_id === r.id && i.straws > 0));
+
+  const makeOpt = r => {
+    const inv = allSemenInventory.filter(i => i.ai_ram_id === r.id && i.straws > 0);
+    const invStr = inv.length > 0 ? ` — ${inv.map(i=>i.location+': '+i.straws).join(', ')}` : '';
+    return `<option value="ai:${r.id}" ${selectedId==='ai:'+r.id?'selected':''}>${r.name}${invStr} 🧬</option>`;
+  };
+
+  const aiOptsWithInv = ramsWithInv.map(makeOpt).join('');
+  const aiOptsNoInv = ramsWithoutInv.map(makeOpt).join('');
+
   return `<option value="">— Select sire —</option>
     ${flockRams.length ? `<optgroup label="Flock Rams">${flockOpts}</optgroup>` : ''}
-    ${allAiRams.length ? `<optgroup label="AI Rams">${aiOpts}</optgroup>` : ''}`;
+    ${ramsWithInv.length ? `<optgroup label="AI Rams — In Stock 🧪">${aiOptsWithInv}</optgroup>` : ''}
+    ${ramsWithoutInv.length ? `<optgroup label="AI Rams — No Inventory">${aiOptsNoInv}</optgroup>` : ''}`;
 }
 
 function parseSireSelection(val) {
@@ -1173,7 +1187,7 @@ async function adjustInventory(ramId, location, entryId, direction) {
 
 async function deductSemenInventory(ramId, location, straws, referenceType, referenceId) {
   const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === location);
-  if (!entry) return;
+  if (!entry) { toast('No inventory found for that location'); return; }
   const newCount = Math.max(0, entry.straws - straws);
   await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entry.id);
   await db.from('semen_transactions').insert({
@@ -1182,6 +1196,8 @@ async function deductSemenInventory(ramId, location, straws, referenceType, refe
     reference_type: referenceType, reference_id: referenceId,
     notes: `Used in ${referenceType}`
   });
+  // Update in memory immediately
+  entry.straws = newCount;
   await loadSemenInventory();
 }
 
@@ -2140,7 +2156,7 @@ function openBulkBreeding() {
       ${ewes.map((ewe,i) => `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:0.5rem">
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
-            <input type="checkbox" id="bb-check-${ewe.id}" checked style="accent-color:var(--accent);width:14px;height:14px">
+            <input type="checkbox" id="bb-check-${ewe.id}" style="accent-color:var(--accent);width:14px;height:14px">
             <label for="bb-check-${ewe.id}" style="font-weight:600;font-size:0.88rem;cursor:pointer">${ewe.name}${ewe.ear_tag?' #'+ewe.ear_tag:''}</label>
           </div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -2174,16 +2190,19 @@ function applyGlobalBreedDate() {
 async function saveBulkBreeding() {
   const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both')));
   const records = [];
+  const missingSire = [];
   for (const ewe of ewes) {
     const checked = document.getElementById(`bb-check-${ewe.id}`)?.checked;
     if (!checked) continue;
     const sireVal = document.getElementById(`bb-sire-${ewe.id}`)?.value || '';
     const date = document.getElementById(`bb-date-${ewe.id}`)?.value || '';
+    if (!sireVal) { missingSire.push(ewe.name); continue; }
     if (!date) continue;
     const { sire_id, ai_sire_id } = parseSireSelection(sireVal);
     const expectedDate = date ? new Date(new Date(date).getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
     records.push({ lamb_id: ewe.id, sire_id, ai_sire_id, breeding_date: date, expected_lamb_date: expectedDate, outcome: 'Pending' });
   }
+  if (missingSire.length > 0) { toast(`Select a sire for: ${missingSire.join(', ')}`); return; }
   if (records.length === 0) { toast('No ewes selected'); return; }
   await db.from('breeding_records').insert(records);
   toast(`${records.length} breeding records saved`);
