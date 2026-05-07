@@ -172,8 +172,8 @@
   .sidebar-btn:hover:not(.active) { background: var(--surface2); color: var(--text2); }
 
   @media (max-width: 700px) {
-    #sidebar { left: -220px; transition: left 0.25s; box-shadow: none; z-index: 90; }
-    #sidebar.open { left: 0; box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
+    #sidebar { left: -240px !important; transition: left 0.25s ease; z-index: 90; }
+    #sidebar.open { left: 0 !important; box-shadow: 4px 0 32px rgba(0,0,0,0.6); }
     #mobile-header { display: flex !important; }
     div[style*="margin-left:220px"] { margin-left: 0 !important; padding-top: 56px; }
     main { padding-bottom: 1.5rem; }
@@ -381,12 +381,19 @@ function toggleMobileMenu() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('mobile-overlay');
   const isOpen = sidebar.classList.contains('open');
-  sidebar.classList.toggle('open', !isOpen);
-  overlay.style.display = isOpen ? 'none' : 'block';
+  if (isOpen) {
+    sidebar.classList.remove('open');
+    overlay.style.display = 'none';
+  } else {
+    sidebar.classList.add('open');
+    overlay.style.display = 'block';
+  }
 }
 function closeMobileMenu() {
-  document.getElementById('sidebar')?.classList.remove('open');
-  document.getElementById('mobile-overlay').style.display = 'none';
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  const overlay = document.getElementById('mobile-overlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 function showLambAtTab(id, tab) {
