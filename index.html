@@ -245,6 +245,7 @@
         <div style="height:1px;background:var(--border);margin:0.5rem 0"></div>
         <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openFlockTreatment()"><span>💉</span>Flock Treatment</button>
         <button class="sidebar-btn" id="sidebar-bulk-breed-btn" onclick="openBulkBreeding()" style="display:none"><span>🐏</span>Bulk Breeding</button>
+        <button class="sidebar-btn" id="sidebar-bulk-pregcheck-btn" onclick="openBulkPregCheck()" style="display:none"><span>🔍</span>Preg Check</button>
         <button class="sidebar-btn" id="sidebar-bulk-weight-btn" onclick="openBulkWeight()" style="display:none"><span>⚖️</span>Bulk Weight</button>
       </nav>
 
@@ -357,10 +358,12 @@ function showPage(page) {
   const btn = document.getElementById('header-action-btn');
   const treatBtn = document.getElementById('sidebar-treatment-btn');
   const bulkBreedBtn = document.getElementById('sidebar-bulk-breed-btn');
+  const bulkPregBtn = document.getElementById('sidebar-bulk-pregcheck-btn');
   const bulkWeightBtn = document.getElementById('sidebar-bulk-weight-btn');
   btn.style.display = page === 'flock' ? '' : 'none';
   if (treatBtn) treatBtn.style.display = page === 'flock' ? '' : 'none';
   if (bulkBreedBtn) bulkBreedBtn.style.display = page === 'flock' ? '' : 'none';
+  if (bulkPregBtn) bulkPregBtn.style.display = page === 'flock' ? '' : 'none';
   if (bulkWeightBtn) bulkWeightBtn.style.display = page === 'flock' ? '' : 'none';
   if (page === 'flock') renderFlock();
   else if (page === 'airams') renderAiRams();
@@ -881,6 +884,8 @@ async function saveBreedingResult(breedingId, id) {
     }
   }
   window._brLambs = [];
+  // Auto-update breeding record outcome to Lamb Born
+  await db.from('breeding_records').update({ outcome: 'Lamb Born' }).eq('id', breedingId);
   closeModal(); loadLambTab();
 }
 
@@ -1504,10 +1509,26 @@ async function renderAnalytics() {
     const filterTransfer = (transfers||[]).filter(t => (!fromDate||t.implant_date>=fromDate) && (!toDate||t.implant_date<=toDate));
 
     const conceivedOutcomes = ['Confirmed Pregnant','Lamb Born'];
+    const decidedOutcomes = ['Confirmed Pregnant','Lamb Born','Not Pregnant','Failed'];
+
+    // Only include records with a decided outcome (exclude Pending)
+    const filterBreedDecided = filterBreed.filter(r => decidedOutcomes.includes(r.outcome));
+    const filterTransferDecided = filterTransfer.filter(t => decidedOutcomes.includes(t.outcome));
+
+    // Needs update — Pending records past expected date
+    const today = new Date().toISOString().slice(0,10);
+    const overdueBreeding = (breedingRecs||[]).filter(r =>
+      r.outcome === 'Pending' && r.expected_lamb_date && r.expected_lamb_date < today
+    );
+    const overdueTransfer = (transfers||[]).filter(t =>
+      t.outcome === 'Pending' && t.implant_date && t.implant_date < today
+    );
+    const pendingBreeding = filterBreed.filter(r => r.outcome === 'Pending' || !r.outcome);
+    const pendingTransfer = filterTransfer.filter(t => t.outcome === 'Pending' || !t.outcome);
 
     // ── CONCEPTION RATE BY EWE ──
     const eweConception = {};
-    filterBreed.forEach(r => {
+    filterBreedDecided.forEach(r => {
       if (!r.lamb_id) return;
       if (!eweConception[r.lamb_id]) eweConception[r.lamb_id] = { total:0, conceived:0, lambs:0 };
       eweConception[r.lamb_id].total++;
@@ -1521,7 +1542,7 @@ async function renderAnalytics() {
 
     // ── CONCEPTION RATE BY AI SIRE (breeding) ──
     const sireConception = {};
-    filterBreed.forEach(r => {
+    filterBreedDecided.forEach(r => {
       const sireKey = r.ai_sire_id || ('text:' + (r.sire_text||'Unknown'));
       if (!sireConception[sireKey]) sireConception[sireKey] = { total:0, conceived:0, lambs:0, isAi: !!r.ai_sire_id };
       sireConception[sireKey].total++;
@@ -1536,7 +1557,7 @@ async function renderAnalytics() {
 
     // ── RETENTION RATE BY DONOR ──
     const donorRetention = {};
-    filterTransfer.forEach(t => {
+    filterTransferDecided.forEach(t => {
       const flushRec = (flushes||[]).find(f => f.id === t.flush_id);
       const donorId = flushRec?.donor_id || t.donor_id;
       if (!donorId) return;
@@ -1553,7 +1574,7 @@ async function renderAnalytics() {
 
     // ── RETENTION RATE BY RECIPIENT ──
     const recipRetention = {};
-    filterTransfer.forEach(t => {
+    filterTransferDecided.forEach(t => {
       const recipKey = t.recipient_id || ('text:' + (t.recipient_text||'Unknown'));
       if (!recipRetention[recipKey]) recipRetention[recipKey] = { total:0, retained:0, lambs:0, isLinked: !!t.recipient_id };
       recipRetention[recipKey].total++;
@@ -1563,7 +1584,7 @@ async function renderAnalytics() {
 
     // ── RETENTION RATE BY AI SIRE (flush) ──
     const flushSireRetention = {};
-    filterTransfer.forEach(t => {
+    filterTransferDecided.forEach(t => {
       const flushRec = (flushes||[]).find(f => f.id === t.flush_id);
       const sireKey = flushRec?.ai_sire_id || ('text:' + (flushRec?.sire_text||'Unknown'));
       if (!flushSireRetention[sireKey]) flushSireRetention[sireKey] = { total:0, retained:0, lambs:0, isAi: !!flushRec?.ai_sire_id };
@@ -1575,13 +1596,14 @@ async function renderAnalytics() {
     function pct(n, d) { return d === 0 ? '—' : Math.round(n/d*100) + '%'; }
     function rateColor(n, d) { if (d===0) return 'var(--text3)'; const p = n/d; return p>=0.6?'var(--green)':p>=0.4?'var(--warn)':'var(--danger)'; }
 
-    function statCard(name, tag, total, success, lambs, label) {
+    function statCard(name, tag, total, success, lambs, label, lambId) {
       const rate = pct(success, total);
       const color = rateColor(success, total);
-      return `<div class="card" style="padding:1rem">
+      const clickable = lambId ? `onclick="showLamb('${lambId}')" style="cursor:pointer"` : '';
+      return `<div class="card" style="padding:1rem;transition:border-color 0.15s${lambId?';cursor:pointer':''}" ${clickable} ${lambId?'onmouseenter="this.style.borderColor=\'var(--border2)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"':''}>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
           <div>
-            <div style="font-weight:600;font-size:0.9rem;color:var(--text)">${name}</div>
+            <div style="font-weight:600;font-size:0.9rem;color:var(--text)">${name}${lambId?` <span style="font-size:0.7rem;color:var(--text3)">→</span>`:''}</div>
             ${tag?`<div style="font-size:0.72rem;color:var(--text3)">${tag}</div>`:''}
           </div>
           <div style="text-align:right">
@@ -1608,31 +1630,31 @@ async function renderAnalytics() {
 
     const eweCards = sortByRate(eweConception).map(([id, d]) => {
       const lamb = allLambs.find(l=>l.id===id);
-      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.conceived, d.lambs, 'Conception Rate');
+      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.conceived, d.lambs, 'Conception Rate', id);
     }).join('');
 
     const sireCards = sortByRate(sireConception).map(([key, d]) => {
       const ram = d.isAi ? allAiRams.find(r=>r.id===key) : null;
       const name = ram ? ram.name+' 🧬' : key.replace('text:','');
-      return statCard(name, '', d.total, d.conceived, d.lambs, 'Conception Rate');
+      return statCard(name, '', d.total, d.conceived, d.lambs, 'Conception Rate', null);
     }).join('');
 
     const donorCards = sortByRate(donorRetention).map(([id, d]) => {
       const lamb = allLambs.find(l=>l.id===id);
-      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.retained, d.lambs, 'Retention Rate');
+      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.retained, d.lambs, 'Retention Rate', id);
     }).join('');
 
     const recipCards = sortByRate(recipRetention).map(([key, d]) => {
       const lamb = d.isLinked ? allLambs.find(l=>l.id===key) : null;
       const name = lamb ? lamb.name : key.replace('text:','');
       const tag = lamb?.ear_tag ? '#'+lamb.ear_tag : '';
-      return statCard(name, tag, d.total, d.retained, d.lambs, 'Retention Rate');
+      return statCard(name, tag, d.total, d.retained, d.lambs, 'Retention Rate', d.isLinked ? key : null);
     }).join('');
 
     const flushSireCards = sortByRate(flushSireRetention).map(([key, d]) => {
       const ram = d.isAi ? allAiRams.find(r=>r.id===key) : null;
       const name = ram ? ram.name+' 🧬' : key.replace('text:','');
-      return statCard(name, '', d.total, d.retained, d.lambs, 'Retention Rate');
+      return statCard(name, '', d.total, d.retained, d.lambs, 'Retention Rate', null);
     }).join('');
 
     return `
@@ -1645,7 +1667,38 @@ async function renderAnalytics() {
           <div class="field" style="margin:0;flex:1;min-width:130px"><label>To</label><input type="date" id="analytics-to" value="${toDate}" onchange="applyAnalyticsFilter()"></div>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analytics-from').value='';document.getElementById('analytics-to').value='';applyAnalyticsFilter()">Clear</button>
         </div>
+        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">Pending outcomes are excluded from rate calculations.</div>
       </div>
+
+      <!-- NEEDS UPDATE -->
+      ${(overdueBreeding.length > 0 || overdueTransfer.length > 0) ? `
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:1.25rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">⚠️ Needs Outcome Update (${overdueBreeding.length + overdueTransfer.length} records)</div>
+        ${overdueBreeding.map(r => {
+          const lamb = allLambs.find(l=>l.id===r.lamb_id);
+          const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLamb('${r.lamb_id}')">
+            <div>
+              <span style="font-weight:600;font-size:0.85rem">${lamb?.name||'Unknown'}</span>
+              <span style="color:var(--text3);font-size:0.78rem"> · Breeding ${r.breeding_date} · Sire: ${sire?.name||r.sire_text||'—'}</span>
+            </div>
+            <span style="color:var(--warn);font-size:0.75rem">Expected ${r.expected_lamb_date} →</span>
+          </div>`;
+        }).join('')}
+        ${overdueTransfer.map(t => {
+          const flush = (flushes||[]).find(f=>f.id===t.flush_id);
+          const donor = allLambs.find(l=>l.id===(flush?.donor_id||t.donor_id));
+          const recip = t.recipient_id ? allLambs.find(l=>l.id===t.recipient_id) : null;
+          const recipName = recip?.name || t.recipient_text || '—';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLamb('${flush?.donor_id||t.donor_id}')">
+            <div>
+              <span style="font-weight:600;font-size:0.85rem">${donor?.name||'Unknown'}</span>
+              <span style="color:var(--text3);font-size:0.78rem"> · Transfer to ${recipName} · Implant ${t.implant_date}</span>
+            </div>
+            <span style="color:var(--warn);font-size:0.75rem">🔬 Needs update →</span>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
 
       <!-- CONCEPTION RATES -->
       <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Ewe</div>
@@ -2598,7 +2651,92 @@ async function saveBulkBreeding() {
   await loadLambs();
 }
 
-// ── BULK WEIGHT ────────────────────────────────────────
+// ── BULK PREG CHECK ───────────────────────────────────
+async function openBulkPregCheck() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading breeding records…</div>`;
+
+  // Load all pending breeding records
+  const { data: recs } = await db.from('breeding_records').select('*')
+    .order('breeding_date', {ascending: false});
+
+  // Get ewes with pending breeding records (most recent per ewe)
+  const latestByEwe = {};
+  (recs||[]).forEach(r => {
+    if (r.outcome === 'Pending' || !r.outcome) {
+      if (!latestByEwe[r.lamb_id] || r.breeding_date > latestByEwe[r.lamb_id].breeding_date) {
+        latestByEwe[r.lamb_id] = r;
+      }
+    }
+  });
+
+  const ewesWithPending = Object.values(latestByEwe).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date));
+
+  if (ewesWithPending.length === 0) {
+    showModal(`
+      <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="empty"><div class="empty-icon">✅</div><h3>No pending breeding records</h3><p>All breeding records have an outcome recorded.</p></div>
+      <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
+    renderFlock();
+    return;
+  }
+
+  const defaultOutcome = 'Confirmed Pregnant';
+  const outcomes = ['Confirmed Pregnant', 'Not Pregnant', 'Pending'];
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">${ewesWithPending.length} ewe${ewesWithPending.length!==1?'s':''} with pending breeding records. Check boxes to update outcome.</div>
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:0.78rem;color:var(--text3)">Set all to:</span>
+      <select id="pc-global-outcome" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+        ${outcomes.map(o=>`<option>${o}</option>`).join('')}
+      </select>
+      <button class="btn-icon" onclick="applyGlobalPregOutcome()">Apply to all</button>
+    </div>
+    <div style="max-height:420px;overflow-y:auto" id="pc-rows">
+      ${ewesWithPending.map(r => {
+        const lamb = allLambs.find(l => l.id === r.lamb_id);
+        const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
+        const sireName = sire ? sire.name+' 🧬' : (r.sire_text||'—');
+        return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+          <input type="checkbox" id="pc-check-${r.id}" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}${lamb?.ear_tag?' <span style="color:var(--text3);font-weight:400">#'+lamb.ear_tag+'</span>':''}</div>
+            <div style="font-size:0.72rem;color:var(--text3)">Bred: ${r.breeding_date} · Sire: ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
+          </div>
+          <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
+            ${outcomes.map(o=>`<option ${o===defaultOutcome?'selected':''}>${o}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkPregCheck(${JSON.stringify(ewesWithPending.map(r=>r.id))})">Save Results</button>
+    </div>`, true);
+
+  renderFlock();
+}
+
+function applyGlobalPregOutcome() {
+  const outcome = document.getElementById('pc-global-outcome')?.value;
+  document.querySelectorAll('[id^="pc-outcome-"]').forEach(sel => sel.value = outcome);
+  document.querySelectorAll('[id^="pc-check-"]').forEach(cb => cb.checked = true);
+}
+
+async function saveBulkPregCheck(recordIds) {
+  const updates = [];
+  for (const id of recordIds) {
+    const checked = document.getElementById(`pc-check-${id}`)?.checked;
+    if (!checked) continue;
+    const outcome = document.getElementById(`pc-outcome-${id}`)?.value;
+    if (outcome) updates.push({ id, outcome });
+  }
+  if (updates.length === 0) { toast('No records selected'); return; }
+  await Promise.all(updates.map(u => db.from('breeding_records').update({ outcome: u.outcome }).eq('id', u.id)));
+  toast(`${updates.length} record${updates.length!==1?'s':''} updated`);
+  closeModal();
+}
 function openBulkWeight() {
   const defaultDate = new Date().toISOString().slice(0,10);
   const active = allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both'));
