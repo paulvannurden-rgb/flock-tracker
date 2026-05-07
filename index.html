@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flock Health Ledger</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
@@ -252,10 +251,216 @@
 <div id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://fmdnazihkanqflnabkcy.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZG5hemloa2FucWZsbmFia2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTUzMzMsImV4cCI6MjA5MTg3MTMzM30.tzR7CNxZ9RtZgtKkRNC3UUp1_hTjgoI8kL5rt_tRPyk';
 const FLOCK_PASSWORD = 'flock2024';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── MOCK DATABASE ─────────────────────────────────────
+const MOCK_DATA = {
+  lambs: [
+    { id: 'l1', name: 'Gigi', ear_tag: '20055', scrapie_id: '20055', genetic_code: 'FD', dob: '2019-12-19', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e85e38', notes: 'Top donor ewe', ai_sire_id: 'ar3', sire_text: 'Hot Chocolate' },
+    { id: 'l2', name: 'Betty', ear_tag: '25309', scrapie_id: 'MN43124 25309', genetic_code: 'FF', dob: '2024-12-25', sex: 'Ewe', breed: 'Natural', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838', notes: 'Dee Brothers GreenlineXHombre', ai_sire_id: 'ar1' },
+    { id: 'l3', name: 'Daphnie', ear_tag: '5568', scrapie_id: '5568', genetic_code: 'FF', dob: '2023-02-10', sex: 'Ewe', breed: 'Dorset', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e838a0', notes: 'Gopher' },
+    { id: 'l4', name: 'Frankie', ear_tag: '21428', scrapie_id: '21428', genetic_code: 'FD', dob: '2020-12-10', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#38a8e8', notes: 'Rule bred Burn' },
+    { id: 'l5', name: 'Dee37', ear_tag: '26037', scrapie_id: 'MN43124 26037', genetic_code: 'RRFF', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Both', tag_color: '#e85e38', notes: 'Dee Brothers' },
+    { id: 'l6', name: 'Ivy', ear_tag: '26013', scrapie_id: 'MN43124 26013', genetic_code: 'RRFD', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8' },
+    { id: 'l7', name: 'Italy', ear_tag: '62', scrapie_id: 'MN757208 062', dob: '2026-01-19', sex: 'Ewe', breed: 'Speck', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38e8d4', dam_id: 'l3', ai_sire_id: 'ar3' },
+    { id: 'l8', name: 'Posie', ear_tag: '61', scrapie_id: 'MN757208 061', dob: '2025-12-15', sex: 'Ewe', breed: 'Natural', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e838a0', dam_id: 'l1', ai_sire_id: 'ar2' },
+    { id: 'l9', name: 'Blaze', ear_tag: 'K089', scrapie_id: 'IA1682 K089', dob: '2025-12-27', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8', notes: 'Berry', ai_sire_id: 'ar3' },
+    { id: 'l10', name: 'Eddie', ear_tag: '6042', scrapie_id: 'NE4306 6042', dob: '2026-01-15', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e85e38', notes: 'Double E', ai_sire_id: 'ar4' },
+    { id: 'l11', name: 'Kaht1', ear_tag: '1', scrapie_id: 'NDS1170 976', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#6e8fe8', notes: 'LML 74111' },
+    { id: 'l12', name: 'Kaht2', ear_tag: '168', scrapie_id: 'MN304489 168', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
+    { id: 'l13', name: 'Ezzy', ear_tag: '14', genetic_code: 'FF', dob: '2018-12-20', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838', notes: 'Kobra Kai' },
+    { id: 'l14', name: 'Sissy', ear_tag: '2209', scrapie_id: '2209', genetic_code: 'FF', dob: '2021-12-17', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#38e86e', notes: 'N&H stunner', ai_sire_id: 'ar5' },
+    { id: 'l15', name: 'Thor', ear_tag: '26084', scrapie_id: 'IA3580 26084', dob: '2025-12-14', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Sold', flock_type: 'Show', tag_color: '#6e8fe8', notes: 'Hild Freestyle' },
+  ],
+  ai_rams: [
+    { id: 'ar1', name: 'Truce', breed: 'Cross', genetic_code: 'FD', sire_name: 'Bombshell', dam_name: 'Bart', sire_ai_id: 'ar6' },
+    { id: 'ar2', name: 'Ceasefire', breed: 'Cross', genetic_code: 'FF', sire_name: 'Truce', dam_name: 'Collusion', sire_ai_id: 'ar1' },
+    { id: 'ar3', name: 'Italian Stallion', breed: 'Cross', genetic_code: 'FD', sire_name: 'Bombshell', dam_name: 'Happy Days', sire_ai_id: 'ar6' },
+    { id: 'ar4', name: 'Unfiltered', breed: 'Cross', genetic_code: 'FD', dam_name: 'Truce', sire_ai_id: 'ar7' },
+    { id: 'ar5', name: 'Manifest', breed: 'Cross', genetic_code: 'FD', sire_name: 'No Lie', dam_name: 'Risky Business' },
+    { id: 'ar6', name: 'Bombshell', breed: 'Cross', genetic_code: 'FD' },
+    { id: 'ar7', name: 'Tres Amigos', breed: 'Cross', genetic_code: 'FD', dam_name: 'Saban', sire_ai_id: 'ar2' },
+    { id: 'ar8', name: 'Alliance', breed: 'Cross', genetic_code: 'FD', dam_name: 'Truce/El Chapo', sire_ai_id: 'ar2' },
+  ],
+  health_records: [
+    { id: 'h1', lamb_id: 'l1', type: 'medication', product: 'Dectomax', date: '2026-03-08', route: 'Intramuscular (IM)', dose: '1 ml' },
+    { id: 'h2', lamb_id: 'l1', type: 'vaccine', product: 'CDT (Clostridium/Tetanus)', date: '2026-02-15', route: 'Subcutaneous (SQ)' },
+    { id: 'h3', lamb_id: 'l1', type: 'medication', product: 'Safeguard', date: '2026-04-13', route: 'Oral' },
+    { id: 'h4', lamb_id: 'l2', type: 'medication', product: 'Dectomax', date: '2026-04-15', route: 'Intramuscular (IM)', dose: '1 ml' },
+    { id: 'h5', lamb_id: 'l2', type: 'medication', product: 'Draxin', date: '2026-04-05', route: 'Intramuscular (IM)' },
+    { id: 'h6', lamb_id: 'l6', type: 'medication', product: 'Banamine', date: '2026-03-09', route: 'Intramuscular (IM)', dose: '1 ml' },
+    { id: 'h7', lamb_id: 'l6', type: 'medication', product: 'Penicillin', date: '2026-04-05', end_date: '2026-04-09', route: 'Intramuscular (IM)' },
+    { id: 'h8', lamb_id: 'l9', type: 'medication', product: 'Vitamin B12', date: '2026-04-19', route: 'Subcutaneous (SQ)', dose: '5ml' },
+    { id: 'h9', lamb_id: 'l10', type: 'medication', product: 'Safeguard', date: '2026-04-13', route: 'Oral' },
+  ],
+  weight_records: [
+    { id: 'w1', lamb_id: 'l9', weight_lbs: 98, date: '2026-03-15' },
+    { id: 'w2', lamb_id: 'l9', weight_lbs: 112, date: '2026-04-01' },
+    { id: 'w3', lamb_id: 'l9', weight_lbs: 119, date: '2026-04-19' },
+    { id: 'w4', lamb_id: 'l10', weight_lbs: 113, date: '2026-03-29' },
+    { id: 'w5', lamb_id: 'l10', weight_lbs: 121, date: '2026-04-19' },
+    { id: 'w6', lamb_id: 'l7', weight_lbs: 95, date: '2026-04-10' },
+    { id: 'w7', lamb_id: 'l8', weight_lbs: 88, date: '2026-04-10' },
+  ],
+  breeding_records: [
+    { id: 'b1', lamb_id: 'l1', ai_sire_id: 'ar2', breeding_date: '2025-07-24', expected_lamb_date: '2025-12-18', outcome: 'Lamb Born', notes: '' },
+    { id: 'b2', lamb_id: 'l2', ai_sire_id: 'ar1', breeding_date: '2025-07-30', expected_lamb_date: '2025-12-26', outcome: 'Confirmed Pregnant' },
+    { id: 'b3', lamb_id: 'l13', sire_text: 'Boozie', breeding_date: '2023-07-24', expected_lamb_date: '2023-12-26', outcome: 'Lamb Born', notes: 'Twins' },
+    { id: 'b4', lamb_id: 'l4', ai_sire_id: 'ar8', breeding_date: '2025-09-03', expected_lamb_date: '2026-01-28', outcome: 'Not Pregnant' },
+  ],
+  breeding_results: [
+    { id: 'br1', breeding_id: 'b1', lamb_id: 'l1', birth_date: '2025-12-14', num_born: 3, num_alive: 3, num_male: 2, num_female: 1, notes: '57 to Dicke, 56 to Hacker' },
+    { id: 'br2', breeding_id: 'b3', lamb_id: 'l13', birth_date: '2023-12-26', num_born: 2, num_alive: 2, num_male: 2, notes: 'Class winner MYLE' },
+  ],
+  breeding_result_lambs: [
+    { id: 'brl1', result_id: 'br1', ear_tag: '57', sex: 'Wether' },
+    { id: 'brl2', result_id: 'br1', ear_tag: '56', sex: 'Wether' },
+    { id: 'brl3', result_id: 'br1', ear_tag: '58', sex: 'Ewe' },
+  ],
+  embryo_flushes: [
+    { id: 'ef1', donor_id: 'l1', flush_date: '2025-07-24', embryos_collected: 14, embryos_transferred: 4, ai_sire_id: 'ar2', notes: 'Ceasefire' },
+    { id: 'ef2', donor_id: 'l1', flush_date: '2025-08-27', embryos_collected: 8, embryos_transferred: 2, ai_sire_id: 'ar2', notes: 'IVF 2 transferred' },
+    { id: 'ef3', donor_id: 'l3', flush_date: '2025-07-24', embryos_collected: 6, embryos_transferred: 4, ai_sire_id: 'ar6', notes: '' },
+  ],
+  embryo_transfers: [
+    { id: 'et1', flush_id: 'ef1', donor_id: 'l1', recipient_id: 'l11', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_birth_date: '2025-12-19', lamb_count: 1, num_transferred: 1 },
+    { id: 'et2', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2019', implant_date: '2025-07-30', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 1 },
+    { id: 'et3', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2347', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_birth_date: '2025-12-19', lamb_count: 1, num_transferred: 1 },
+    { id: 'et4', flush_id: 'ef2', donor_id: 'l1', recipient_id: 'l12', implant_date: '2025-09-03', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 2 },
+    { id: 'et5', flush_id: 'ef3', donor_id: 'l3', recipient_text: 'Schoenfeld2125', implant_date: '2026-04-19', outcome: 'Pending', lamb_born: false, num_transferred: 2 },
+  ],
+  embryo_transfer_lambs: [
+    { id: 'etl1', transfer_id: 'et1', ear_tag: '51', sex: 'Ewe', lamb_id: 'l8' },
+    { id: 'etl2', transfer_id: 'et3', ear_tag: '61', sex: 'Ewe', lamb_id: 'l8' },
+  ],
+  lamb_notes: [
+    { id: 'ln1', lamb_id: 'l1', note: 'Top donor, consistently produces 10+ embryos per flush', date: '2025-08-01' },
+    { id: 'ln2', lamb_id: 'l1', note: 'Vet check — healthy, ready for fall flush season', date: '2026-03-15' },
+    { id: 'ln3', lamb_id: 'l6', note: 'Showed well at county fair, placed 2nd', date: '2026-02-20' },
+  ],
+  custom_products: [
+    { id: 'cp1', type: 'medication', name: 'Dectomax' },
+    { id: 'cp2', type: 'medication', name: 'Draxin' },
+    { id: 'cp3', type: 'medication', name: 'Nuflor' },
+    { id: 'cp4', type: 'medication', name: 'Linco' },
+    { id: 'cp5', type: 'medication', name: 'Dexamethasone' },
+  ],
+  semen_inventory: [
+    { id: 'si1', ai_ram_id: 'ar1', location: 'Tank', straws: 12 },
+    { id: 'si2', ai_ram_id: 'ar1', location: 'RSG', straws: 4 },
+    { id: 'si3', ai_ram_id: 'ar2', location: 'Tank', straws: 8 },
+    { id: 'si4', ai_ram_id: 'ar3', location: 'Tank', straws: 6 },
+    { id: 'si5', ai_ram_id: 'ar3', location: 'RSG', straws: 2 },
+    { id: 'si6', ai_ram_id: 'ar8', location: 'Tank', straws: 15 },
+  ],
+  semen_transactions: [],
+};
+
+// Mock DB that mimics Supabase client
+let _mockStore = JSON.parse(JSON.stringify(MOCK_DATA));
+
+const db = {
+  from(table) { return new MockQuery(table); }
+};
+
+class MockQuery {
+  constructor(table) {
+    this.table = table;
+    this._filters = {};
+    this._orderCol = null;
+    this._orderAsc = true;
+    this._isSingle = false;
+    this._selectCols = '*';
+    this._insertData = null;
+    this._updateData = null;
+    this._deleteFlag = false;
+  }
+  select(cols) { this._selectCols = cols; return this; }
+  eq(col, val) { this._filters[col] = val; return this; }
+  order(col, opts) { this._orderCol = col; this._orderAsc = opts?.ascending !== false; return this; }
+  single() { this._isSingle = true; return this; }
+  limit(n) { return this; }
+  insert(data) { this._insertData = data; return this; }
+  update(data) { this._updateData = data; return this; }
+  delete() { this._deleteFlag = true; return this; }
+
+  async then(resolve) {
+    const rows = _mockStore[this.table] || [];
+
+    if (this._deleteFlag) {
+      const key = Object.keys(this._filters)[0];
+      const val = this._filters[key];
+      _mockStore[this.table] = rows.filter(r => r[key] !== val);
+      return resolve({ data: null, error: null });
+    }
+
+    if (this._insertData) {
+      const items = Array.isArray(this._insertData) ? this._insertData : [this._insertData];
+      const inserted = items.map(item => ({ id: 'mock_' + Math.random().toString(36).slice(2), ...item }));
+      _mockStore[this.table] = [...rows, ...inserted];
+      const result = Array.isArray(this._insertData) ? inserted : inserted[0];
+      return resolve({ data: result, error: null });
+    }
+
+    if (this._updateData) {
+      const key = Object.keys(this._filters)[0];
+      const val = this._filters[key];
+      _mockStore[this.table] = rows.map(r => r[key] === val ? { ...r, ...this._updateData } : r);
+      return resolve({ data: null, error: null });
+    }
+
+    // GET
+    let result = rows.filter(r => {
+      return Object.entries(this._filters).every(([k, v]) => r[k] === v);
+    });
+
+    // Handle nested selects like "*, breeding_results(*)"
+    if (this._selectCols && this._selectCols.includes('(')) {
+      const matches = this._selectCols.match(/(\w+)\(\*\)/g) || [];
+      matches.forEach(m => {
+        const relTable = m.replace('(*)', '');
+        const fkMap = {
+          breeding_results: { fk: 'breeding_id', parentKey: 'id' },
+          breeding_result_lambs: { fk: 'result_id', parentKey: 'id' },
+          embryo_transfers: { fk: 'flush_id', parentKey: 'id' },
+        };
+        const rel = fkMap[relTable];
+        if (rel) {
+          result = result.map(r => ({
+            ...r,
+            [relTable]: (_mockStore[relTable] || []).filter(child => child[rel.fk] === r[rel.parentKey])
+          }));
+        }
+      });
+      // Handle embryo_flushes nested in transfers
+      if (this._selectCols.includes('embryo_flushes')) {
+        result = result.map(r => ({
+          ...r,
+          embryo_flushes: (_mockStore.embryo_flushes || []).find(f => f.id === r.flush_id) || null
+        }));
+      }
+      // Handle lambs nested select
+      if (this._selectCols.includes('lambs(')) {
+        result = result.map(r => ({
+          ...r,
+          lambs: (_mockStore.lambs || []).find(l => l.id === r.lamb_id) || null
+        }));
+      }
+    }
+
+    if (this._orderCol) {
+      result.sort((a, b) => {
+        const av = a[this._orderCol] || '';
+        const bv = b[this._orderCol] || '';
+        return this._orderAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+      });
+    }
+
+    if (this._isSingle) return resolve({ data: result[0] || null, error: null });
+    return resolve({ data: result, error: null });
+  }
+}
+
 
 const BASE_VACCINES = ['CDT (Clostridium/Tetanus)','Overeating Disease','Foot Rot','Caseous Lymphadenitis (CL)','Rabies'];
 const BASE_MEDS = ['Ivermectin (Dewormer)','Fenbendazole','Coccidiostat','Penicillin','LA-200 (Oxytetracycline)','Banamine','Vitamin B12','Selenium/Vit E'];
@@ -1139,16 +1344,15 @@ function openManageInventory(ramId) {
   const ram = allAiRams.find(r => r.id === ramId);
   if (!ram) return;
   const LOCATIONS = ['Tank', 'RSG', 'Other'];
-  const inv = allSemenInventory.filter(i => i.ai_ram_id === ramId);
 
   const locRows = LOCATIONS.map(loc => {
-    const entry = inv.find(i => i.location === loc);
+    const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === loc);
     const count = entry ? entry.straws : 0;
     const entryId = entry ? entry.id : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0;border-bottom:1px solid var(--border)">
       <div style="font-weight:500;color:var(--text);min-width:80px">${loc}</div>
       <div style="display:flex;align-items:center;gap:0.5rem">
-        <span style="font-size:1.1rem;font-weight:700;color:var(--accent);min-width:40px;text-align:center">${count}</span>
+        <span style="font-size:1.1rem;font-weight:700;color:${count>0?'var(--accent)':'var(--text3)'};min-width:40px;text-align:center">${count}</span>
         <span style="font-size:0.75rem;color:var(--text3)">straws</span>
       </div>
       <div style="display:flex;gap:0.35rem;align-items:center">
@@ -1174,12 +1378,10 @@ async function adjustInventory(ramId, location, entryId, direction) {
     const entry = allSemenInventory.find(i => i.id === entryId);
     const newCount = Math.max(0, (entry?.straws || 0) + adj);
     await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entryId);
-    // Update in memory immediately
     if (entry) entry.straws = newCount;
   } else {
     if (adj <= 0) { toast('No inventory to deduct'); return; }
     const { data } = await db.from('semen_inventory').insert({ ai_ram_id: ramId, location, straws: adj });
-    // Add to in-memory array immediately
     if (data) allSemenInventory.push(Array.isArray(data) ? data[0] : data);
   }
 
