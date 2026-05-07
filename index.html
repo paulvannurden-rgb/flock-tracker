@@ -459,17 +459,15 @@ function renderFlock() {
       const flockBadge = flockType === 'Show' ? 'badge-purple' : flockType === 'Breeding' ? 'badge-blue' : 'badge-gray';
       html += `
         <div class="card card-hover" onclick="showLamb('${lamb.id}')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
-            <div style="min-width:0">
-              <div style="font-size:1rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lamb.name}</div>
-              <div style="display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap;align-items:center">
-                ${lamb.ear_tag?`<span style="font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
-                <span class="badge ${statusBadge}">${lamb.status}</span>
-                <span class="badge ${flockBadge}" style="font-size:0.62rem">${flockType}</span>
-              </div>
-              <div style="font-size:0.75rem;color:var(--text3);margin-top:0.35rem">${lamb.sex||''}${lamb.breed?' · '+lamb.breed:''}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>
+          <div style="min-width:0">
+            <div style="font-size:1rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lamb.name}</div>
+            <div style="display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap;align-items:center">
+              ${lamb.ear_tag?`<span style="font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
+              <span class="badge ${statusBadge}">${lamb.status}</span>
+              <span class="badge ${flockBadge}" style="font-size:0.62rem">${flockType}</span>
+              ${lamb.role!=='Standard'?`<span class="badge badge-yellow" style="font-size:0.62rem">${lamb.role==='Embryo Donor'?'Donor':lamb.role==='Embryo Recipient'?'Recip':'Both'}</span>`:''}
             </div>
-            <div style="font-size:0.68rem;color:var(--text3);text-align:right;flex-shrink:0">${lamb.role!=='Standard'?`<div style="color:var(--accent);font-weight:600">${lamb.role}</div>`:''}</div>
+            <div style="font-size:0.75rem;color:var(--text3);margin-top:0.35rem">${lamb.sex||''}${lamb.breed?' · '+lamb.breed:''}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>
           </div>
         </div>`;
     });
