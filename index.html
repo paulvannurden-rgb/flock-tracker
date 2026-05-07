@@ -1063,7 +1063,7 @@ function renderAiRams() {
   } else {
     html += `<div class="flock-grid">`;
     allAiRams.forEach(ram => {
-      const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id);
+      const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
       const totalStraws = inv.reduce((s, i) => s + (i.straws || 0), 0);
       const invBadge = totalStraws > 0
         ? `<span class="badge badge-green">🧪 ${totalStraws} straws</span>`
@@ -1081,7 +1081,7 @@ function renderAiRams() {
               ${ram.genetic_code?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">🧬 ${ram.genetic_code}</div>`:''}
               ${(()=>{ const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null; const sireName = sire ? sire.name+' 🧬' : ram.sire_name||null; return sireName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
               ${(()=>{ const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null; const damName = dam ? dam.name+(dam.ear_tag?' #'+dam.ear_tag:'') : ram.dam_name||null; return damName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Dam: ${damName}</div>` : ''; })()}
-              ${inv.length > 0 ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.3rem;display:flex;gap:0.5rem;flex-wrap:wrap">${inv.map(i=>`<span>${i.location}: ${i.straws}</span>`).join(' · ')}</div>` : ''}
+              ${inv.filter(i=>i.straws>0).length > 0 ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.3rem;display:flex;gap:0.5rem;flex-wrap:wrap">${inv.filter(i=>i.straws>0).map(i=>`<span>${i.location}: ${i.straws}</span>`).join(' · ')}</div>` : ''}
             </div>
           </div>
           <div style="display:flex;gap:0.4rem;margin-top:0.85rem">
@@ -1108,14 +1108,21 @@ async function deleteAiRam(id) {
 // ── SEMEN INVENTORY ───────────────────────────────────
 
 function openSemenInventory() {
-  const LOCATIONS = ['Tank', 'RSG', 'Other'];
-  const rows = allAiRams.map(ram => {
-    const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id);
+  const sortedRams = [...allAiRams].sort((a, b) => {
+    const aHas = allSemenInventory.some(i => i.ai_ram_id === a.id && i.straws > 0);
+    const bHas = allSemenInventory.some(i => i.ai_ram_id === b.id && i.straws > 0);
+    if (aHas && !bHas) return -1;
+    if (!aHas && bHas) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const rows = sortedRams.map(ram => {
+    const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
     const total = inv.reduce((s,i) => s + (i.straws||0), 0);
     const locStr = inv.length > 0 ? inv.map(i=>`${i.location}: <strong>${i.straws}</strong>`).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--text3)">No inventory</span>';
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid var(--border)">
       <div>
-        <div style="font-weight:600;font-size:0.9rem">${ram.name}</div>
+        <div style="font-weight:600;font-size:0.9rem">${ram.name}${total > 0 ? ` <span style="color:var(--green);font-size:0.78rem">(${total} straws)</span>` : ''}</div>
         <div style="font-size:0.78rem;color:var(--text2);margin-top:0.15rem">${locStr}</div>
       </div>
       <button class="btn-icon btn-sm" onclick="openManageInventory('${ram.id}')">Manage</button>
