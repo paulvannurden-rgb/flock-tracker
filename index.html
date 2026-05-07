@@ -1144,7 +1144,6 @@ async function openManageInventory(ramId) {
   const locRows = LOCATIONS.map(loc => {
     const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === loc);
     const count = entry ? entry.straws : 0;
-    const entryId = entry ? entry.id : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0;border-bottom:1px solid var(--border)">
       <div style="font-weight:500;color:var(--text);min-width:80px">${loc}</div>
       <div style="display:flex;align-items:center;gap:0.5rem">
@@ -1153,17 +1152,71 @@ async function openManageInventory(ramId) {
       </div>
       <div style="display:flex;gap:0.35rem;align-items:center">
         <input type="number" id="inv-adj-${loc}" value="1" min="1" style="width:55px;padding:0.3rem 0.4rem;font-size:0.82rem" placeholder="qty">
-        <button class="btn btn-primary btn-sm" onclick="adjustInventory('${ramId}','${loc}','${entryId}',1)">+ Add</button>
-        <button class="btn btn-secondary btn-sm" onclick="adjustInventory('${ramId}','${loc}','${entryId}',-1)" ${count===0?'disabled':''}>− Use</button>
+        <button class="btn btn-primary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',1)">+ Add</button>
+        <button class="btn btn-secondary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',-1)" ${count===0?'disabled':''}>− Use</button>
       </div>
     </div>`;
   }).join('');
+
+  // Transfer section
+  const locOptions = LOCATIONS.map(l => `<option value="${l}">${l}</option>`).join('');
+  const transferSection = `
+    <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <div style="font-size:0.75rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Transfer Between Locations</div>
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+        <select id="inv-from-loc" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">${locOptions}</select>
+        <span style="color:var(--text3)">→</span>
+        <select id="inv-to-loc" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">${locOptions}</select>
+        <input type="number" id="inv-transfer-qty" value="1" min="1" style="width:55px;padding:0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <span style="font-size:0.78rem;color:var(--text3)">straws</span>
+        <button class="btn btn-primary btn-sm" onclick="transferInventory('${ramId}')">Transfer</button>
+      </div>
+    </div>`;
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🧪 ${ram.name} — Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div style="margin-bottom:0.5rem;font-size:0.78rem;color:var(--text3)">Enter quantity then click Add or Use</div>
     ${locRows}
+    ${transferSection}
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
+}
+
+async function transferInventory(ramId) {
+  const fromLoc = document.getElementById('inv-from-loc')?.value;
+  const toLoc = document.getElementById('inv-to-loc')?.value;
+  const qty = parseInt(document.getElementById('inv-transfer-qty')?.value) || 1;
+
+  if (fromLoc === toLoc) { toast('Select different locations'); return; }
+
+  const fromEntry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === fromLoc);
+  if (!fromEntry || fromEntry.straws < qty) { toast(`Not enough straws in ${fromLoc}`); return; }
+
+  // Deduct from source
+  const newFromCount = fromEntry.straws - qty;
+  await db.from('semen_inventory').update({ straws: newFromCount, updated_at: new Date().toISOString() }).eq('id', fromEntry.id);
+  fromEntry.straws = newFromCount;
+
+  // Add to destination
+  const toEntry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === toLoc);
+  if (toEntry) {
+    const newToCount = toEntry.straws + qty;
+    await db.from('semen_inventory').update({ straws: newToCount, updated_at: new Date().toISOString() }).eq('id', toEntry.id);
+    toEntry.straws = newToCount;
+  } else {
+    const { data } = await db.from('semen_inventory').insert({ ai_ram_id: ramId, location: toLoc, straws: qty });
+    if (data) allSemenInventory.push(Array.isArray(data) ? data[0] : data);
+  }
+
+  // Log transaction
+  await db.from('semen_transactions').insert({
+    ai_ram_id: ramId, transaction_type: 'transfer', straws: qty,
+    notes: `Transferred ${qty} from ${fromLoc} to ${toLoc}`
+  });
+
+  toast(`Transferred ${qty} straw${qty>1?'s':''} from ${fromLoc} to ${toLoc}`);
+  await loadSemenInventory();
+  renderAiRams();
+  openManageInventory(ramId);
 }
 
 async function adjustInventory(ramId, location, entryIdHint, direction) {
@@ -1192,6 +1245,7 @@ async function adjustInventory(ramId, location, entryIdHint, direction) {
 
   toast(`Inventory updated`);
   await loadSemenInventory();
+  renderAiRams();
   openManageInventory(ramId);
 }
 
