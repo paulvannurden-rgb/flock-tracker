@@ -1564,11 +1564,21 @@ async function renderAnalytics() {
       // Transfers for these flushes (decided only)
       const flushIds = new Set(typeFlushes.map(f => f.id));
       const relatedTransfers = filterTransferDecided.filter(t => flushIds.has(t.flush_id));
-      const retained = relatedTransfers.filter(t => conceivedOutcomes.includes(t.outcome)).length;
-      const retentionRate = relatedTransfers.length ? Math.round(retained/relatedTransfers.length*100)+'%' : '—';
+      const pregnantTransfers = relatedTransfers.filter(t => conceivedOutcomes.includes(t.outcome));
+      const retained = pregnantTransfers.length;
+
+      // Conception rate = % of recipients that got pregnant
+      const conceptionRate = relatedTransfers.length ? Math.round(retained/relatedTransfers.length*100)+'%' : '—';
+
+      // Embryo retention rate = embryos that resulted in pregnancy / total embryos transferred
+      // Count embryos from pregnant transfers (use num_transferred field)
+      const embryosInPregnantTransfers = pregnantTransfers.reduce((s,t) => s + (t.num_transferred||1), 0);
+      const totalEmbryosTransferred = relatedTransfers.reduce((s,t) => s + (t.num_transferred||1), 0);
+      const embryoRetentionRate = totalEmbryosTransferred > 0 ? Math.round(embryosInPregnantTransfers/totalEmbryosTransferred*100)+'%' : '—';
+
       const totalLambs = relatedTransfers.reduce((s,t) => s + (t.lamb_born ? (t.lamb_count||0) : 0), 0);
 
-      return { type, count, avgCollected, avgTransferred, totalCollected, totalTransferred, relatedTransfers: relatedTransfers.length, retained, retentionRate, totalLambs };
+      return { type, count, avgCollected, avgTransferred, totalCollected, totalTransferred, relatedTransfers: relatedTransfers.length, retained, conceptionRate, embryoRetentionRate, totalLambs };
     }
 
     const ivfStats = flushTypeStats('IVF');
@@ -1576,29 +1586,35 @@ async function renderAnalytics() {
 
     function flushTypeCard(stats, typeFlushes) {
       if (!stats) return '';
-      const retColor = stats.relatedTransfers === 0 ? 'var(--text3)' : (stats.retained/stats.relatedTransfers >= 0.6 ? 'var(--green)' : stats.retained/stats.relatedTransfers >= 0.4 ? 'var(--warn)' : 'var(--danger)');
+      const concColor = stats.relatedTransfers === 0 ? 'var(--text3)' : (stats.retained/stats.relatedTransfers >= 0.6 ? 'var(--green)' : stats.retained/stats.relatedTransfers >= 0.4 ? 'var(--warn)' : 'var(--danger)');
       const flushData = JSON.stringify(typeFlushes.map(f => f.id)).replace(/"/g, '&quot;');
       return `<div class="card" style="padding:1rem;cursor:pointer;transition:border-color 0.15s" onclick="showFlushTypeDetail('${stats.type}','${stats.type==='IVF'?'badge-purple':'badge-blue'}',${flushData})" onmouseenter="this.style.borderColor='var(--border2)'" onmouseleave="this.style.borderColor='var(--border)'">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
           <div style="font-size:1rem;font-weight:700;color:var(--text)">${stats.type} <span style="font-size:0.7rem;color:var(--text3)">→</span></div>
           <span class="badge ${stats.type==='IVF'?'badge-purple':'badge-blue'}">${stats.count} flush${stats.count!==1?'es':''}</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">
-          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
-            <div style="font-size:1.3rem;font-weight:700;color:var(--accent)">${stats.avgCollected}</div>
-            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Avg Collected</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.5rem">
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--accent)">${stats.avgCollected}</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Avg Collected</div>
           </div>
-          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
-            <div style="font-size:1.3rem;font-weight:700;color:var(--blue)">${stats.avgTransferred}</div>
-            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Avg Transferred</div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--blue)">${stats.avgTransferred}</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Avg Transferred</div>
           </div>
-          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
-            <div style="font-size:1.3rem;font-weight:700;color:${retColor}">${stats.retentionRate}</div>
-            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Retention Rate</div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
+            <div style="font-size:1.2rem;font-weight:700;color:var(--green)">${stats.totalLambs}</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Live Born</div>
           </div>
-          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
-            <div style="font-size:1.3rem;font-weight:700;color:var(--green)">${stats.totalLambs}</div>
-            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Live Born</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
+            <div style="font-size:1.2rem;font-weight:700;color:${concColor}">${stats.conceptionRate}</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Recip Conception Rate</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
+            <div style="font-size:1.2rem;font-weight:700;color:${concColor}">${stats.embryoRetentionRate}</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Embryo Retention Rate</div>
           </div>
         </div>
         <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">${stats.totalCollected} collected · ${stats.totalTransferred} transferred · ${stats.relatedTransfers} transfers checked</div>
@@ -1724,20 +1740,20 @@ async function renderAnalytics() {
 
     const donorCards = sortByRate(donorRetention).map(([id, d]) => {
       const lamb = allLambs.find(l=>l.id===id);
-      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.retained, d.lambs, 'Retention Rate', id);
+      return statCard(lamb?.name||'Unknown', lamb?.ear_tag?'#'+lamb.ear_tag:'', d.total, d.retained, d.lambs, 'Conception Rate', id);
     }).join('');
 
     const recipCards = sortByRate(recipRetention).map(([key, d]) => {
       const lamb = d.isLinked ? allLambs.find(l=>l.id===key) : null;
       const name = lamb ? lamb.name : key.replace('text:','');
       const tag = lamb?.ear_tag ? '#'+lamb.ear_tag : '';
-      return statCard(name, tag, d.total, d.retained, d.lambs, 'Retention Rate', d.isLinked ? key : null);
+      return statCard(name, tag, d.total, d.retained, d.lambs, 'Conception Rate', d.isLinked ? key : null);
     }).join('');
 
     const flushSireCards = sortByRate(flushSireRetention).map(([key, d]) => {
       const ram = d.isAi ? allAiRams.find(r=>r.id===key) : null;
       const name = ram ? ram.name+' 🧬' : key.replace('text:','');
-      return statCard(name, '', d.total, d.retained, d.lambs, 'Retention Rate', null);
+      return statCard(name, '', d.total, d.retained, d.lambs, 'Conception Rate', null);
     }).join('');
 
     return `
@@ -1816,13 +1832,13 @@ async function renderAnalytics() {
         <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🐏 Conception Rate — By Sire</div>
         <div class="flock-grid" style="margin-bottom:1.25rem">${sireCards||'<div style="color:var(--text3);font-size:0.85rem">No breeding records in range</div>'}</div>
 
-        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Donor</div>
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Recip Conception Rate — By Donor</div>
         <div class="flock-grid" style="margin-bottom:1.25rem">${donorCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
 
-        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Recipient</div>
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Recip Conception Rate — By Recipient</div>
         <div class="flock-grid" style="margin-bottom:1.25rem">${recipCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
 
-        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Retention Rate — By Sire</div>
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Recip Conception Rate — By Sire</div>
         <div class="flock-grid" style="margin-bottom:1.25rem">${flushSireCards||'<div style="color:var(--text3);font-size:0.85rem">No transfer records in range</div>'}</div>
       </div>`;
   }
