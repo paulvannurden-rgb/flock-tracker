@@ -2124,14 +2124,18 @@ async function saveFlockTreatment() {
 }
 
 // ── BULK BREEDING ─────────────────────────────────────
+let bulkBreedIncludeRecips = false;
 function openBulkBreeding() {
   const defaultDate = new Date().toISOString().slice(0,10);
-  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe');
+  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both')));
   const sireOpts = sireOptions('');
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🐏 Bulk Breeding</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:1rem">Log a breeding record for multiple ewes at once. Each ewe gets its own sire and date.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div style="font-size:0.8rem;color:var(--text3)">Log a breeding record for multiple ewes at once.</div>
+      <button class="btn-icon" onclick="bulkBreedIncludeRecips=!bulkBreedIncludeRecips;openBulkBreeding()" style="font-size:0.72rem;white-space:nowrap">${bulkBreedIncludeRecips ? '✅ Recips included' : 'Include Recips'}</button>
+    </div>
     <div style="max-height:420px;overflow-y:auto" id="bulk-breed-rows">
       ${ewes.map((ewe,i) => `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:0.5rem">
@@ -2161,14 +2165,14 @@ function openBulkBreeding() {
 function applyGlobalBreedDate() {
   const date = document.getElementById('bb-global-date')?.value;
   if (!date) return;
-  allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe').forEach(ewe => {
+  allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both'))).forEach(ewe => {
     const el = document.getElementById(`bb-date-${ewe.id}`);
     if (el) el.value = date;
   });
 }
 
 async function saveBulkBreeding() {
-  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe');
+  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both')));
   const records = [];
   for (const ewe of ewes) {
     const checked = document.getElementById(`bb-check-${ewe.id}`)?.checked;
@@ -2190,7 +2194,7 @@ async function saveBulkBreeding() {
 // ── BULK WEIGHT ────────────────────────────────────────
 function openBulkWeight() {
   const defaultDate = new Date().toISOString().slice(0,10);
-  const active = allLambs.filter(l => l.status === 'Active');
+  const active = allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both'));
 
   showModal(`
     <div class="modal-header"><div class="modal-title">⚖️ Bulk Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -2217,14 +2221,14 @@ function openBulkWeight() {
 function applyGlobalWeightDate() {
   const date = document.getElementById('bw-global-date')?.value;
   if (!date) return;
-  allLambs.filter(l => l.status === 'Active').forEach(lamb => {
+  allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both')).forEach(lamb => {
     const el = document.getElementById(`bw-date-${lamb.id}`);
     if (el) el.value = date;
   });
 }
 
 async function saveBulkWeight() {
-  const active = allLambs.filter(l => l.status === 'Active');
+  const active = allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both'));
   const records = [];
   for (const lamb of active) {
     const wt = document.getElementById(`bw-wt-${lamb.id}`)?.value;
