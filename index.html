@@ -1167,9 +1167,13 @@ async function adjustInventory(ramId, location, entryId, direction) {
     const entry = allSemenInventory.find(i => i.id === entryId);
     const newCount = Math.max(0, (entry?.straws || 0) + adj);
     await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entryId);
+    // Update in memory immediately
+    if (entry) entry.straws = newCount;
   } else {
     if (adj <= 0) { toast('No inventory to deduct'); return; }
-    await db.from('semen_inventory').insert({ ai_ram_id: ramId, location, straws: adj });
+    const { data } = await db.from('semen_inventory').insert({ ai_ram_id: ramId, location, straws: adj });
+    // Add to in-memory array immediately
+    if (data) allSemenInventory.push(Array.isArray(data) ? data[0] : data);
   }
 
   // Log transaction
