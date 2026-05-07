@@ -172,10 +172,11 @@
   .sidebar-btn:hover:not(.active) { background: var(--surface2); color: var(--text2); }
 
   @media (max-width: 700px) {
-    #sidebar { display: none !important; }
-    .mobile-nav { display: flex !important; }
-    #main-content { margin-left: 0 !important; padding-bottom: 5rem; }
-    div[style*="margin-left:220px"] { margin-left: 0 !important; }
+    #sidebar { transform: translateX(-220px); transition: transform 0.25s; box-shadow: none; }
+    #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); z-index: 80; }
+    #mobile-header { display: flex !important; }
+    div[style*="margin-left:220px"] { margin-left: 0 !important; padding-top: 56px; }
+    main { padding-bottom: 1.5rem; }
   }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -264,16 +265,17 @@
     </div>
   </div>
 
-  <!-- MOBILE NAV -->
-  <div class="mobile-nav" id="mobile-nav">
-    <button class="mobile-nav-btn active" onclick="showPage('flock')" data-page="flock"><span>🐑</span><span>Flock</span></button>
-    <button class="mobile-nav-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span><span>AI Rams</span></button>
-    <button class="mobile-nav-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span><span>Breeding</span></button>
-    <button class="mobile-nav-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span><span>Calendar</span></button>
-    <button class="mobile-nav-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span><span>Pedigree</span></button>
-    <button class="mobile-nav-btn" onclick="showPage('export')" data-page="export"><span>📊</span><span>Export</span></button>
-    <button class="mobile-nav-btn" onclick="doLogout()"><span>🚪</span><span>Out</span></button>
+  <!-- MOBILE HEADER -->
+  <div id="mobile-header" style="display:none;position:fixed;top:0;left:0;right:0;background:var(--surface);border-bottom:1px solid var(--border);padding:0.75rem 1rem;z-index:60;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:0.6rem">
+      <div style="width:28px;height:28px;background:var(--accent-glow);border:1px solid var(--border2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.9rem">🐑</div>
+      <div style="font-size:0.88rem;font-weight:700;color:var(--text)">Flock Ledger</div>
+    </div>
+    <button onclick="toggleMobileMenu()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:1.1rem;cursor:pointer">☰</button>
   </div>
+
+  <!-- MOBILE OVERLAY -->
+  <div id="mobile-overlay" onclick="closeMobileMenu()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:70;backdrop-filter:blur(4px)"></div>
 
 <!-- TOAST -->
 <div id="toast"></div>
@@ -351,6 +353,7 @@ async function loadCustomProducts() {
 
 // ── NAVIGATION ────────────────────────────────────────
 function showPage(page) {
+  closeMobileMenu();
   currentPage = page;
   currentLambId = null;
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
@@ -372,6 +375,18 @@ function showPage(page) {
   else if (page === 'calendar') renderCalendar();
   else if (page === 'pedigree') renderPedigreeNetwork();
   else if (page === 'export') renderExport();
+}
+
+function toggleMobileMenu() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobile-overlay');
+  const isOpen = sidebar.classList.contains('open');
+  sidebar.classList.toggle('open', !isOpen);
+  overlay.style.display = isOpen ? 'none' : 'block';
+}
+function closeMobileMenu() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('mobile-overlay').style.display = 'none';
 }
 
 function showLambAtTab(id, tab) {
