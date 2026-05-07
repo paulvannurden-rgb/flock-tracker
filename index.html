@@ -1570,15 +1570,14 @@ async function renderAnalytics() {
       // Conception rate = % of recipients that got pregnant
       const conceptionRate = relatedTransfers.length ? Math.round(retained/relatedTransfers.length*100)+'%' : '—';
 
-      // Embryo retention rate = embryos that resulted in pregnancy / total embryos transferred
-      // Count embryos from pregnant transfers (use num_transferred field)
-      const embryosInPregnantTransfers = pregnantTransfers.reduce((s,t) => s + (t.num_transferred||1), 0);
+      // Embryo retention rate = total born / embryos transferred
+      const totalBorn = relatedTransfers.reduce((s,t) => s + (t.lamb_born ? (t.lamb_count||0) : 0), 0);
       const totalEmbryosTransferred = relatedTransfers.reduce((s,t) => s + (t.num_transferred||1), 0);
-      const embryoRetentionRate = totalEmbryosTransferred > 0 ? Math.round(embryosInPregnantTransfers/totalEmbryosTransferred*100)+'%' : '—';
+      const embryoRetentionRate = totalEmbryosTransferred > 0 ? Math.round(totalBorn/totalEmbryosTransferred*100)+'%' : '—';
 
       const totalLambs = relatedTransfers.reduce((s,t) => s + (t.lamb_born ? (t.lamb_count||0) : 0), 0);
 
-      return { type, count, avgCollected, avgTransferred, totalCollected, totalTransferred, relatedTransfers: relatedTransfers.length, retained, conceptionRate, embryoRetentionRate, totalLambs };
+      return { type, count, avgCollected, avgTransferred, totalCollected, totalTransferred, relatedTransfers: relatedTransfers.length, retained, conceptionRate, embryoRetentionRate, totalLambs, totalBorn };
     }
 
     const ivfStats = flushTypeStats('IVF');
@@ -1614,7 +1613,7 @@ async function renderAnalytics() {
           </div>
           <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.5rem;text-align:center">
             <div style="font-size:1.2rem;font-weight:700;color:${concColor}">${stats.embryoRetentionRate}</div>
-            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Embryo Retention Rate</div>
+            <div style="font-size:0.65rem;color:var(--text3);margin-top:0.1rem">Embryo Retention (Born/Transferred)</div>
           </div>
         </div>
         <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">${stats.totalCollected} collected · ${stats.totalTransferred} transferred · ${stats.relatedTransfers} transfers checked</div>
