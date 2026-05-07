@@ -307,8 +307,7 @@ function doLogin() {
   const pw = document.getElementById('login-password').value;
   if (pw === FLOCK_PASSWORD) {
     document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    document.getElementById('app').style.flexDirection = 'column';
+    document.getElementById('app').style.display = 'block';
     init();
   } else {
     const el = document.getElementById('login-error');
