@@ -1526,7 +1526,60 @@ async function renderAnalytics() {
     const pendingBreeding = filterBreed.filter(r => r.outcome === 'Pending' || !r.outcome);
     const pendingTransfer = filterTransfer.filter(t => t.outcome === 'Pending' || !t.outcome);
 
-    // ── CONCEPTION RATE BY EWE ──
+    // ── FLUSH TYPE ANALYTICS ──
+    const filterFlushes = (flushes||[]).filter(f => (!fromDate||f.flush_date>=fromDate) && (!toDate||f.flush_date<=toDate));
+
+    function flushTypeStats(type) {
+      const typeFlushes = filterFlushes.filter(f => type === 'IVF' ? f.flush_type === 'IVF' : (f.flush_type === 'MOET' || !f.flush_type));
+      const count = typeFlushes.length;
+      if (count === 0) return null;
+      const totalCollected = typeFlushes.reduce((s,f) => s + (f.embryos_collected||0), 0);
+      const totalTransferred = typeFlushes.reduce((s,f) => s + (f.embryos_transferred||0), 0);
+      const avgCollected = count ? (totalCollected/count).toFixed(1) : '—';
+      const avgTransferred = count ? (totalTransferred/count).toFixed(1) : '—';
+
+      // Transfers for these flushes (decided only)
+      const flushIds = new Set(typeFlushes.map(f => f.id));
+      const relatedTransfers = filterTransferDecided.filter(t => flushIds.has(t.flush_id));
+      const retained = relatedTransfers.filter(t => conceivedOutcomes.includes(t.outcome)).length;
+      const retentionRate = relatedTransfers.length ? Math.round(retained/relatedTransfers.length*100)+'%' : '—';
+      const totalLambs = relatedTransfers.reduce((s,t) => s + (t.lamb_born ? (t.lamb_count||0) : 0), 0);
+
+      return { type, count, avgCollected, avgTransferred, totalCollected, totalTransferred, relatedTransfers: relatedTransfers.length, retained, retentionRate, totalLambs };
+    }
+
+    const ivfStats = flushTypeStats('IVF');
+    const moetStats = flushTypeStats('MOET');
+
+    function flushTypeCard(stats) {
+      if (!stats) return '';
+      const retColor = stats.relatedTransfers === 0 ? 'var(--text3)' : (stats.retained/stats.relatedTransfers >= 0.6 ? 'var(--green)' : stats.retained/stats.relatedTransfers >= 0.4 ? 'var(--warn)' : 'var(--danger)');
+      return `<div class="card" style="padding:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+          <div style="font-size:1rem;font-weight:700;color:var(--text)">${stats.type}</div>
+          <span class="badge ${stats.type==='IVF'?'badge-purple':'badge-blue'}">${stats.count} flush${stats.count!==1?'es':''}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--accent)">${stats.avgCollected}</div>
+            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Avg Collected</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--blue)">${stats.avgTransferred}</div>
+            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Avg Transferred</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
+            <div style="font-size:1.3rem;font-weight:700;color:${retColor}">${stats.retentionRate}</div>
+            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Retention Rate</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:0.6rem;text-align:center">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--green)">${stats.totalLambs}</div>
+            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem">Live Born</div>
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">${stats.totalCollected} collected · ${stats.totalTransferred} transferred · ${stats.relatedTransfers} transfers checked</div>
+      </div>`;
+    }
     const eweConception = {};
     filterBreedDecided.forEach(r => {
       if (!r.lamb_id) return;
@@ -1698,6 +1751,14 @@ async function renderAnalytics() {
             <span style="color:var(--warn);font-size:0.75rem">🔬 Needs update →</span>
           </div>`;
         }).join('')}
+      </div>` : ''}
+
+      <!-- FLUSH TYPE COMPARISON -->
+      ${(ivfStats || moetStats) ? `
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem">🔬 Flush Type Comparison</div>
+      <div class="flock-grid" style="margin-bottom:1.5rem">
+        ${flushTypeCard(moetStats)}
+        ${flushTypeCard(ivfStats)}
       </div>` : ''}
 
       <!-- CONCEPTION RATES -->
@@ -2653,39 +2714,42 @@ async function saveBulkBreeding() {
 
 // ── BULK PREG CHECK ───────────────────────────────────
 async function openBulkPregCheck() {
-  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading breeding records…</div>`;
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading records…</div>`;
 
-  // Load all pending breeding records
-  const { data: recs } = await db.from('breeding_records').select('*')
-    .order('breeding_date', {ascending: false});
+  const [{ data: breedRecs }, { data: transfers }, { data: flushes }] = await Promise.all([
+    db.from('breeding_records').select('*').order('breeding_date', {ascending: false}),
+    db.from('embryo_transfers').select('*').order('implant_date', {ascending: false}),
+    db.from('embryo_flushes').select('*'),
+  ]);
 
-  // Get ewes with pending breeding records (most recent per ewe)
+  // Most recent pending breeding per ewe
   const latestByEwe = {};
-  (recs||[]).forEach(r => {
+  (breedRecs||[]).forEach(r => {
     if (r.outcome === 'Pending' || !r.outcome) {
       if (!latestByEwe[r.lamb_id] || r.breeding_date > latestByEwe[r.lamb_id].breeding_date) {
         latestByEwe[r.lamb_id] = r;
       }
     }
   });
+  const pendingBreedings = Object.values(latestByEwe).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date));
 
-  const ewesWithPending = Object.values(latestByEwe).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date));
+  // Pending embryo transfers
+  const pendingTransfers = (transfers||[]).filter(t => t.outcome === 'Pending' || !t.outcome);
 
-  if (ewesWithPending.length === 0) {
+  if (pendingBreedings.length === 0 && pendingTransfers.length === 0) {
     showModal(`
       <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-      <div class="empty"><div class="empty-icon">✅</div><h3>No pending breeding records</h3><p>All breeding records have an outcome recorded.</p></div>
+      <div class="empty"><div class="empty-icon">✅</div><h3>No pending records</h3><p>All breeding and transfer records have an outcome recorded.</p></div>
       <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
-    renderFlock();
-    return;
+    renderFlock(); return;
   }
 
-  const defaultOutcome = 'Confirmed Pregnant';
   const outcomes = ['Confirmed Pregnant', 'Not Pregnant', 'Pending'];
+  const transferOutcomes = ['Confirmed Pregnant', 'Not Pregnant', 'Lamb Born', 'Failed', 'Pending'];
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">${ewesWithPending.length} ewe${ewesWithPending.length!==1?'s':''} with pending breeding records. Check boxes to update outcome.</div>
+    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">${pendingBreedings.length} breeding + ${pendingTransfers.length} transfer records pending.</div>
     <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)">
       <span style="font-size:0.78rem;color:var(--text3)">Set all to:</span>
       <select id="pc-global-outcome" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
@@ -2693,26 +2757,47 @@ async function openBulkPregCheck() {
       </select>
       <button class="btn-icon" onclick="applyGlobalPregOutcome()">Apply to all</button>
     </div>
-    <div style="max-height:420px;overflow-y:auto" id="pc-rows">
-      ${ewesWithPending.map(r => {
-        const lamb = allLambs.find(l => l.id === r.lamb_id);
-        const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
-        const sireName = sire ? sire.name+' 🧬' : (r.sire_text||'—');
-        return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
-          <input type="checkbox" id="pc-check-${r.id}" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}${lamb?.ear_tag?' <span style="color:var(--text3);font-weight:400">#'+lamb.ear_tag+'</span>':''}</div>
-            <div style="font-size:0.72rem;color:var(--text3)">Bred: ${r.breeding_date} · Sire: ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
-          </div>
-          <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
-            ${outcomes.map(o=>`<option ${o===defaultOutcome?'selected':''}>${o}</option>`).join('')}
-          </select>
-        </div>`;
-      }).join('')}
+    <div style="max-height:450px;overflow-y:auto" id="pc-rows">
+      ${pendingBreedings.length > 0 ? `
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;padding:0.4rem 0;margin-bottom:0.25rem">🐏 Breeding Records</div>
+        ${pendingBreedings.map(r => {
+          const lamb = allLambs.find(l => l.id === r.lamb_id);
+          const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
+          const sireName = sire ? sire.name+' 🧬' : (r.sire_text||'—');
+          return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+            <input type="checkbox" id="pc-check-${r.id}" data-type="breeding" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}${lamb?.ear_tag?` <span style="color:var(--text3);font-weight:400">#${lamb.ear_tag}</span>`:''}</div>
+              <div style="font-size:0.72rem;color:var(--text3)">Bred: ${r.breeding_date} · ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
+            </div>
+            <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
+              ${outcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
+            </select>
+          </div>`;
+        }).join('')}` : ''}
+
+      ${pendingTransfers.length > 0 ? `
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;padding:0.5rem 0 0.25rem;margin-top:0.5rem">🔬 Embryo Transfers</div>
+        ${pendingTransfers.map(t => {
+          const recip = t.recipient_id ? allLambs.find(l=>l.id===t.recipient_id) : null;
+          const recipName = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recipient_text||'Unknown');
+          const flush = (flushes||[]).find(f=>f.id===t.flush_id);
+          const donor = flush ? allLambs.find(l=>l.id===flush.donor_id) : null;
+          return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+            <input type="checkbox" id="pc-check-${t.id}" data-type="transfer" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${recipName}</div>
+              <div style="font-size:0.72rem;color:var(--text3)">Implant: ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</div>
+            </div>
+            <select id="pc-outcome-${t.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
+              ${transferOutcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
+            </select>
+          </div>`;
+        }).join('')}` : ''}
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkPregCheck(${JSON.stringify(ewesWithPending.map(r=>r.id))})">Save Results</button>
+      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save Results</button>
     </div>`, true);
 
   renderFlock();
@@ -2724,17 +2809,32 @@ function applyGlobalPregOutcome() {
   document.querySelectorAll('[id^="pc-check-"]').forEach(cb => cb.checked = true);
 }
 
-async function saveBulkPregCheck(recordIds) {
-  const updates = [];
-  for (const id of recordIds) {
-    const checked = document.getElementById(`pc-check-${id}`)?.checked;
-    if (!checked) continue;
+async function saveBulkPregCheck() {
+  const checkboxes = document.querySelectorAll('[id^="pc-check-"]');
+  const breedingUpdates = [];
+  const transferUpdates = [];
+
+  checkboxes.forEach(cb => {
+    if (!cb.checked) return;
+    const id = cb.id.replace('pc-check-', '');
     const outcome = document.getElementById(`pc-outcome-${id}`)?.value;
-    if (outcome) updates.push({ id, outcome });
-  }
-  if (updates.length === 0) { toast('No records selected'); return; }
-  await Promise.all(updates.map(u => db.from('breeding_records').update({ outcome: u.outcome }).eq('id', u.id)));
-  toast(`${updates.length} record${updates.length!==1?'s':''} updated`);
+    if (!outcome) return;
+    if (cb.dataset.type === 'transfer') {
+      transferUpdates.push({ id, outcome, lambBorn: outcome === 'Lamb Born' });
+    } else {
+      breedingUpdates.push({ id, outcome });
+    }
+  });
+
+  if (breedingUpdates.length === 0 && transferUpdates.length === 0) { toast('No records selected'); return; }
+
+  await Promise.all([
+    ...breedingUpdates.map(u => db.from('breeding_records').update({ outcome: u.outcome }).eq('id', u.id)),
+    ...transferUpdates.map(u => db.from('embryo_transfers').update({ outcome: u.outcome, lamb_born: u.lambBorn }).eq('id', u.id)),
+  ]);
+
+  const total = breedingUpdates.length + transferUpdates.length;
+  toast(`${total} record${total!==1?'s':''} updated`);
   closeModal();
 }
 function openBulkWeight() {
