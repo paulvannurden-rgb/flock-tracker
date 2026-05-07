@@ -47,7 +47,7 @@
   .login-logo { width: 52px; height: 52px; background: var(--accent-glow); border: 1px solid var(--border2); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; font-size: 1.6rem; }
 
   /* LAYOUT */
-  #app { display: none; flex-direction: column; min-height: 100vh; }
+  #app { display: none; min-height: 100vh; }
   header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); }
   .header-left { display: flex; align-items: center; gap: 0.75rem; }
   .header-logo { width: 32px; height: 32px; background: var(--accent-glow); border: 1px solid var(--border2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
@@ -165,7 +165,18 @@
   optgroup { color: var(--text3); font-style: normal; font-size: 0.72rem; }
   option { color: var(--text); background: var(--bg); }
 
-  /* SCROLLBAR */
+  /* SIDEBAR NAV BUTTONS */
+  .sidebar-btn { background: none; border: none; color: var(--text3); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.82rem; font-family: 'Inter', sans-serif; font-weight: 500; transition: all 0.15s; white-space: nowrap; display: flex; align-items: center; gap: 0.6rem; width: 100%; text-align: left; }
+  .sidebar-btn span:first-child { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-btn.active { background: var(--accent-glow); color: var(--accent); }
+  .sidebar-btn:hover:not(.active) { background: var(--surface2); color: var(--text2); }
+
+  @media (max-width: 700px) {
+    #sidebar { display: none !important; }
+    .mobile-nav { display: flex !important; }
+    #main-content { margin-left: 0 !important; padding-bottom: 5rem; }
+    div[style*="margin-left:220px"] { margin-left: 0 !important; }
+  }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
@@ -207,30 +218,48 @@
 
 <!-- APP -->
 <div id="app">
-  <header>
-    <div class="header-left">
-      <div class="header-logo">🐑</div>
-      <div>
-        <div class="header-title">Flock Health Ledger</div>
-        <div class="header-sub" id="flock-count">Loading…</div>
+  <!-- SIDEBAR + CONTENT LAYOUT -->
+  <div style="display:flex;min-height:100vh">
+
+    <!-- LEFT SIDEBAR -->
+    <aside id="sidebar" style="width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50;transition:width 0.2s">
+      <!-- Logo -->
+      <div style="padding:1.25rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.75rem">
+        <div style="width:34px;height:34px;background:var(--accent-glow);border:1px solid var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🐑</div>
+        <div>
+          <div style="font-size:0.88rem;font-weight:700;color:var(--text)">Flock Ledger</div>
+          <div style="font-size:0.65rem;color:var(--text3)" id="flock-count">Loading…</div>
+        </div>
       </div>
+
+      <!-- Nav items -->
+      <nav style="padding:0.75rem 0.5rem;flex:1;display:flex;flex-direction:column;gap:0.15rem">
+        <button class="sidebar-btn active" onclick="showPage('flock')" data-page="flock"><span>🐑</span>Flock</button>
+        <button class="sidebar-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span>AI Rams</button>
+        <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
+        <button class="sidebar-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span>Calendar</button>
+        <button class="sidebar-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span>Pedigree</button>
+        <button class="sidebar-btn" onclick="showPage('export')" data-page="export"><span>📊</span>Export</button>
+        <div style="height:1px;background:var(--border);margin:0.5rem 0"></div>
+        <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openFlockTreatment()"><span>💉</span>Flock Treatment</button>
+        <button class="sidebar-btn" id="sidebar-bulk-breed-btn" onclick="openBulkBreeding()" style="display:none"><span>🐏</span>Bulk Breeding</button>
+        <button class="sidebar-btn" id="sidebar-bulk-weight-btn" onclick="openBulkWeight()" style="display:none"><span>⚖️</span>Bulk Weight</button>
+      </nav>
+
+      <!-- Bottom actions -->
+      <div style="padding:0.75rem 0.5rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:0.25rem">
+        <button class="btn btn-primary btn-sm" id="header-action-btn" onclick="openAddLamb()" style="width:100%;justify-content:center">+ Add Lamb</button>
+        <button class="sidebar-btn" onclick="doLogout()" style="color:var(--text3)"><span>🚪</span>Sign Out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div style="margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh">
+      <main id="main-content" style="flex:1;padding:1.5rem;max-width:1000px;width:100%">
+        <div class="loading"><span class="spinner"></span>Loading flock…</div>
+      </main>
     </div>
-    <nav id="main-nav">
-      <button class="nav-btn active" onclick="showPage('flock')" data-page="flock">Flock</button>
-      <button class="nav-btn" onclick="showPage('airams')" data-page="airams">AI Rams</button>
-      <button class="nav-btn" onclick="showPage('breeding')" data-page="breeding">Breeding</button>
-      <button class="nav-btn" onclick="showPage('calendar')" data-page="calendar">Calendar</button>
-      <button class="nav-btn" onclick="showPage('pedigree')" data-page="pedigree">Pedigree</button>
-      <button class="nav-btn" onclick="showPage('export')" data-page="export">Export</button>
-      <button class="nav-btn" onclick="doLogout()">Sign Out</button>
-    </nav>
-    <div style="display:flex;gap:0.5rem;align-items:center">
-      <button class="btn btn-secondary btn-sm" id="header-treatment-btn" onclick="openFlockTreatment()">💉 Flock Treatment</button>
-      <button class="btn btn-secondary btn-sm" id="header-bulk-breed-btn" onclick="openBulkBreeding()" style="display:none">🐏 Bulk Breeding</button>
-      <button class="btn btn-secondary btn-sm" id="header-bulk-weight-btn" onclick="openBulkWeight()" style="display:none">⚖️ Bulk Weight</button>
-      <button class="btn btn-primary btn-sm" id="header-action-btn" onclick="openAddLamb()">+ Add Lamb</button>
-    </div>
-  </header>
+  </div>
 
   <!-- MOBILE NAV -->
   <div class="mobile-nav" id="mobile-nav">
@@ -242,11 +271,6 @@
     <button class="mobile-nav-btn" onclick="showPage('export')" data-page="export"><span>📊</span><span>Export</span></button>
     <button class="mobile-nav-btn" onclick="doLogout()"><span>🚪</span><span>Out</span></button>
   </div>
-
-  <main id="main-content">
-    <div class="loading"><span class="spinner"></span>Loading flock…</div>
-  </main>
-</div>
 
 <!-- TOAST -->
 <div id="toast"></div>
@@ -328,13 +352,13 @@ function showPage(page) {
   currentLambId = null;
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   const btn = document.getElementById('header-action-btn');
-  const treatBtn = document.getElementById('header-treatment-btn');
-  const bulkBreedBtn = document.getElementById('header-bulk-breed-btn');
-  const bulkWeightBtn = document.getElementById('header-bulk-weight-btn');
+  const treatBtn = document.getElementById('sidebar-treatment-btn');
+  const bulkBreedBtn = document.getElementById('sidebar-bulk-breed-btn');
+  const bulkWeightBtn = document.getElementById('sidebar-bulk-weight-btn');
   btn.style.display = page === 'flock' ? '' : 'none';
-  treatBtn.style.display = page === 'flock' ? '' : 'none';
-  bulkBreedBtn.style.display = page === 'flock' ? '' : 'none';
-  bulkWeightBtn.style.display = page === 'flock' ? '' : 'none';
+  if (treatBtn) treatBtn.style.display = page === 'flock' ? '' : 'none';
+  if (bulkBreedBtn) bulkBreedBtn.style.display = page === 'flock' ? '' : 'none';
+  if (bulkWeightBtn) bulkWeightBtn.style.display = page === 'flock' ? '' : 'none';
   if (page === 'flock') renderFlock();
   else if (page === 'airams') renderAiRams();
   else if (page === 'breeding') renderBreeding();
@@ -347,9 +371,12 @@ function showLamb(id) {
   currentLambId = id;
   currentLambTab = 'health';
   document.getElementById('header-action-btn').style.display = 'none';
-  document.getElementById('header-treatment-btn').style.display = 'none';
-  document.getElementById('header-bulk-breed-btn').style.display = 'none';
-  document.getElementById('header-bulk-weight-btn').style.display = 'none';
+  const treatBtn = document.getElementById('sidebar-treatment-btn');
+  const bulkBreedBtn = document.getElementById('sidebar-bulk-breed-btn');
+  const bulkWeightBtn = document.getElementById('sidebar-bulk-weight-btn');
+  if (treatBtn) treatBtn.style.display = 'none';
+  if (bulkBreedBtn) bulkBreedBtn.style.display = 'none';
+  if (bulkWeightBtn) bulkWeightBtn.style.display = 'none';
   renderLambDetail();
 }
 
@@ -877,7 +904,7 @@ async function renderEmbryoTab(el) {
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
               <div style="font-weight:600;color:var(--text)">Flush: ${f.flush_date}</div>
-              <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.notes?' — '+f.notes:''}</div>
+              <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.flush_type?' · '+f.flush_type:''}${f.notes?' — '+f.notes:''}</div>
               ${(()=>{ const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null); const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||null); return sireName ? `<div style="font-size:0.82rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
             </div>
             <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
@@ -1129,9 +1156,14 @@ function openSemenInventory() {
     </div>`;
   }).join('');
 
+  const grandTotal = allSemenInventory.filter(i => i.straws > 0).reduce((s,i) => s + (i.straws||0), 0);
   showModal(`
     <div class="modal-header"><div class="modal-title">🧪 Semen Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="max-height:400px;overflow-y:auto">${rows || '<div class="empty"><p>No AI rams yet</p></div>'}</div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 1rem;margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:0.78rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.07em">Total Straws in Inventory</span>
+      <span style="font-size:1.2rem;font-weight:700;color:var(--accent)">${grandTotal}</span>
+    </div>
+    <div style="max-height:380px;overflow-y:auto">${rows || '<div class="empty"><p>No AI rams yet</p></div>'}</div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
 }
 
@@ -1842,11 +1874,14 @@ function showFlushModal(flush) {
     <div class="modal-header"><div class="modal-title">${isEdit ? 'Edit Flush' : 'Log Embryo Flush'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="row">
       <div class="field"><label>Flush Date *</label><input type="date" id="fl-date" value="${flush?.flush_date||new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Embryos Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="e.g. 8"></div>
+      <div class="field"><label>Flush Type</label><select id="fl-type">
+        <option ${(flush?.flush_type||'MOET')==='MOET'?'selected':''}>MOET</option>
+        <option ${flush?.flush_type==='IVF'?'selected':''}>IVF</option>
+      </select></div>
     </div>
     <div class="row">
+      <div class="field"><label>Embryos Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="e.g. 8"></div>
       <div class="field"><label>Embryos Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="e.g. 6"></div>
-      <div class="field"></div>
     </div>
     <div class="field"><label>Sire</label><select id="fl-sire-id" onchange="updateFlushSemenOpts()">${sireOptions(currentSire)}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="fl-sire-text" value="${flush?.sire_text||''}" placeholder="Sire name or ID"></div>
@@ -1883,7 +1918,7 @@ async function saveFlush(id) {
   const date = v('fl-date');
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('fl-sire-id'));
-  const payload = { donor_id: currentLambId, flush_date: date, embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes') };
+  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes') };
   if (id) {
     await db.from('embryo_flushes').update(payload).eq('id', id);
     toast('Flush updated');
