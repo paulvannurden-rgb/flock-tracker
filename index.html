@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flock Health Ledger</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script>
-window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){return {};},book_append_sheet:function(){}},writeFile:function(){alert("Export not available in preview");}};
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #f0f2f5;
@@ -243,6 +242,8 @@ window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){ret
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
+        <button class="sidebar-btn" onclick="showPage('costs')" data-page="costs"><span>💰</span>Costs</button>
+        <button class="sidebar-btn" onclick="showPage('supplies')" data-page="supplies"><span>🌾</span>Supplies</button>
         <button class="sidebar-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span>Calendar</button>
         <button class="sidebar-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span>Pedigree</button>
         <button class="sidebar-btn" onclick="showPage('export')" data-page="export"><span>📊</span>Export</button>
@@ -284,158 +285,10 @@ window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){ret
 <div id="toast"></div>
 
 <script>
+const SUPABASE_URL = 'https://fmdnazihkanqflnabkcy.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZG5hemloa2FucWZsbmFia2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTUzMzMsImV4cCI6MjA5MTg3MTMzM30.tzR7CNxZ9RtZgtKkRNC3UUp1_hTjgoI8kL5rt_tRPyk';
 const FLOCK_PASSWORD = 'flock2024';
-
-const MOCK_DATA = {
-  lambs: [
-    { id: 'l1', name: 'Gigi', ear_tag: '20055', genetic_code: 'FD', dob: '2019-12-19', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e85e38', ai_sire_id: 'ar3' },
-    { id: 'l2', name: 'Betty', ear_tag: '25309', genetic_code: 'FF', dob: '2024-12-25', sex: 'Ewe', breed: 'Natural', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838', ai_sire_id: 'ar1' },
-    { id: 'l3', name: 'Daphnie', ear_tag: '5568', genetic_code: 'FF', dob: '2023-02-10', sex: 'Ewe', breed: 'Dorset', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e838a0' },
-    { id: 'l4', name: 'Frankie', ear_tag: '21428', genetic_code: 'FD', dob: '2020-12-10', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#38a8e8' },
-    { id: 'l5', name: 'Dee37', ear_tag: '26037', genetic_code: 'RRFF', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Both', tag_color: '#e85e38' },
-    { id: 'l6', name: 'Ivy', ear_tag: '26013', genetic_code: 'RRFD', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8' },
-    { id: 'l7', name: 'Italy', ear_tag: '62', dob: '2026-01-19', sex: 'Ewe', breed: 'Speck', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38e8d4', dam_id: 'l3', ai_sire_id: 'ar3' },
-    { id: 'l8', name: 'Posie', ear_tag: '61', dob: '2025-12-15', sex: 'Ewe', breed: 'Natural', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e838a0', dam_id: 'l1', ai_sire_id: 'ar2' },
-    { id: 'l9', name: 'Blaze', ear_tag: 'K089', dob: '2025-12-27', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8', ai_sire_id: 'ar3' },
-    { id: 'l10', name: 'Eddie', ear_tag: '6042', dob: '2026-01-15', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e85e38', ai_sire_id: 'ar4' },
-    { id: 'l11', name: 'Kaht1', ear_tag: '1', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#6e8fe8' },
-    { id: 'l12', name: 'Kaht2', ear_tag: '168', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
-    { id: 'l13', name: 'Ezzy', ear_tag: '14', genetic_code: 'FF', dob: '2018-12-20', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
-    { id: 'l14', name: 'Sissy', ear_tag: '2209', genetic_code: 'FF', dob: '2021-12-17', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#38e86e', ai_sire_id: 'ar5' },
-    { id: 'l15', name: 'Thor', ear_tag: '26084', dob: '2025-12-14', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Sold', flock_type: 'Show', tag_color: '#6e8fe8' },
-  ],
-  ai_rams: [
-    { id: 'ar1', name: 'Truce', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
-    { id: 'ar2', name: 'Ceasefire', breed: 'Cross', genetic_code: 'FF', sire_ai_id: 'ar1' },
-    { id: 'ar3', name: 'Italian Stallion', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
-    { id: 'ar4', name: 'Unfiltered', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar7' },
-    { id: 'ar5', name: 'Manifest', breed: 'Cross', genetic_code: 'FD' },
-    { id: 'ar6', name: 'Bombshell', breed: 'Cross', genetic_code: 'FD' },
-    { id: 'ar7', name: 'Tres Amigos', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
-    { id: 'ar8', name: 'Alliance', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
-  ],
-  health_records: [
-    { id: 'h1', lamb_id: 'l1', type: 'medication', product: 'Dectomax', date: '2026-03-08', route: 'Intramuscular (IM)', dose: '1 ml' },
-    { id: 'h2', lamb_id: 'l1', type: 'vaccine', product: 'CDT (Clostridium/Tetanus)', date: '2026-02-15', route: 'Subcutaneous (SQ)' },
-    { id: 'h3', lamb_id: 'l2', type: 'medication', product: 'Dectomax', date: '2026-04-15', route: 'Intramuscular (IM)', dose: '1 ml' },
-    { id: 'h4', lamb_id: 'l9', type: 'medication', product: 'Vitamin B12', date: '2026-04-19', route: 'Subcutaneous (SQ)', dose: '5ml' },
-  ],
-  weight_records: [
-    { id: 'w1', lamb_id: 'l9', weight_lbs: 98, date: '2026-03-15' },
-    { id: 'w2', lamb_id: 'l9', weight_lbs: 112, date: '2026-04-01' },
-    { id: 'w3', lamb_id: 'l9', weight_lbs: 119, date: '2026-04-19' },
-    { id: 'w4', lamb_id: 'l10', weight_lbs: 121, date: '2026-04-19' },
-  ],
-  breeding_records: [
-    { id: 'b1',  lamb_id: 'l1',  ai_sire_id: 'ar2', breeding_date: '2025-07-24', expected_lamb_date: '2025-12-18', outcome: 'Lamb Born' },
-    { id: 'b2',  lamb_id: 'l2',  ai_sire_id: 'ar1', breeding_date: '2025-07-30', expected_lamb_date: '2025-12-26', outcome: 'Confirmed Pregnant' },
-    { id: 'b3',  lamb_id: 'l13', sire_text: 'Boozie', breeding_date: '2023-07-24', expected_lamb_date: '2023-12-26', outcome: 'Lamb Born', notes: 'Twins' },
-    { id: 'b4',  lamb_id: 'l4',  ai_sire_id: 'ar8', breeding_date: '2025-09-03', expected_lamb_date: '2026-01-28', outcome: 'Not Pregnant' },
-    { id: 'b5',  lamb_id: 'l14', ai_sire_id: 'ar5', breeding_date: '2025-09-01', expected_lamb_date: '2026-01-26', outcome: 'Pending' },
-    { id: 'b6',  lamb_id: 'l3',  ai_sire_id: 'ar3', breeding_date: '2024-07-20', expected_lamb_date: '2024-12-14', outcome: 'Pending' },
-    { id: 'b7',  lamb_id: 'l1',  ai_sire_id: 'ar3', breeding_date: '2024-08-10', expected_lamb_date: '2025-01-04', outcome: 'Confirmed Pregnant', notes: 'Second cycle' },
-    { id: 'b8',  lamb_id: 'l4',  ai_sire_id: 'ar1', breeding_date: '2024-09-15', expected_lamb_date: '2025-02-08', outcome: 'Lamb Born', notes: '3 lambs born' },
-    { id: 'b9',  lamb_id: 'l13', ai_sire_id: 'ar2', breeding_date: '2025-08-05', expected_lamb_date: '2025-12-30', outcome: 'Not Pregnant' },
-    { id: 'b10', lamb_id: 'l2',  ai_sire_id: 'ar8', breeding_date: '2024-10-01', expected_lamb_date: '2025-02-24', outcome: 'Lamb Born' },
-    { id: 'b11', lamb_id: 'l5',  ai_sire_id: 'ar2', breeding_date: '2025-09-10', expected_lamb_date: '2026-02-04', outcome: 'Confirmed Pregnant' },
-    { id: 'b12', lamb_id: 'l14', ai_sire_id: 'ar3', breeding_date: '2024-08-20', expected_lamb_date: '2025-01-14', outcome: 'Not Pregnant', notes: 'Retry scheduled' },
-    { id: 'b13', lamb_id: 'l3',  ai_sire_id: 'ar1', breeding_date: '2025-10-01', expected_lamb_date: '2026-02-25', outcome: 'Pending' },
-    { id: 'b14', lamb_id: 'l1',  ai_sire_id: 'ar8', breeding_date: '2025-10-15', expected_lamb_date: '2026-03-11', outcome: 'Pending' },
-    { id: 'b15', lamb_id: 'l4',  ai_sire_id: 'ar2', breeding_date: '2025-11-01', expected_lamb_date: '2026-03-28', outcome: 'Pending' },
-  ],
-  breeding_results: [
-    { id: 'br1', breeding_id: 'b1', lamb_id: 'l1', birth_date: '2025-12-14', num_born: 3, num_alive: 3, num_male: 2, num_female: 1 },
-    { id: 'br2', breeding_id: 'b3', lamb_id: 'l13', birth_date: '2023-12-26', num_born: 2, num_alive: 2, num_male: 2 },
-  ],
-  breeding_result_lambs: [
-    { id: 'brl1', result_id: 'br1', ear_tag: '57', sex: 'Wether' },
-    { id: 'brl2', result_id: 'br1', ear_tag: '56', sex: 'Wether' },
-    { id: 'brl3', result_id: 'br1', ear_tag: '58', sex: 'Ewe' },
-  ],
-  embryo_flushes: [
-    { id: 'ef1', donor_id: 'l1', flush_date: '2025-07-24', embryos_collected: 14, embryos_transferred: 4, ai_sire_id: 'ar2', flush_type: 'MOET' },
-    { id: 'ef2', donor_id: 'l1', flush_date: '2025-08-27', embryos_collected: 8, embryos_transferred: 2, ai_sire_id: 'ar2', flush_type: 'IVF' },
-    { id: 'ef3', donor_id: 'l3', flush_date: '2025-07-24', embryos_collected: 6, embryos_transferred: 4, ai_sire_id: 'ar6', flush_type: 'MOET' },
-    { id: 'ef4', donor_id: 'l2', flush_date: '2025-09-10', embryos_collected: 10, embryos_transferred: 5, ai_sire_id: 'ar1', flush_type: 'IVF' },
-  ],
-  embryo_transfers: [
-    { id: 'et1', flush_id: 'ef1', donor_id: 'l1', recipient_id: 'l11', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
-    { id: 'et2', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2019', implant_date: '2025-07-30', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 1 },
-    { id: 'et3', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2347', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
-    { id: 'et4', flush_id: 'ef2', donor_id: 'l1', recipient_id: 'l12', implant_date: '2025-09-03', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 2 },
-    { id: 'et5', flush_id: 'ef3', donor_id: 'l3', recipient_text: 'Schoenfeld2125', implant_date: '2026-04-19', outcome: 'Pending', lamb_born: false, num_transferred: 2 },
-    { id: 'et6', flush_id: 'ef4', donor_id: 'l2', recipient_id: 'l11', implant_date: '2025-09-15', outcome: 'Confirmed Pregnant', lamb_born: false, num_transferred: 1 },
-    { id: 'et7', flush_id: 'ef4', donor_id: 'l2', recipient_text: 'Schoenfeld3001', implant_date: '2025-09-15', outcome: 'Pending', lamb_born: false, num_transferred: 1 },
-  ],
-  embryo_transfer_lambs: [
-    { id: 'etl1', transfer_id: 'et1', ear_tag: '51', sex: 'Ewe', lamb_id: 'l8' },
-  ],
-  lamb_notes: [
-    { id: 'ln1', lamb_id: 'l1', note: 'Top donor, consistently produces 10+ embryos per flush', date: '2025-08-01' },
-  ],
-  custom_products: [
-    { id: 'cp1', type: 'medication', name: 'Dectomax' },
-    { id: 'cp2', type: 'medication', name: 'Draxin' },
-    { id: 'cp3', type: 'medication', name: 'Nuflor' },
-  ],
-  semen_inventory: [
-    { id: 'si1', ai_ram_id: 'ar1', location: 'Tank', straws: 12 },
-    { id: 'si2', ai_ram_id: 'ar1', location: 'RSG', straws: 4 },
-    { id: 'si3', ai_ram_id: 'ar2', location: 'Tank', straws: 8 },
-    { id: 'si4', ai_ram_id: 'ar3', location: 'Tank', straws: 6 },
-    { id: 'si5', ai_ram_id: 'ar8', location: 'Tank', straws: 15 },
-  ],
-  semen_transactions: [],
-};
-
-let _mockStore = JSON.parse(JSON.stringify(MOCK_DATA));
-
-function mockQuery(table) {
-  const store = _mockStore;
-  let _filters = {}, _orderCol = null, _orderAsc = true, _isSingle = false, _selectCols = '*';
-  function getRows() {
-    let rows = JSON.parse(JSON.stringify(store[table] || []));
-    rows = rows.filter(function(r) { return Object.keys(_filters).every(function(k) { return r[k] === _filters[k]; }); });
-    if (_selectCols && _selectCols.indexOf('(') !== -1) {
-      var fkMap = { breeding_results:{fk:'breeding_id',parentKey:'id'}, breeding_result_lambs:{fk:'result_id',parentKey:'id'}, embryo_transfers:{fk:'flush_id',parentKey:'id'}, embryo_transfer_lambs:{fk:'transfer_id',parentKey:'id'} };
-      Object.keys(fkMap).forEach(function(rel) { if (_selectCols.indexOf(rel)!==-1) { var r2=fkMap[rel]; rows=rows.map(function(r){r[rel]=(store[rel]||[]).filter(function(c){return c[r2.fk]===r[r2.parentKey];});return r;}); } });
-      if (_selectCols.indexOf('embryo_flushes')!==-1) rows=rows.map(function(r){r.embryo_flushes=(store.embryo_flushes||[]).find(function(f){return f.id===r.flush_id;})||null;return r;});
-    }
-    if (_orderCol) { var col=_orderCol,asc=_orderAsc; rows.sort(function(a,b){var av=a[col]||'',bv=b[col]||'';return asc?(av>bv?1:-1):(av<bv?1:-1);}); }
-    return rows;
-  }
-  var q = {
-    select:function(c){_selectCols=c;return q;},
-    eq:function(k,v){_filters[k]=v;return q;},
-    order:function(c,o){_orderCol=c;_orderAsc=o?o.ascending!==false:true;return q;},
-    single:function(){_isSingle=true;return q;},
-    limit:function(){return q;},
-    insert:function(data){
-      var items=Array.isArray(data)?data:[data];
-      var ins=items.map(function(item){var r=JSON.parse(JSON.stringify(item));r.id='mock_'+Math.random().toString(36).slice(2);if(!store[table])store[table]=[];store[table].push(r);return r;});
-      return Promise.resolve({data:Array.isArray(data)?ins:ins[0],error:null});
-    },
-    update:function(data){
-      var key=Object.keys(_filters)[0],val=_filters[key];
-      store[table]=(store[table]||[]).map(function(r){return r[key]===val?Object.assign({},r,data):r;});
-      return Promise.resolve({data:null,error:null});
-    },
-    delete:function(){
-      var key=Object.keys(_filters)[0],val=_filters[key];
-      store[table]=(store[table]||[]).filter(function(r){return r[key]!==val;});
-      return Promise.resolve({data:null,error:null});
-    },
-    then:function(res,rej){var rows=getRows(),result=_isSingle?(rows[0]||null):rows;return Promise.resolve({data:result,error:null}).then(res,rej);}
-  };
-  return q;
-}
-
-var db = { from: function(table) { return mockQuery(table); } };
-
-
-
-
-
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const BASE_VACCINES = ['CDT (Clostridium/Tetanus)','Overeating Disease','Foot Rot','Caseous Lymphadenitis (CL)','Rabies'];
 const BASE_MEDS = ['Ivermectin (Dewormer)','Fenbendazole','Coccidiostat','Penicillin','LA-200 (Oxytetracycline)','Banamine','Vitamin B12','Selenium/Vit E'];
@@ -448,7 +301,7 @@ let currentLambTab = 'health';
 let allLambs = [];
 let allAiRams = [];
 let allSemenInventory = [];
-let customProducts = { vaccine: [], medication: [] };
+let customProducts = { vaccine: [], medication: [], cost: [] };
 let flockFilter = 'Active';
 let flockTypeFilter = 'All';
 let flockRoleFilter = 'All Roles';
@@ -498,8 +351,8 @@ async function loadAiRams() {
 
 async function loadCustomProducts() {
   const { data } = await db.from('custom_products').select('*').order('name');
-  customProducts = { vaccine: [], medication: [] };
-  (data || []).forEach(p => { if (customProducts[p.type]) customProducts[p.type].push(p.name); });
+  customProducts = { vaccine: [], medication: [], cost: [] };
+  (data || []).forEach(p => { if (customProducts[p.type]) customProducts[p.type].push({ name: p.name }); else if (p.type === 'cost') customProducts.cost.push({ name: p.name }); });
 }
 
 // ── NAVIGATION ────────────────────────────────────────
@@ -523,6 +376,8 @@ function showPage(page) {
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
   else if (page === 'analytics') renderAnalytics();
+  else if (page === 'costs') renderCosts();
+  else if (page === 'supplies') renderSupplies();
   else if (page === 'calendar') renderCalendar();
   else if (page === 'pedigree') renderPedigreeNetwork();
   else if (page === 'export') renderExport();
@@ -1275,8 +1130,9 @@ function renderAiRams() {
   let html = `
     <div class="section-header">
       <div class="section-title" style="font-size:1.15rem">AI Rams</div>
-      <div style="display:flex;gap:0.5rem">
-        <button class="btn btn-secondary btn-sm" onclick="openSemenInventory()">🧪 Semen Inventory</button>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openSemenInventory()">🧪 Inventory</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddInventoryPicker()">+ Add Inventory</button>
         <button class="btn btn-primary btn-sm" onclick="openAddAiRam()">+ Add AI Ram</button>
       </div>
     </div>`;
@@ -1362,6 +1218,30 @@ function openSemenInventory() {
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
 }
 
+function openAddInventoryPicker() {
+  if (allAiRams.length === 0) { toast('Add an AI Ram first'); return; }
+  const opts = [...allAiRams].sort((a,b)=>a.name.localeCompare(b.name)).map(r => {
+    const inv = allSemenInventory.filter(i => i.ai_ram_id === r.id && i.straws > 0);
+    const total = inv.reduce((s,i) => s+(i.straws||0), 0);
+    return `<option value="${r.id}">${r.name}${total > 0 ? ` (${total} straws)` : ' — no inventory'}</option>`;
+  }).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🧪 Add Semen Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Select AI Ram *</label>
+      <select id="inv-picker-ram"><option value="">— Select ram —</option>${opts}</select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="openInventoryFromPicker()">Next →</button>
+    </div>`);
+}
+
+function openInventoryFromPicker() {
+  const ramId = document.getElementById('inv-picker-ram')?.value;
+  if (!ramId) { toast('Select a ram'); return; }
+  openManageInventory(ramId);
+}
+
 async function openManageInventory(ramId) {
   await loadSemenInventory();
   const ram = allAiRams.find(r => r.id === ramId);
@@ -1371,14 +1251,19 @@ async function openManageInventory(ramId) {
   const locRows = LOCATIONS.map(loc => {
     const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === loc);
     const count = entry ? entry.straws : 0;
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0;border-bottom:1px solid var(--border)">
-      <div style="font-weight:500;color:var(--text);min-width:80px">${loc}</div>
-      <div style="display:flex;align-items:center;gap:0.5rem">
-        <span style="font-size:1.1rem;font-weight:700;color:${count>0?'var(--accent)':'var(--text3)'};min-width:40px;text-align:center">${count}</span>
-        <span style="font-size:0.75rem;color:var(--text3)">straws</span>
+    const cps = entry?.cost_per_straw;
+    return `<div style="padding:0.6rem 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem">
+        <div style="font-weight:500;color:var(--text);min-width:80px">${loc}</div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="font-size:1.1rem;font-weight:700;color:${count>0?'var(--accent)':'var(--text3)'};min-width:40px;text-align:center">${count}</span>
+          <span style="font-size:0.75rem;color:var(--text3)">straws</span>
+          ${cps ? `<span style="font-size:0.72rem;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.1rem 0.4rem">$${parseFloat(cps).toFixed(2)}/straw</span>` : ''}
+        </div>
       </div>
-      <div style="display:flex;gap:0.35rem;align-items:center">
+      <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
         <input type="number" id="inv-adj-${loc}" value="1" min="0.5" step="0.5" style="width:65px;padding:0.3rem 0.4rem;font-size:0.82rem" placeholder="qty">
+        <input type="number" id="inv-cps-${loc}" value="${cps||''}" min="0" step="0.01" style="width:80px;padding:0.3rem 0.4rem;font-size:0.82rem" placeholder="$/straw">
         <button class="btn btn-primary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',1)">+ Add</button>
         <button class="btn btn-secondary btn-sm" onclick="adjustInventory('${ramId}','${loc}','',-1)" ${count===0?'disabled':''}>− Use</button>
       </div>
@@ -1402,7 +1287,7 @@ async function openManageInventory(ramId) {
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🧪 ${ram.name} — Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="margin-bottom:0.5rem;font-size:0.78rem;color:var(--text3)">Enter quantity then click Add or Use</div>
+    <div style="margin-bottom:0.5rem;font-size:0.78rem;color:var(--text3)">Enter qty and cost per straw (required to add), then click Add</div>
     ${locRows}
     ${transferSection}
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
@@ -1449,17 +1334,28 @@ async function transferInventory(ramId) {
 async function adjustInventory(ramId, location, entryIdHint, direction) {
   const qty = parseFloat(document.getElementById(`inv-adj-${location}`)?.value) || 1;
   const adj = direction * qty;
+  const cpsInput = document.getElementById(`inv-cps-${location}`)?.value;
+  const costPerStraw = cpsInput ? parseFloat(cpsInput) : null;
 
-  // Always look up fresh from allSemenInventory by ram+location
+  // Require cost per straw when adding
+  if (direction > 0 && !costPerStraw) {
+    toast('Cost per straw required when adding inventory');
+    document.getElementById(`inv-cps-${location}`)?.focus();
+    return;
+  }
+
   const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === location);
 
   if (entry) {
     const newCount = Math.max(0, (entry.straws || 0) + adj);
-    await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entry.id);
+    const updateData = { straws: newCount, updated_at: new Date().toISOString() };
+    if (direction > 0 && costPerStraw != null) updateData.cost_per_straw = costPerStraw;
+    await db.from('semen_inventory').update(updateData).eq('id', entry.id);
     entry.straws = newCount;
+    if (direction > 0 && costPerStraw != null) entry.cost_per_straw = costPerStraw;
   } else {
     if (adj <= 0) { toast('No inventory to deduct'); return; }
-    const { data } = await db.from('semen_inventory').insert({ ai_ram_id: ramId, location, straws: adj });
+    const { data } = await db.from('semen_inventory').insert({ ai_ram_id: ramId, location, straws: adj, cost_per_straw: costPerStraw });
     if (data) allSemenInventory.push(Array.isArray(data) ? data[0] : data);
   }
 
@@ -1467,10 +1363,10 @@ async function adjustInventory(ramId, location, entryIdHint, direction) {
     ai_ram_id: ramId,
     transaction_type: direction > 0 ? 'add' : 'use',
     straws: qty,
-    notes: direction > 0 ? `Manual add — ${location}` : `Manual use — ${location}`
+    notes: direction > 0 ? `Manual add — ${location}${costPerStraw?` @ $${costPerStraw}/straw`:''}` : `Manual use — ${location}`
   });
 
-  toast(`Inventory updated`);
+  toast('Inventory updated');
   await loadSemenInventory();
   renderAiRams();
   openManageInventory(ramId);
@@ -1487,7 +1383,20 @@ async function deductSemenInventory(ramId, location, straws, referenceType, refe
     reference_type: referenceType, reference_id: referenceId,
     notes: `Used in ${referenceType}`
   });
-  // Update in memory immediately
+  // Auto-create semen cost entry if cost_per_straw is set
+  if (entry.cost_per_straw && referenceId) {
+    const ram = allAiRams.find(r => r.id === ramId);
+    const totalCost = parseFloat(entry.cost_per_straw) * straws;
+    const table = referenceType === 'flush' ? 'flush_costs' : 'breeding_costs';
+    const idField = referenceType === 'flush' ? 'flush_id' : 'breeding_id';
+    await db.from(table).insert({
+      [idField]: referenceId,
+      description: `Semen — ${ram?.name||'AI Ram'} (${straws} straw${straws!==1?'s':''} @ $${parseFloat(entry.cost_per_straw).toFixed(2)})`,
+      category: 'Semen',
+      amount: totalCost,
+      date: new Date().toISOString().slice(0,10)
+    });
+  }
   entry.straws = newCount;
   await loadSemenInventory();
 }
@@ -1550,6 +1459,66 @@ async function saveAiRam(id) {
   if (id) { await db.from('ai_rams').update(payload).eq('id', id); toast('AI ram updated'); }
   else { await db.from('ai_rams').insert(payload); toast('AI ram added'); }
   closeModal(); await loadAiRams(); renderAiRams();
+}
+
+// ── INLINE COST HELPERS ───────────────────────────────
+function addCostRow(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const id = 'cr_' + Math.random().toString(36).slice(2);
+
+  // Build saved cost descriptions from customProducts
+  const savedDescs = (customProducts.cost || []).map(p => `<option value="${p.name}">`).join('');
+  const datalistId = id + '_dl';
+
+  const row = document.createElement('div');
+  row.id = id;
+  row.style.cssText = 'display:flex;gap:0.4rem;margin-bottom:0.4rem;align-items:center;flex-wrap:wrap';
+  row.innerHTML = `
+    <datalist id="${datalistId}">${savedDescs}</datalist>
+    <div style="flex:2;min-width:120px;display:flex;gap:0.2rem;align-items:center">
+      <input list="${datalistId}" placeholder="Description" style="flex:1;padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="cr-desc">
+      <button type="button" title="Save to list" onclick="saveCostDesc(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:0.9rem;padding:0 0.2rem" title="Save description to list">💾</button>
+    </div>
+    <select style="flex:1;min-width:90px;padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="cr-cat">
+      ${COST_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}
+    </select>
+    <input type="number" placeholder="$0.00" step="0.01" min="0" style="width:80px;padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="cr-amount">
+    <button type="button" onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0 0.2rem;line-height:1">×</button>`;
+  container.appendChild(row);
+}
+
+async function saveCostDesc(btn) {
+  const input = btn.previousElementSibling;
+  const desc = input?.value?.trim();
+  if (!desc) { toast('Enter a description first'); return; }
+  // Check if already saved
+  if ((customProducts.cost||[]).find(p => p.name === desc)) { toast('Already saved'); return; }
+  await db.from('custom_products').insert({ type: 'cost', name: desc });
+  if (!customProducts.cost) customProducts.cost = [];
+  customProducts.cost.push({ name: desc });
+  // Update all datalists in the modal
+  document.querySelectorAll('[id$="_dl"]').forEach(dl => {
+    const opt = document.createElement('option');
+    opt.value = desc;
+    dl.appendChild(opt);
+  });
+  toast(`"${desc}" saved to list`);
+  btn.style.color = 'var(--green)';
+  setTimeout(() => { btn.style.color = 'var(--text3)'; }, 1500);
+}
+
+async function saveInlineCosts(containerId, table, idField, recordId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const inserts = [];
+  container.querySelectorAll('div').forEach(row => {
+    const desc = row.querySelector('.cr-desc')?.value?.trim();
+    const cat = row.querySelector('.cr-cat')?.value;
+    const amount = parseFloat(row.querySelector('.cr-amount')?.value);
+    if (desc && amount > 0) inserts.push({ [idField]: recordId, description: desc, category: cat, amount, date: new Date().toISOString().slice(0,10) });
+  });
+  if (inserts.length > 0) await db.from(table).insert(inserts);
 }
 
 // ── BREEDING PAGE ─────────────────────────────────────
@@ -1820,8 +1789,8 @@ function openAddBreedingGlobal() {
       </div>
     </div>
     <div class="row">
-      <div class="field"><label>Breeding Date</label><input type="date" id="gbr-date" value="${new Date().toISOString().slice(0,10)}" oninput="calcGbrExpected()"></div>
-      <div class="field"><label>Expected Lamb Date</label><input type="date" id="gbr-expected"></div>
+      <div class="field"><label>Breeding Date</label><input type="date" id="gbr-date" value="${new Date().toISOString().slice(0,10)}" onchange="calcGbrExpected()"></div>
+      <div class="field"><label>Expected Lamb Date</label><input type="date" id="gbr-expected" value="${new Date(new Date().getTime()+147*24*60*60*1000).toISOString().slice(0,10)}"></div>
     </div>
     <div class="row">
       <div class="field"><label>Outcome</label><select id="gbr-outcome">
@@ -1830,6 +1799,16 @@ function openAddBreedingGlobal() {
       <div class="field"></div>
     </div>
     <div class="field"><label>Notes</label><textarea id="gbr-notes" rows="2"></textarea></div>
+
+    <!-- COSTS SECTION -->
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
+        <button type="button" class="btn-icon" onclick="addCostRow('gbr-costs')">+ Add Cost</button>
+      </div>
+      <div id="gbr-costs"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveBreedingGlobal()">Save Record</button>
@@ -1838,7 +1817,10 @@ function openAddBreedingGlobal() {
 
 function calcGbrExpected() {
   const d = document.getElementById('gbr-date')?.value;
-  if (d) { const exp = new Date(new Date(d).getTime()+147*24*60*60*1000).toISOString().slice(0,10); document.getElementById('gbr-expected').value = exp; }
+  if (d) {
+    const exp = new Date(d + 'T12:00:00').getTime() + 147*24*60*60*1000;
+    document.getElementById('gbr-expected').value = new Date(exp).toISOString().slice(0,10);
+  }
 }
 
 function updateGbrSemenOpts() {
@@ -1864,6 +1846,8 @@ async function saveBreedingGlobal() {
     const loc = v('gbr-semen-loc'); const straws = parseFloat(v('gbr-straws-used'))||0;
     if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', data.id);
   }
+  // Save inline costs
+  if (data?.id) await saveInlineCosts('gbr-costs', 'breeding_costs', 'breeding_id', data.id);
   toast('Breeding record saved');
   closeModal();
   renderBreeding();
@@ -2124,6 +2108,16 @@ function openAddFlushGlobal() {
       </div>
     </div>
     <div class="field"><label>Notes</label><textarea id="gfl-notes" rows="2"></textarea></div>
+
+    <!-- COSTS SECTION -->
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
+        <button type="button" class="btn-icon" onclick="addCostRow('gfl-costs')">+ Add Cost</button>
+      </div>
+      <div id="gfl-costs"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlushGlobal()">Save Record</button>
@@ -2155,6 +2149,8 @@ async function saveFlushGlobal() {
     const loc = v('gfl-semen-loc'); const straws = parseFloat(v('gfl-straws-used'))||0;
     if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', data.id);
   }
+  // Save inline costs
+  if (data?.id) await saveInlineCosts('gfl-costs', 'flush_costs', 'flush_id', data.id);
   toast('Flush record saved');
   closeModal();
   renderFlushes();
@@ -2580,6 +2576,373 @@ function showFlushTypeDetail(type, badgeClass, flushIds) {
     </div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`, true);
 }
+// ── COSTS PAGE ────────────────────────────────────────
+
+const COST_CATEGORIES = ['Semen', 'Vet', 'Lab', 'Transport', 'Drugs', 'Other'];
+
+async function renderCosts() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const [{ data: flushCosts }, { data: breedCosts }, { data: flushes }, { data: breeds }, { data: transfers }] = await Promise.all([
+    db.from('flush_costs').select('*').order('date', {ascending:false}),
+    db.from('breeding_costs').select('*').order('date', {ascending:false}),
+    db.from('embryo_flushes').select('*'),
+    db.from('breeding_records').select('*'),
+    db.from('embryo_transfers').select('*'),
+  ]);
+  window._costsAllFlush = flushCosts || [];
+  window._costsAllBreed = breedCosts || [];
+  window._costsFlushRecs = flushes || [];
+  window._costsBreedRecs = breeds || [];
+  window._costsTransfers = transfers || [];
+  window._costFilters = window._costFilters || { animal:'', category:'', dateFrom:'', dateTo:'' };
+  renderCostTables(window._costsAllFlush, window._costsAllBreed, window._costsFlushRecs, window._costsBreedRecs, window._costsTransfers, window._costFilters);
+}
+
+function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters) {
+  // Apply filters to both tables
+  function applyFilter(costs, type) {
+    return costs.filter(c => {
+      const rec = type === 'flush'
+        ? flushRecs.find(r => r.id === c.flush_id)
+        : breedRecs.find(r => r.id === c.breeding_id);
+      const animal = type === 'flush'
+        ? (allLambs.find(l => l.id === rec?.donor_id)?.name || '')
+        : (allLambs.find(l => l.id === rec?.lamb_id)?.name || '');
+      if (filters.animal && !animal.toLowerCase().includes(filters.animal.toLowerCase())) return false;
+      if (filters.category && c.category !== filters.category) return false;
+      if (filters.dateFrom && c.date && c.date < filters.dateFrom) return false;
+      if (filters.dateTo && c.date && c.date > filters.dateTo) return false;
+      return true;
+    });
+  }
+
+  const fc = applyFilter(allFc, 'flush');
+  const bc = applyFilter(allBc, 'breeding');
+
+  // Summary stats from filtered
+  const flushTotal = fc.reduce((s,c) => s+(c.amount||0), 0);
+  const breedTotal = bc.reduce((s,c) => s+(c.amount||0), 0);
+  const totalCost = flushTotal + breedTotal;
+  const totalEmbryos = flushRecs.reduce((s,f) => s+(f.embryos_collected||0), 0);
+  const costPerEmbryo = totalEmbryos > 0 ? (flushTotal/totalEmbryos).toFixed(2) : '—';
+  const totalLambs = transfers.filter(t=>t.lamb_born).reduce((s,t)=>s+(t.lamb_count||0),0);
+  const costPerLamb = totalLambs > 0 ? (flushTotal/totalLambs).toFixed(2) : '—';
+  const byCat = {};
+  [...fc,...bc].forEach(c => { byCat[c.category] = (byCat[c.category]||0) + (c.amount||0); });
+
+  const hasFilters = filters.animal || filters.category || filters.dateFrom || filters.dateTo;
+  const totalAll = allFc.length + allBc.length;
+  const totalFiltered = fc.length + bc.length;
+
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">💰 Breeding & Flush Costs</div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-secondary btn-sm" onclick="openAddCost('flush')">+ Flush Cost</button>
+        <button class="btn btn-primary btn-sm" onclick="openAddCost('breeding')">+ Breeding Cost</button>
+      </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+        ${[
+          ...(filters.animal ? [{ key:'animal', val:filters.animal, label:'Animal' }] : []),
+          ...(filters.category ? [{ key:'category', val:filters.category, label:'Category' }] : []),
+          ...(filters.dateFrom ? [{ key:'dateFrom', val:filters.dateFrom, label:'From' }] : []),
+          ...(filters.dateTo ? [{ key:'dateTo', val:filters.dateTo, label:'To' }] : []),
+        ].map(({key,val,label}) => `<span style="display:inline-flex;align-items:center;gap:0.35rem;background:var(--accent-glow);border:1px solid var(--accent2);color:var(--accent2);padding:0.25rem 0.5rem 0.25rem 0.65rem;border-radius:1rem;font-size:0.75rem;font-weight:600">
+          ${label}: ${val}
+          <button onclick="clearCostFilter('${key}')" style="background:none;border:none;cursor:pointer;color:var(--accent2);font-size:0.9rem;line-height:1;padding:0 0.1rem">×</button>
+        </span>`).join('')}
+
+        <div style="position:relative;display:inline-block" id="cost-filter-dropdown-wrap">
+          <button onclick="toggleCostFilterMenu()" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:0.35rem">
+            <span style="font-size:0.9rem">＋</span> Add Filter
+          </button>
+          <div id="cost-filter-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:var(--shadow);z-index:100;min-width:200px;padding:0.5rem">
+            ${!filters.animal ? `<div class="filter-menu-item" onclick="showCostFilterInput('animal')">Animal name</div>` : ''}
+            ${!filters.dateFrom ? `<div class="filter-menu-item" onclick="showCostFilterInput('dateFrom')">Date from</div>` : ''}
+            ${!filters.dateTo ? `<div class="filter-menu-item" onclick="showCostFilterInput('dateTo')">Date to</div>` : ''}
+            ${!filters.category ? `<div style="border-top:1px solid var(--border);margin:0.25rem 0;padding-top:0.35rem">
+              <div style="font-size:0.68rem;color:var(--text3);padding:0 0.5rem;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.06em">Category</div>
+              ${COST_CATEGORIES.map(cat=>`<div class="filter-menu-item" onclick="window._costFilters.category='${cat}';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">${cat}</div>`).join('')}
+            </div>` : ''}
+          </div>
+        </div>
+
+        <div id="cost-filter-input-wrap" style="display:none;align-items:center;gap:0.35rem">
+          <input id="cost-filter-input" style="width:160px;padding:0.3rem 0.6rem;font-size:0.82rem" placeholder="" onkeydown="if(event.key==='Enter')applyCostFilterInput();if(event.key==='Escape'){document.getElementById('cost-filter-input-wrap').style.display='none';}">
+          <button class="btn btn-primary btn-sm" onclick="applyCostFilterInput()">Apply</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('cost-filter-input-wrap').style.display='none'">✕</button>
+        </div>
+
+        ${hasFilters ? `<button onclick="window._costFilters={animal:'',category:'',dateFrom:'',dateTo:''};renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)" style="background:none;border:none;color:var(--text3);font-size:0.78rem;cursor:pointer;text-decoration:underline">Clear all</button>` : ''}
+      </div>
+      ${hasFilters ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.4rem">Showing ${totalFiltered} of ${totalAll} records</div>` : ''}
+    </div>
+
+    <!-- SUMMARY STATS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$${totalCost.toFixed(0)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Total</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--purple)">$${flushTotal.toFixed(0)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Flush</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--blue)">$${breedTotal.toFixed(0)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Breeding</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$${costPerEmbryo}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Per Embryo</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--green)">$${costPerLamb}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Per Live Lamb</div></div>
+    </div>
+
+    ${Object.keys(byCat).length > 0 ? `<div class="card" style="padding:1rem;margin-bottom:1.25rem">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">By Category</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+        ${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.75rem;display:inline-flex;gap:0.5rem;align-items:center;cursor:pointer" onclick="window._costFilters.category='${cat}';renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)"><span style="font-size:0.82rem;font-weight:600;color:var(--text)">${cat}</span><span style="font-size:0.82rem;color:var(--accent);font-weight:700">$${amt.toFixed(0)}</span></div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1rem">
+      <button class="tab active" id="costs-tab-flush" onclick="switchCostsTab('flush')">🔬 Flush Costs (${fc.length})</button>
+      <button class="tab" id="costs-tab-breeding" onclick="switchCostsTab('breeding')">🐏 Breeding Costs (${bc.length})</button>
+    </div>
+    <div id="costs-panel-flush">${renderCostTable(fc,'flush',flushRecs)}</div>
+    <div id="costs-panel-breeding" style="display:none">${renderCostTable(bc,'breeding',breedRecs)}</div>`;
+
+  document.getElementById('main-content').innerHTML = html;
+}
+
+// Cost filter helpers
+let _activeCostFilterKey = null;
+function toggleCostFilterMenu() { const m=document.getElementById('cost-filter-menu'); if(m) m.style.display=m.style.display==='none'?'block':'none'; }
+function closeCostFilterMenu() { const m=document.getElementById('cost-filter-menu'); if(m) m.style.display='none'; }
+function clearCostFilter(key) { window._costFilters[key]=''; renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters); }
+function showCostFilterInput(key) {
+  closeCostFilterMenu();
+  _activeCostFilterKey = key;
+  const wrap=document.getElementById('cost-filter-input-wrap');
+  const input=document.getElementById('cost-filter-input');
+  if(!wrap||!input) return;
+  input.type = (key.includes('date')||key.includes('Date')) ? 'date' : 'text';
+  input.placeholder = key==='animal' ? 'Animal name…' : '';
+  input.value = window._costFilters[key]||'';
+  wrap.style.display='inline-flex';
+  input.focus();
+}
+function applyCostFilterInput() {
+  if(!_activeCostFilterKey) return;
+  window._costFilters[_activeCostFilterKey] = document.getElementById('cost-filter-input')?.value||'';
+  document.getElementById('cost-filter-input-wrap').style.display='none';
+  _activeCostFilterKey=null;
+  renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters);
+}
+document.addEventListener('click', function(e) {
+  const wrap=document.getElementById('cost-filter-dropdown-wrap');
+  if(wrap&&!wrap.contains(e.target)) closeCostFilterMenu();
+});
+
+function renderCostTable(costs, type, records) {
+  if (costs.length === 0) return `<div class="empty"><div class="empty-icon">💰</div><h3>No ${type} costs yet</h3></div>`;
+  const idField = type === 'flush' ? 'flush_id' : 'breeding_id';
+  const total = costs.reduce((s,c)=>s+(c.amount||0),0);
+  return `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+    <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">${type==='flush'?'Flush':'Breeding'}</th>
+      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Description</th>
+      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Category</th>
+      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Date</th>
+      <th style="padding:0.65rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Amount</th>
+      <th style="padding:0.65rem 1rem"></th>
+    </tr></thead>
+    <tbody>
+      ${costs.map(c => {
+        const rec = records.find(r => r.id === c[idField]);
+        const label = type==='flush'
+          ? (()=>{ const d=allLambs.find(l=>l.id===rec?.donor_id); return (d?d.name:'')+' '+(rec?.flush_date||''); })()
+          : (()=>{ const l=allLambs.find(x=>x.id===rec?.lamb_id); return (l?l.name:'')+' '+(rec?.breeding_date||''); })();
+        return `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+          <td style="padding:0.65rem 1rem;color:var(--text2);font-size:0.82rem;white-space:nowrap">${label.trim()||'—'}</td>
+          <td style="padding:0.65rem 1rem;color:var(--text);font-weight:500">${c.description}</td>
+          <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${c.category||'Other'}</span></td>
+          <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${c.date||'—'}</td>
+          <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${(c.amount||0).toFixed(2)}</td>
+          <td style="padding:0.65rem 1rem;text-align:center"><button class="btn-icon btn-sm" onclick="deleteCost('${c.id}','${type}')" style="color:var(--danger)">🗑</button></td>
+        </tr>`;
+      }).join('')}
+      <tr style="background:var(--surface2);border-top:2px solid var(--border)">
+        <td colspan="4" style="padding:0.65rem 1rem;font-weight:700">Total</td>
+        <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${total.toFixed(2)}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table></div></div>`;
+}
+
+function switchCostsTab(tab) {
+  document.getElementById('costs-panel-flush').style.display = tab==='flush'?'':'none';
+  document.getElementById('costs-panel-breeding').style.display = tab==='breeding'?'':'none';
+  document.getElementById('costs-tab-flush').classList.toggle('active', tab==='flush');
+  document.getElementById('costs-tab-breeding').classList.toggle('active', tab==='breeding');
+}
+
+async function openAddCost(type) {
+  const isFlush = type==='flush';
+  const { data: records } = await db.from(isFlush?'embryo_flushes':'breeding_records').select('*').order(isFlush?'flush_date':'breeding_date',{ascending:false});
+  const recOpts = (records||[]).map(r => {
+    if (isFlush) { const d=allLambs.find(l=>l.id===r.donor_id); return `<option value="${r.id}">${d?.name||'?'} — ${r.flush_date} (${r.flush_type||'MOET'})</option>`; }
+    const l=allLambs.find(x=>x.id===r.lamb_id); const s=r.ai_sire_id?allAiRams.find(x=>x.id===r.ai_sire_id):null;
+    return `<option value="${r.id}">${l?.name||'?'} × ${s?.name||r.sire_text||'?'} — ${r.breeding_date}</option>`;
+  }).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">💰 Add ${isFlush?'Flush':'Breeding'} Cost</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>${isFlush?'Flush':'Breeding'} Record *</label><select id="cost-rec-id"><option value="">— Select —</option>${recOpts}</select></div>
+    <div class="field"><label>Description *</label><input id="cost-desc" placeholder="e.g. Semen straws, Vet fee, Lab processing"></div>
+    <div class="row">
+      <div class="field"><label>Category</label><select id="cost-cat">${COST_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Amount ($) *</label><input type="number" id="cost-amount" step="0.01" min="0" placeholder="0.00"></div>
+    </div>
+    <div class="field"><label>Date</label><input type="date" id="cost-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="field"><label>Notes</label><textarea id="cost-notes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCost('${type}')">Save Cost</button>
+    </div>`);
+}
+
+async function saveCost(type) {
+  const recId=v('cost-rec-id'), desc=v('cost-desc'), amount=parseFloat(v('cost-amount'));
+  if (!recId){toast('Select a record');return;} if(!desc){toast('Description required');return;}
+  if(!amount||amount<=0){toast('Enter a valid amount');return;}
+  const table=type==='flush'?'flush_costs':'breeding_costs';
+  const idField=type==='flush'?'flush_id':'breeding_id';
+  await db.from(table).insert({[idField]:recId,description:desc,category:v('cost-cat'),amount,date:v('cost-date')||null,notes:v('cost-notes')});
+  toast('Cost saved'); closeModal(); renderCosts();
+}
+
+async function deleteCost(id, type) {
+  await db.from(type==='flush'?'flush_costs':'breeding_costs').delete().eq('id',id);
+  // Update the in-memory store
+  if (type === 'flush') window._costsAllFlush = (window._costsAllFlush||[]).filter(c=>c.id!==id);
+  else window._costsAllBreed = (window._costsAllBreed||[]).filter(c=>c.id!==id);
+  const activeTab = document.getElementById('costs-tab-breeding')?.classList.contains('active') ? 'breeding' : 'flush';
+  renderCostTables(window._costsAllFlush||[],window._costsAllBreed||[],window._costsFlushRecs||[],window._costsBreedRecs||[],window._costsTransfers||[],window._costFilters||{});
+  setTimeout(()=>switchCostsTab(activeTab), 0);
+  toast('Deleted');
+}
+
+// ── SUPPLIES PAGE ──────────────────────────────────────
+const SUPPLY_CATEGORIES = ['Feed', 'Hay', 'Bedding', 'Supplement', 'Other'];
+const SUPPLY_UNITS = ['bags', 'bales', 'lbs', 'tons', 'gallons', 'units'];
+
+async function renderSupplies() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const { data } = await db.from('supply_log').select('*').order('date', {ascending:false});
+  const logs = data || [];
+  const byItem = {};
+  logs.forEach(l => { if(!byItem[l.item]) byItem[l.item]={item:l.item,category:l.category,unit:l.unit,entries:[]}; byItem[l.item].entries.push(l); });
+  const today = new Date().toISOString().slice(0,10);
+  const predictions = Object.values(byItem).map(item => {
+    const sorted=[...item.entries].sort((a,b)=>a.date>b.date?1:-1);
+    const totalQty=sorted.reduce((s,e)=>s+(e.quantity||0),0);
+    const totalCost=sorted.reduce((s,e)=>s+(e.cost||0),0);
+    let avgDays=null, nextPurchase=null;
+    if(sorted.length>=2){
+      const gaps=[];
+      for(let i=1;i<sorted.length;i++){const d1=new Date(sorted[i-1].date),d2=new Date(sorted[i].date);gaps.push((d2-d1)/(1000*60*60*24));}
+      avgDays=Math.round(gaps.reduce((s,g)=>s+g,0)/gaps.length);
+      nextPurchase=new Date(new Date(sorted[sorted.length-1].date).getTime()+avgDays*24*60*60*1000).toISOString().slice(0,10);
+    }
+    return {...item,totalQty,totalCost,avgDays,nextPurchase,lastDate:sorted[sorted.length-1]?.date};
+  });
+  const dueSoon=predictions.filter(p=>p.nextPurchase&&p.nextPurchase<=today);
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🌾 Feed & Supplies</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddSupply()">+ Log Purchase</button>
+    </div>
+    ${dueSoon.length>0?`<div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:1.25rem">
+      <div style="font-size:0.78rem;font-weight:700;color:#92560a;margin-bottom:0.4rem">⚠️ Due for Reorder (${dueSoon.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem">${dueSoon.map(p=>`<span style="background:#fef3cd;border:1px solid #fcd68a;border-radius:0.25rem;padding:0.2rem 0.6rem;font-size:0.78rem;font-weight:600;color:#92560a">${p.item}</span>`).join('')}</div>
+    </div>`:''}
+    ${predictions.length>0?`<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Overview</div>
+    <div class="flock-grid" style="margin-bottom:1.25rem">
+      ${predictions.map(p=>{
+        const isDue=p.nextPurchase&&p.nextPurchase<=today;
+        const isSoon=p.nextPurchase&&p.nextPurchase>today&&p.nextPurchase<=new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
+        return `<div class="card" style="padding:1rem${isDue?';border-color:#fcd68a':isSoon?';border-color:#fde68a':''}">
+          <div style="font-weight:700;color:var(--text)">${p.item}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${p.category}</div>
+          <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.2rem">
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total purchased</span><span style="font-weight:600">${p.totalQty} ${p.unit||''}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total spent</span><span style="font-weight:600;color:var(--accent)">$${p.totalCost.toFixed(0)}</span></div>
+            ${p.avgDays?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Avg reorder</span><span style="font-weight:600">every ${p.avgDays}d</span></div>`:''}
+            ${p.nextPurchase?`<div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-top:0.1rem"><span style="color:var(--text3)">Next est.</span><span style="font-weight:600;color:${isDue?'#dc2626':isSoon?'#d97706':'var(--text)'}">${p.nextPurchase}${isDue?' ⚠️':isSoon?' 🔔':''}</span></div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Purchase Log</div>
+    <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Date</th>
+          <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Item</th>
+          <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Category</th>
+          <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Qty</th>
+          <th style="padding:0.65rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Total Cost</th>
+          <th style="padding:0.65rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Per Unit</th>
+          <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Supplier</th>
+          <th style="padding:0.65rem 1rem;text-align:center"></th>
+        </tr></thead>
+        <tbody>
+          ${logs.length===0?`<tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--text3)">No purchases logged yet</td></tr>`:
+            logs.map(l=>`<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+              <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${l.date}</td>
+              <td style="padding:0.65rem 1rem;font-weight:600;color:var(--text)">${l.item}</td>
+              <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${l.category||'—'}</span></td>
+              <td style="padding:0.65rem 1rem;color:var(--text2)">${l.quantity?l.quantity+' '+(l.unit||''):'—'}</td>
+              <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">${l.cost?'$'+parseFloat(l.cost).toFixed(2):'—'}</td>
+              <td style="padding:0.65rem 1rem;text-align:right;color:var(--text3);font-size:0.82rem">${l.cost&&l.quantity?'$'+(parseFloat(l.cost)/parseFloat(l.quantity)).toFixed(2)+'/'+( l.unit||'unit'):'—'}</td>
+              <td style="padding:0.65rem 1rem;color:var(--text3);font-size:0.82rem">${l.supplier||''}</td>
+              <td style="padding:0.65rem 1rem;text-align:center"><button class="btn-icon btn-sm" onclick="deleteSupply('${l.id}')" style="color:var(--danger)">🗑</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div></div>`;
+  document.getElementById('main-content').innerHTML = html;
+}
+
+function openAddSupply() {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🌾 Log Purchase</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Item *</label><input id="sup-item" placeholder="e.g. Calf Manna, Timothy Hay"></div>
+      <div class="field"><label>Category</label><select id="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Date *</label><input type="date" id="sup-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Supplier</label><input id="sup-supplier" placeholder="Store or supplier name"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" placeholder="e.g. 10"></div>
+      <div class="field"><label>Unit</label><select id="sup-unit"><option value="">— Select —</option>${SUPPLY_UNITS.map(u=>`<option>${u}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="field"><label>Notes</label><textarea id="sup-notes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSupply()">Save</button>
+    </div>`);
+}
+
+async function saveSupply() {
+  const item=v('sup-item'), date=v('sup-date');
+  if(!item){toast('Item required');return;} if(!date){toast('Date required');return;}
+  await db.from('supply_log').insert({item,category:v('sup-cat'),date,quantity:v('sup-qty')?parseFloat(v('sup-qty')):null,unit:v('sup-unit')||null,cost:v('sup-cost')?parseFloat(v('sup-cost')):null,supplier:v('sup-supplier')||null,notes:v('sup-notes')||null});
+  toast('Logged'); closeModal(); renderSupplies();
+}
+
+async function deleteSupply(id) {
+  await db.from('supply_log').delete().eq('id',id);
+  toast('Deleted'); renderSupplies();
+}
+
 function renderExport() {
   document.getElementById('main-content').innerHTML = `
     <div class="section-header"><div class="section-title" style="font-size:1.15rem">Export Data</div></div>
