@@ -5,41 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flock Health Ledger</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){return {};},book_append_sheet:function(){}},writeFile:function(){alert("Export not available in preview");}};
+</script>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #222536;
-    --surface3: #2a2e42;
-    --border: #2e3248;
-    --border2: #3d4260;
-    --text: #e8eaf2;
-    --text2: #9198b8;
-    --text3: #5a6080;
-    --accent: #6c8ef5;
-    --accent2: #4f6fe8;
-    --accent-glow: rgba(108,142,245,0.15);
-    --green: #4ade80;
-    --green-bg: #0d2318;
-    --warn: #f59e0b;
-    --danger: #f87171;
-    --danger-bg: #2d1515;
-    --blue: #60a5fa;
-    --purple: #a78bfa;
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --surface2: #f5f6f8;
+    --surface3: #eceef2;
+    --border: #e1e4ea;
+    --border2: #c8cdd8;
+    --text: #0d0f18;
+    --text2: #2d3148;
+    --text3: #5a6280;
+    --accent: #2e7d4f;
+    --accent2: #236040;
+    --accent-glow: rgba(46,125,79,0.1);
+    --green: #2e7d4f;
+    --green-bg: #e8f5ee;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --blue: #2563eb;
+    --purple: #7c3aed;
     --radius: 0.75rem;
     --radius-sm: 0.45rem;
     --radius-lg: 1rem;
-    --shadow: 0 4px 24px rgba(0,0,0,0.4);
-    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; font-size: 14px; line-height: 1.5; }
   h1,h2,h3,h4 { font-family: 'Inter', sans-serif; font-weight: 600; }
 
   /* LOGIN */
-  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: radial-gradient(ellipse at 50% 30%, #1a1f35 0%, #0f1117 70%); }
+  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: radial-gradient(ellipse at 50% 30%, #e8ecf4 0%, #f0f2f5 70%); }
   .login-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 1.25rem; padding: 2.5rem; width: 100%; max-width: 360px; text-align: center; box-shadow: var(--shadow); }
   .login-box h1 { font-size: 1.6rem; color: var(--text); margin-bottom: 0.25rem; font-weight: 700; }
   .login-box p { color: var(--text3); font-size: 0.78rem; margin-bottom: 2rem; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -62,7 +63,7 @@
   /* FORMS */
   .field { margin-bottom: 0.9rem; }
   .field label { display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.3rem; }
-  input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 0.5rem 0.75rem; font-size: 0.88rem; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+  input, select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 0.5rem 0.75rem; font-size: 0.88rem; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
   input:focus, select:focus, textarea:focus { border-color: var(--accent2); box-shadow: 0 0 0 3px var(--accent-glow); }
   textarea { resize: vertical; min-height: 70px; }
   .row { display: flex; gap: 0.75rem; }
@@ -96,12 +97,12 @@
 
   /* BADGES */
   .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-  .badge-green { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
-  .badge-yellow { background: rgba(245,158,11,0.1); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
-  .badge-red { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
-  .badge-blue { background: rgba(96,165,250,0.1); color: var(--blue); border: 1px solid rgba(96,165,250,0.25); }
-  .badge-purple { background: rgba(167,139,250,0.1); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
-  .badge-gray { background: rgba(148,163,184,0.1); color: var(--text2); border: 1px solid var(--border); }
+  .badge-green { background: #e8f5ee; color: #1a6b3a; border: 1px solid #b3d9c0; }
+  .badge-yellow { background: #fef3cd; color: #92560a; border: 1px solid #fcd68a; }
+  .badge-red { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-blue { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
+  .badge-purple { background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+  .badge-gray { background: #f1f3f6; color: var(--text2); border: 1px solid var(--border); }
 
   /* TABS */
   .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; overflow-x: auto; }
@@ -138,7 +139,7 @@
   .ped-col { display: flex; flex-direction: column; gap: 0.5rem; }
 
   /* WEIGHT CHART */
-  .weight-chart { background: var(--bg); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); }
+  .weight-chart { background: var(--surface2); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); }
   canvas { width: 100% !important; }
 
   /* EMPTY STATE */
@@ -165,7 +166,8 @@
   optgroup { color: var(--text3); font-style: normal; font-size: 0.72rem; }
   option { color: var(--text); background: var(--bg); }
 
-  /* SIDEBAR NAV BUTTONS */
+  .filter-menu-item { padding: 0.4rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.82rem; cursor: pointer; color: var(--text2); transition: background 0.1s; }
+  .filter-menu-item:hover { background: var(--surface2); color: var(--text); }
   .sidebar-btn { background: none; border: none; color: var(--text3); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.82rem; font-family: 'Inter', sans-serif; font-weight: 500; transition: all 0.15s; white-space: nowrap; display: flex; align-items: center; gap: 0.6rem; width: 100%; text-align: left; }
   .sidebar-btn span:first-child { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
   .sidebar-btn.active { background: var(--accent-glow); color: var(--accent); }
@@ -282,10 +284,158 @@
 <div id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://fmdnazihkanqflnabkcy.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZG5hemloa2FucWZsbmFia2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTUzMzMsImV4cCI6MjA5MTg3MTMzM30.tzR7CNxZ9RtZgtKkRNC3UUp1_hTjgoI8kL5rt_tRPyk';
 const FLOCK_PASSWORD = 'flock2024';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const MOCK_DATA = {
+  lambs: [
+    { id: 'l1', name: 'Gigi', ear_tag: '20055', genetic_code: 'FD', dob: '2019-12-19', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e85e38', ai_sire_id: 'ar3' },
+    { id: 'l2', name: 'Betty', ear_tag: '25309', genetic_code: 'FF', dob: '2024-12-25', sex: 'Ewe', breed: 'Natural', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838', ai_sire_id: 'ar1' },
+    { id: 'l3', name: 'Daphnie', ear_tag: '5568', genetic_code: 'FF', dob: '2023-02-10', sex: 'Ewe', breed: 'Dorset', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e838a0' },
+    { id: 'l4', name: 'Frankie', ear_tag: '21428', genetic_code: 'FD', dob: '2020-12-10', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#38a8e8' },
+    { id: 'l5', name: 'Dee37', ear_tag: '26037', genetic_code: 'RRFF', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Both', tag_color: '#e85e38' },
+    { id: 'l6', name: 'Ivy', ear_tag: '26013', genetic_code: 'RRFD', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8' },
+    { id: 'l7', name: 'Italy', ear_tag: '62', dob: '2026-01-19', sex: 'Ewe', breed: 'Speck', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38e8d4', dam_id: 'l3', ai_sire_id: 'ar3' },
+    { id: 'l8', name: 'Posie', ear_tag: '61', dob: '2025-12-15', sex: 'Ewe', breed: 'Natural', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e838a0', dam_id: 'l1', ai_sire_id: 'ar2' },
+    { id: 'l9', name: 'Blaze', ear_tag: 'K089', dob: '2025-12-27', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8', ai_sire_id: 'ar3' },
+    { id: 'l10', name: 'Eddie', ear_tag: '6042', dob: '2026-01-15', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e85e38', ai_sire_id: 'ar4' },
+    { id: 'l11', name: 'Kaht1', ear_tag: '1', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#6e8fe8' },
+    { id: 'l12', name: 'Kaht2', ear_tag: '168', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
+    { id: 'l13', name: 'Ezzy', ear_tag: '14', genetic_code: 'FF', dob: '2018-12-20', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
+    { id: 'l14', name: 'Sissy', ear_tag: '2209', genetic_code: 'FF', dob: '2021-12-17', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#38e86e', ai_sire_id: 'ar5' },
+    { id: 'l15', name: 'Thor', ear_tag: '26084', dob: '2025-12-14', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Sold', flock_type: 'Show', tag_color: '#6e8fe8' },
+  ],
+  ai_rams: [
+    { id: 'ar1', name: 'Truce', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
+    { id: 'ar2', name: 'Ceasefire', breed: 'Cross', genetic_code: 'FF', sire_ai_id: 'ar1' },
+    { id: 'ar3', name: 'Italian Stallion', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
+    { id: 'ar4', name: 'Unfiltered', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar7' },
+    { id: 'ar5', name: 'Manifest', breed: 'Cross', genetic_code: 'FD' },
+    { id: 'ar6', name: 'Bombshell', breed: 'Cross', genetic_code: 'FD' },
+    { id: 'ar7', name: 'Tres Amigos', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
+    { id: 'ar8', name: 'Alliance', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
+  ],
+  health_records: [
+    { id: 'h1', lamb_id: 'l1', type: 'medication', product: 'Dectomax', date: '2026-03-08', route: 'Intramuscular (IM)', dose: '1 ml' },
+    { id: 'h2', lamb_id: 'l1', type: 'vaccine', product: 'CDT (Clostridium/Tetanus)', date: '2026-02-15', route: 'Subcutaneous (SQ)' },
+    { id: 'h3', lamb_id: 'l2', type: 'medication', product: 'Dectomax', date: '2026-04-15', route: 'Intramuscular (IM)', dose: '1 ml' },
+    { id: 'h4', lamb_id: 'l9', type: 'medication', product: 'Vitamin B12', date: '2026-04-19', route: 'Subcutaneous (SQ)', dose: '5ml' },
+  ],
+  weight_records: [
+    { id: 'w1', lamb_id: 'l9', weight_lbs: 98, date: '2026-03-15' },
+    { id: 'w2', lamb_id: 'l9', weight_lbs: 112, date: '2026-04-01' },
+    { id: 'w3', lamb_id: 'l9', weight_lbs: 119, date: '2026-04-19' },
+    { id: 'w4', lamb_id: 'l10', weight_lbs: 121, date: '2026-04-19' },
+  ],
+  breeding_records: [
+    { id: 'b1',  lamb_id: 'l1',  ai_sire_id: 'ar2', breeding_date: '2025-07-24', expected_lamb_date: '2025-12-18', outcome: 'Lamb Born' },
+    { id: 'b2',  lamb_id: 'l2',  ai_sire_id: 'ar1', breeding_date: '2025-07-30', expected_lamb_date: '2025-12-26', outcome: 'Confirmed Pregnant' },
+    { id: 'b3',  lamb_id: 'l13', sire_text: 'Boozie', breeding_date: '2023-07-24', expected_lamb_date: '2023-12-26', outcome: 'Lamb Born', notes: 'Twins' },
+    { id: 'b4',  lamb_id: 'l4',  ai_sire_id: 'ar8', breeding_date: '2025-09-03', expected_lamb_date: '2026-01-28', outcome: 'Not Pregnant' },
+    { id: 'b5',  lamb_id: 'l14', ai_sire_id: 'ar5', breeding_date: '2025-09-01', expected_lamb_date: '2026-01-26', outcome: 'Pending' },
+    { id: 'b6',  lamb_id: 'l3',  ai_sire_id: 'ar3', breeding_date: '2024-07-20', expected_lamb_date: '2024-12-14', outcome: 'Pending' },
+    { id: 'b7',  lamb_id: 'l1',  ai_sire_id: 'ar3', breeding_date: '2024-08-10', expected_lamb_date: '2025-01-04', outcome: 'Confirmed Pregnant', notes: 'Second cycle' },
+    { id: 'b8',  lamb_id: 'l4',  ai_sire_id: 'ar1', breeding_date: '2024-09-15', expected_lamb_date: '2025-02-08', outcome: 'Lamb Born', notes: '3 lambs born' },
+    { id: 'b9',  lamb_id: 'l13', ai_sire_id: 'ar2', breeding_date: '2025-08-05', expected_lamb_date: '2025-12-30', outcome: 'Not Pregnant' },
+    { id: 'b10', lamb_id: 'l2',  ai_sire_id: 'ar8', breeding_date: '2024-10-01', expected_lamb_date: '2025-02-24', outcome: 'Lamb Born' },
+    { id: 'b11', lamb_id: 'l5',  ai_sire_id: 'ar2', breeding_date: '2025-09-10', expected_lamb_date: '2026-02-04', outcome: 'Confirmed Pregnant' },
+    { id: 'b12', lamb_id: 'l14', ai_sire_id: 'ar3', breeding_date: '2024-08-20', expected_lamb_date: '2025-01-14', outcome: 'Not Pregnant', notes: 'Retry scheduled' },
+    { id: 'b13', lamb_id: 'l3',  ai_sire_id: 'ar1', breeding_date: '2025-10-01', expected_lamb_date: '2026-02-25', outcome: 'Pending' },
+    { id: 'b14', lamb_id: 'l1',  ai_sire_id: 'ar8', breeding_date: '2025-10-15', expected_lamb_date: '2026-03-11', outcome: 'Pending' },
+    { id: 'b15', lamb_id: 'l4',  ai_sire_id: 'ar2', breeding_date: '2025-11-01', expected_lamb_date: '2026-03-28', outcome: 'Pending' },
+  ],
+  breeding_results: [
+    { id: 'br1', breeding_id: 'b1', lamb_id: 'l1', birth_date: '2025-12-14', num_born: 3, num_alive: 3, num_male: 2, num_female: 1 },
+    { id: 'br2', breeding_id: 'b3', lamb_id: 'l13', birth_date: '2023-12-26', num_born: 2, num_alive: 2, num_male: 2 },
+  ],
+  breeding_result_lambs: [
+    { id: 'brl1', result_id: 'br1', ear_tag: '57', sex: 'Wether' },
+    { id: 'brl2', result_id: 'br1', ear_tag: '56', sex: 'Wether' },
+    { id: 'brl3', result_id: 'br1', ear_tag: '58', sex: 'Ewe' },
+  ],
+  embryo_flushes: [
+    { id: 'ef1', donor_id: 'l1', flush_date: '2025-07-24', embryos_collected: 14, embryos_transferred: 4, ai_sire_id: 'ar2', flush_type: 'MOET' },
+    { id: 'ef2', donor_id: 'l1', flush_date: '2025-08-27', embryos_collected: 8, embryos_transferred: 2, ai_sire_id: 'ar2', flush_type: 'IVF' },
+    { id: 'ef3', donor_id: 'l3', flush_date: '2025-07-24', embryos_collected: 6, embryos_transferred: 4, ai_sire_id: 'ar6', flush_type: 'MOET' },
+    { id: 'ef4', donor_id: 'l2', flush_date: '2025-09-10', embryos_collected: 10, embryos_transferred: 5, ai_sire_id: 'ar1', flush_type: 'IVF' },
+  ],
+  embryo_transfers: [
+    { id: 'et1', flush_id: 'ef1', donor_id: 'l1', recipient_id: 'l11', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
+    { id: 'et2', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2019', implant_date: '2025-07-30', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 1 },
+    { id: 'et3', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2347', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
+    { id: 'et4', flush_id: 'ef2', donor_id: 'l1', recipient_id: 'l12', implant_date: '2025-09-03', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 2 },
+    { id: 'et5', flush_id: 'ef3', donor_id: 'l3', recipient_text: 'Schoenfeld2125', implant_date: '2026-04-19', outcome: 'Pending', lamb_born: false, num_transferred: 2 },
+    { id: 'et6', flush_id: 'ef4', donor_id: 'l2', recipient_id: 'l11', implant_date: '2025-09-15', outcome: 'Confirmed Pregnant', lamb_born: false, num_transferred: 1 },
+    { id: 'et7', flush_id: 'ef4', donor_id: 'l2', recipient_text: 'Schoenfeld3001', implant_date: '2025-09-15', outcome: 'Pending', lamb_born: false, num_transferred: 1 },
+  ],
+  embryo_transfer_lambs: [
+    { id: 'etl1', transfer_id: 'et1', ear_tag: '51', sex: 'Ewe', lamb_id: 'l8' },
+  ],
+  lamb_notes: [
+    { id: 'ln1', lamb_id: 'l1', note: 'Top donor, consistently produces 10+ embryos per flush', date: '2025-08-01' },
+  ],
+  custom_products: [
+    { id: 'cp1', type: 'medication', name: 'Dectomax' },
+    { id: 'cp2', type: 'medication', name: 'Draxin' },
+    { id: 'cp3', type: 'medication', name: 'Nuflor' },
+  ],
+  semen_inventory: [
+    { id: 'si1', ai_ram_id: 'ar1', location: 'Tank', straws: 12 },
+    { id: 'si2', ai_ram_id: 'ar1', location: 'RSG', straws: 4 },
+    { id: 'si3', ai_ram_id: 'ar2', location: 'Tank', straws: 8 },
+    { id: 'si4', ai_ram_id: 'ar3', location: 'Tank', straws: 6 },
+    { id: 'si5', ai_ram_id: 'ar8', location: 'Tank', straws: 15 },
+  ],
+  semen_transactions: [],
+};
+
+let _mockStore = JSON.parse(JSON.stringify(MOCK_DATA));
+
+function mockQuery(table) {
+  const store = _mockStore;
+  let _filters = {}, _orderCol = null, _orderAsc = true, _isSingle = false, _selectCols = '*';
+  function getRows() {
+    let rows = JSON.parse(JSON.stringify(store[table] || []));
+    rows = rows.filter(function(r) { return Object.keys(_filters).every(function(k) { return r[k] === _filters[k]; }); });
+    if (_selectCols && _selectCols.indexOf('(') !== -1) {
+      var fkMap = { breeding_results:{fk:'breeding_id',parentKey:'id'}, breeding_result_lambs:{fk:'result_id',parentKey:'id'}, embryo_transfers:{fk:'flush_id',parentKey:'id'}, embryo_transfer_lambs:{fk:'transfer_id',parentKey:'id'} };
+      Object.keys(fkMap).forEach(function(rel) { if (_selectCols.indexOf(rel)!==-1) { var r2=fkMap[rel]; rows=rows.map(function(r){r[rel]=(store[rel]||[]).filter(function(c){return c[r2.fk]===r[r2.parentKey];});return r;}); } });
+      if (_selectCols.indexOf('embryo_flushes')!==-1) rows=rows.map(function(r){r.embryo_flushes=(store.embryo_flushes||[]).find(function(f){return f.id===r.flush_id;})||null;return r;});
+    }
+    if (_orderCol) { var col=_orderCol,asc=_orderAsc; rows.sort(function(a,b){var av=a[col]||'',bv=b[col]||'';return asc?(av>bv?1:-1):(av<bv?1:-1);}); }
+    return rows;
+  }
+  var q = {
+    select:function(c){_selectCols=c;return q;},
+    eq:function(k,v){_filters[k]=v;return q;},
+    order:function(c,o){_orderCol=c;_orderAsc=o?o.ascending!==false:true;return q;},
+    single:function(){_isSingle=true;return q;},
+    limit:function(){return q;},
+    insert:function(data){
+      var items=Array.isArray(data)?data:[data];
+      var ins=items.map(function(item){var r=JSON.parse(JSON.stringify(item));r.id='mock_'+Math.random().toString(36).slice(2);if(!store[table])store[table]=[];store[table].push(r);return r;});
+      return Promise.resolve({data:Array.isArray(data)?ins:ins[0],error:null});
+    },
+    update:function(data){
+      var key=Object.keys(_filters)[0],val=_filters[key];
+      store[table]=(store[table]||[]).map(function(r){return r[key]===val?Object.assign({},r,data):r;});
+      return Promise.resolve({data:null,error:null});
+    },
+    delete:function(){
+      var key=Object.keys(_filters)[0],val=_filters[key];
+      store[table]=(store[table]||[]).filter(function(r){return r[key]!==val;});
+      return Promise.resolve({data:null,error:null});
+    },
+    then:function(res,rej){var rows=getRows(),result=_isSingle?(rows[0]||null):rows;return Promise.resolve({data:result,error:null}).then(res,rej);}
+  };
+  return q;
+}
+
+var db = { from: function(table) { return mockQuery(table); } };
+
+
+
+
+
 
 const BASE_VACCINES = ['CDT (Clostridium/Tetanus)','Overeating Disease','Foot Rot','Caseous Lymphadenitis (CL)','Rabies'];
 const BASE_MEDS = ['Ivermectin (Dewormer)','Fenbendazole','Coccidiostat','Penicillin','LA-200 (Oxytetracycline)','Banamine','Vitamin B12','Selenium/Vit E'];
@@ -1403,119 +1553,636 @@ async function saveAiRam(id) {
 }
 
 // ── BREEDING PAGE ─────────────────────────────────────
+function clearBreedFilter(key, val) {
+  if (key === 'females' || key === 'sires') {
+    window._breedingFilters[key] = (window._breedingFilters[key]||[]).filter(v => v !== val);
+  } else {
+    window._breedingFilters[key] = '';
+  }
+  renderBreedingTable(window._breedingAllRecs, window._breedingFilters);
+}
+
+function clearFlushFilter(key) {
+  window._flushFilters[key] = '';
+  renderFlushTable(window._flushAllRecs, window._flushAllTransfers||[], window._flushFilters);
+}
+
+let _breedFilterTimer = null;
+let _activeFilterKey = null;
+
+function debounceBreedFilter(key, value) {
+  window._breedingFilters[key] = value;
+  clearTimeout(_breedFilterTimer);
+  _breedFilterTimer = setTimeout(() => {
+    renderBreedingTable(window._breedingAllRecs, window._breedingFilters);
+  }, 350);
+}
+
+function toggleBreedFilterMenu() {
+  const menu = document.getElementById('breed-filter-menu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeBreedFilterMenu() {
+  const menu = document.getElementById('breed-filter-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function showBreedFilterInput(key) {
+  closeBreedFilterMenu();
+  _activeFilterKey = key;
+  const wrap = document.getElementById('breed-filter-input-wrap');
+  const input = document.getElementById('breed-filter-input');
+  if (!wrap || !input) return;
+  const isDate = key.includes('From') || key.includes('To');
+  input.type = isDate ? 'date' : 'text';
+  input.placeholder = key === 'female' ? 'Name or tag…' : key === 'sire' ? 'Sire name…' : '';
+  input.value = window._breedingFilters[key] || '';
+  wrap.style.display = 'inline-flex';
+  input.focus();
+}
+
+function applyBreedFilterInput() {
+  if (!_activeFilterKey) return;
+  const val = document.getElementById('breed-filter-input')?.value || '';
+  if (val) {
+    if (_activeFilterKey === 'female') {
+      if (!window._breedingFilters.females.includes(val))
+        window._breedingFilters.females.push(val);
+    } else if (_activeFilterKey === 'sire') {
+      if (!window._breedingFilters.sires.includes(val))
+        window._breedingFilters.sires.push(val);
+    } else {
+      window._breedingFilters[_activeFilterKey] = val;
+    }
+  }
+  document.getElementById('breed-filter-input-wrap').style.display = 'none';
+  _activeFilterKey = null;
+  renderBreedingTable(window._breedingAllRecs, window._breedingFilters);
+}
+
+// Close filter menu when clicking outside
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('filter-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) closeBreedFilterMenu();
+});
+
 async function renderBreeding() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
-  const { data, error } = await db.from('breeding_records').select('*').order('breeding_date', {ascending:false});
-  const recs = data || [];
-  let html = `<div class="section-header"><div class="section-title" style="font-size:1.15rem">Breeding Records — All Flock</div></div>`;
-  if (recs.length === 0) {
-    html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No breeding records yet</h3><p>Open a lamb profile to log breeding</p></div>`;
-  } else {
-    recs.forEach(r => {
-      const lamb = allLambs.find(l => l.id === r.lamb_id);
-      const sire = r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : (r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null);
-      const sireName = sire ? sire.name+(r.ai_sire_id?' 🧬':'') : (r.sire_text||'—');
-      html += `<div class="record-row" style="cursor:pointer" onclick="showLamb('${r.lamb_id}')">
-        <div>
-          <div style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'} ${lamb?.ear_tag?`<span style="color:var(--text3);font-size:0.82rem">#${lamb.ear_tag}</span>`:''}</div>
-          <div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;display:flex;gap:0.75rem;flex-wrap:wrap">
-            <span>Sire: ${sireName}</span>
-            ${r.breeding_date?`<span>🗓 ${r.breeding_date}</span>`:''}
-            ${r.expected_lamb_date?`<span>📅 Due: ${r.expected_lamb_date}</span>`:''}
-            ${r.outcome&&r.outcome!=='Pending'?`<span class="badge ${r.outcome==='Lamb Born'?'badge-blue':r.outcome==='Confirmed Pregnant'?'badge-green':'badge-red'}" style="font-size:0.68rem">${r.outcome}</span>`:''}
+  const { data } = await db.from('breeding_records').select('*').order('breeding_date', {ascending:false});
+  const allRecs = data || [];
+  window._breedingAllRecs = allRecs;
+  window._breedingFilters = window._breedingFilters || { females: [], sires: [], breedFrom: '', breedTo: '', dueFrom: '', dueTo: '', outcome: '' };
+  renderBreedingTable(allRecs, window._breedingFilters);
+}
+
+function renderBreedingTable(allRecs, filters) {
+  const outcomeColors = {
+    'Confirmed Pregnant': { dot: '#16a34a', text: '#15803d', bg: '#dcfce7' },
+    'Lamb Born':          { dot: '#2563eb', text: '#1d4ed8', bg: '#dbeafe' },
+    'Not Pregnant':       { dot: '#dc2626', text: '#b91c1c', bg: '#fee2e2' },
+    'Failed':             { dot: '#9ca3af', text: '#6b7280', bg: '#f3f4f6' },
+    'Pending':            { dot: '#d97706', text: '#b45309', bg: '#fef3c7' },
+  };
+
+  // Apply filters
+  const recs = allRecs.filter(r => {
+    const lamb = allLambs.find(l => l.id === r.lamb_id);
+    const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : (r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : null);
+    const sireName = (sire?.name || r.sire_text || '').toLowerCase();
+    const lambName = ((lamb?.name||'') + ' ' + (lamb?.ear_tag||'')).toLowerCase();
+    if (filters.females && filters.females.length > 0 && !filters.females.some(f => lambName.includes(f.toLowerCase()))) return false;
+    if (filters.sires && filters.sires.length > 0 && !filters.sires.some(s => sireName.includes(s.toLowerCase()))) return false;
+    if (filters.breedFrom && r.breeding_date && r.breeding_date < filters.breedFrom) return false;
+    if (filters.breedTo && r.breeding_date && r.breeding_date > filters.breedTo) return false;
+    if (filters.dueFrom && r.expected_lamb_date && r.expected_lamb_date < filters.dueFrom) return false;
+    if (filters.dueTo && r.expected_lamb_date && r.expected_lamb_date > filters.dueTo) return false;
+    if (filters.outcome && (r.outcome||'Pending') !== filters.outcome) return false;
+    return true;
+  });
+
+  // Summary stats from filtered records
+  const decided = recs.filter(r => r.outcome && r.outcome !== 'Pending');
+  const pregnant = recs.filter(r => r.outcome === 'Confirmed Pregnant' || r.outcome === 'Lamb Born');
+  const conceptionRate = decided.length ? Math.round(pregnant.length/decided.length*100) : 0;
+  const pending = recs.filter(r => !r.outcome || r.outcome === 'Pending').length;
+  const outcomes = ['Confirmed Pregnant','Lamb Born','Not Pregnant','Failed','Pending'];
+  const today = new Date().toISOString().slice(0,10);
+
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Breeding Records</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddBreedingGlobal()">+ Add Breeding Record</button>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+        <!-- Active filter chips -->
+        ${[
+          ...(filters.females||[]).map(v => ({ key:'females', val:v, label:'Female' })),
+          ...(filters.sires||[]).map(v => ({ key:'sires', val:v, label:'Sire' })),
+          ...(filters.breedFrom ? [{ key:'breedFrom', val:filters.breedFrom, label:'Bred From' }] : []),
+          ...(filters.breedTo ? [{ key:'breedTo', val:filters.breedTo, label:'Bred To' }] : []),
+          ...(filters.dueFrom ? [{ key:'dueFrom', val:filters.dueFrom, label:'Due From' }] : []),
+          ...(filters.dueTo ? [{ key:'dueTo', val:filters.dueTo, label:'Due To' }] : []),
+          ...(filters.outcome ? [{ key:'outcome', val:filters.outcome, label:'Result' }] : []),
+        ].map(({key, val, label}) => `<span style="display:inline-flex;align-items:center;gap:0.35rem;background:var(--accent-glow);border:1px solid var(--accent2);color:var(--accent2);padding:0.25rem 0.5rem 0.25rem 0.65rem;border-radius:1rem;font-size:0.75rem;font-weight:600">
+            ${label}: ${val}
+            <button onclick="clearBreedFilter('${key}','${val}')" style="background:none;border:none;cursor:pointer;color:var(--accent2);font-size:0.9rem;line-height:1;padding:0 0.1rem">×</button>
+          </span>`).join('')}
+
+        <!-- Add filter dropdown -->
+        <div style="position:relative;display:inline-block" id="filter-dropdown-wrap">
+          <button onclick="toggleBreedFilterMenu()" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:0.35rem">
+            <span style="font-size:0.9rem">＋</span> Add Filter
+          </button>
+          <div id="breed-filter-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:var(--shadow);z-index:100;min-width:220px;padding:0.5rem">
+            <div class="filter-menu-item" onclick="showBreedFilterInput('female')">Female name / tag</div>
+            <div class="filter-menu-item" onclick="showBreedFilterInput('sire')">Sire name</div>
+            ${!filters.breedFrom ? `<div class="filter-menu-item" onclick="showBreedFilterInput('breedFrom')">Bred from date</div>` : ''}
+            ${!filters.breedTo ? `<div class="filter-menu-item" onclick="showBreedFilterInput('breedTo')">Bred to date</div>` : ''}
+            ${!filters.dueFrom ? `<div class="filter-menu-item" onclick="showBreedFilterInput('dueFrom')">Due from date</div>` : ''}
+            ${!filters.dueTo ? `<div class="filter-menu-item" onclick="showBreedFilterInput('dueTo')">Due to date</div>` : ''}
+            ${!filters.outcome ? `<div style="border-top:1px solid var(--border);margin:0.25rem 0;padding-top:0.35rem">
+              <div style="font-size:0.68rem;color:var(--text3);padding:0 0.5rem;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.06em">Result</div>
+              ${['Confirmed Pregnant','Lamb Born','Not Pregnant','Failed','Pending'].map(o=>`<div class="filter-menu-item" onclick="window._breedingFilters.outcome='${o}';closeBreedFilterMenu();renderBreedingTable(window._breedingAllRecs,window._breedingFilters)">${o}</div>`).join('')}
+            </div>` : ''}
           </div>
         </div>
-        <span style="color:var(--text3)">→</span>
-      </div>`;
-    });
-  }
+
+        <!-- Inline input for text/date filters -->
+        <div id="breed-filter-input-wrap" style="display:none;align-items:center;gap:0.35rem">
+          <input id="breed-filter-input" style="width:160px;padding:0.3rem 0.6rem;font-size:0.82rem" placeholder="" onkeydown="if(event.key==='Enter')applyBreedFilterInput();if(event.key==='Escape'){document.getElementById('breed-filter-input-wrap').style.display='none';}">
+          <button class="btn btn-primary btn-sm" onclick="applyBreedFilterInput()">Apply</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('breed-filter-input-wrap').style.display='none'">✕</button>
+        </div>
+
+        ${(filters.females?.length||filters.sires?.length||filters.breedFrom||filters.breedTo||filters.dueFrom||filters.dueTo||filters.outcome) ? `<button onclick="window._breedingFilters={females:[],sires:[],breedFrom:'',breedTo:'',dueFrom:'',dueTo:'',outcome:''};renderBreedingTable(window._breedingAllRecs,window._breedingFilters)" style="background:none;border:none;color:var(--text3);font-size:0.78rem;cursor:pointer;text-decoration:underline">Clear all</button>` : ''}
+      </div>
+      ${(filters.females?.length||filters.sires?.length||filters.breedFrom||filters.breedTo||filters.dueFrom||filters.dueTo||filters.outcome) ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.4rem">Showing ${recs.length} of ${allRecs.length} records</div>` : ''}
+    </div>
+
+    <!-- SUMMARY STATS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${recs.length}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Records</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#16a34a">${pregnant.length}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Pregnant</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${conceptionRate}%</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Conception Rate</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#d97706">${pending}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Pending</div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead>
+            <tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Female</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Sire</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Bred</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Due Date</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Result</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);white-space:nowrap">Notes</th>
+              <th style="padding:0.75rem 1rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${recs.length === 0 ? `<tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--text3)">No records match your filters</td></tr>` :
+              recs.map(r => {
+                const lamb = allLambs.find(l => l.id === r.lamb_id);
+                const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : (r.sire_id ? allLambs.find(l=>l.id===r.sire_id) : null);
+                const sireName = sire ? sire.name+(r.ai_sire_id?' 🧬':'') : (r.sire_text||'—');
+                const outcome = r.outcome || 'Pending';
+                const oc = outcomeColors[outcome] || outcomeColors['Pending'];
+                const isOverdue = outcome === 'Pending' && r.expected_lamb_date && r.expected_lamb_date < today;
+                return `<tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+                  <td style="padding:0.75rem 1rem">
+                    <span style="font-weight:600;color:var(--accent);cursor:pointer" onclick="showLamb('${r.lamb_id}')">${lamb?.name||'Unknown'}</span>
+                    ${lamb?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${lamb.ear_tag}</span>`:''}
+                  </td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}</td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${r.breeding_date||'—'}</td>
+                  <td style="padding:0.75rem 1rem;white-space:nowrap">
+                    <span style="color:${isOverdue?'#dc2626':'var(--text2)'};font-weight:${isOverdue?'600':'400'}">${r.expected_lamb_date||'—'}</span>
+                    ${isOverdue?`<span class="badge badge-red" style="margin-left:0.35rem;font-size:0.6rem">Overdue</span>`:''}
+                  </td>
+                  <td style="padding:0.75rem 1rem">
+                    <span style="display:inline-flex;align-items:center;gap:0.35rem;background:${oc.bg};color:${oc.text};padding:0.2rem 0.6rem;border-radius:1rem;font-size:0.75rem;font-weight:600">
+                      <span style="width:6px;height:6px;border-radius:50%;background:${oc.dot};display:inline-block"></span>${outcome}
+                    </span>
+                  </td>
+                  <td style="padding:0.75rem 1rem;color:var(--text3);font-size:0.82rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes||''}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center">
+                    <div style="display:flex;gap:0.35rem;justify-content:center">
+                      <button class="btn-icon btn-sm" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" title="Edit">✏️</button>
+                      <button class="btn-icon btn-sm" onclick="showLamb('${r.lamb_id}')" title="View profile">→</button>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
   document.getElementById('main-content').innerHTML = html;
+}
+
+
+function openAddBreedingGlobal() {
+  // Open add breeding modal — user picks the ewe from a dropdown
+  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe');
+  const sireOpts = sireOptions('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🐏 Add Breeding Record</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Female *</label><select id="gbr-lamb-id">
+      <option value="">— Select ewe —</option>
+      ${ewes.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Sire</label><select id="gbr-sire-id" onchange="updateGbrSemenOpts()">${sireOpts}</select></div>
+    <div class="field"><label>Sire (if not in system)</label><input id="gbr-sire-text" placeholder="Sire name or ID"></div>
+    <div id="gbr-semen-section" style="display:none">
+      <div class="row">
+        <div class="field"><label>Semen Location</label><select id="gbr-semen-loc"></select></div>
+        <div class="field"><label>Straws Used</label><input type="number" id="gbr-straws-used" value="1" min="0" step="0.5"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Breeding Date</label><input type="date" id="gbr-date" value="${new Date().toISOString().slice(0,10)}" oninput="calcGbrExpected()"></div>
+      <div class="field"><label>Expected Lamb Date</label><input type="date" id="gbr-expected"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Outcome</label><select id="gbr-outcome">
+        <option>Pending</option><option>Confirmed Pregnant</option><option>Not Pregnant</option><option>Lamb Born</option><option>Failed</option>
+      </select></div>
+      <div class="field"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="gbr-notes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBreedingGlobal()">Save Record</button>
+    </div>`);
+}
+
+function calcGbrExpected() {
+  const d = document.getElementById('gbr-date')?.value;
+  if (d) { const exp = new Date(new Date(d).getTime()+147*24*60*60*1000).toISOString().slice(0,10); document.getElementById('gbr-expected').value = exp; }
+}
+
+function updateGbrSemenOpts() {
+  const val = document.getElementById('gbr-sire-id')?.value || '';
+  const section = document.getElementById('gbr-semen-section');
+  const locSel = document.getElementById('gbr-semen-loc');
+  if (!section || !locSel) return;
+  if (val.startsWith('ai:')) {
+    const aiId = val.replace('ai:', '');
+    const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
+    section.style.display = hasInv ? '' : 'none';
+    locSel.innerHTML = getSemenOptionsForRam(aiId, '');
+  } else { section.style.display = 'none'; }
+}
+
+async function saveBreedingGlobal() {
+  const lambId = v('gbr-lamb-id');
+  if (!lambId) { toast('Select a female'); return; }
+  const { sire_id, ai_sire_id } = parseSireSelection(v('gbr-sire-id'));
+  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes') };
+  const { data } = await db.from('breeding_records').insert(payload).select().single();
+  if (ai_sire_id && data?.id) {
+    const loc = v('gbr-semen-loc'); const straws = parseFloat(v('gbr-straws-used'))||0;
+    if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', data.id);
+  }
+  toast('Breeding record saved');
+  closeModal();
+  renderBreeding();
+}
+
+async function openEditBreedingGlobal(recId, lambId) {
+  const { data: rec } = await db.from('breeding_records').select('*').eq('id', recId).single();
+  if (!rec) return;
+  // Temporarily set currentLambId so saveBreeding works
+  const prevLambId = currentLambId;
+  currentLambId = lambId;
+  openAddBreeding(rec);
+  // Override save button to go back to breeding page
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveBreeding(recId);
+        currentLambId = prevLambId;
+        renderBreeding();
+      };
+    }
+  }, 50);
 }
 
 // ── FLUSHES PAGE ──────────────────────────────────────
 async function renderFlushes() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
-  const { data: flushes } = await db.from('embryo_flushes').select('*').order('flush_date', {ascending:false});
-  const recs = flushes || [];
+  const [{ data: flushes }, { data: allTransfers }] = await Promise.all([
+    db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
+    db.from('embryo_transfers').select('*'),
+  ]);
+  window._flushAllRecs = flushes || [];
+  window._flushAllTransfers = allTransfers || [];
+  window._flushFilters = window._flushFilters || { donor:'', sire:'', flushFrom:'', flushTo:'', type:'' };
+  renderFlushTable(window._flushAllRecs, window._flushAllTransfers, window._flushFilters);
+}
 
-  // Summary stats
-  const totalFlushes = recs.length;
+function renderFlushTable(allRecs, allTransfers, filters) {
+  // Apply filters
+  const recs = allRecs.filter(f => {
+    const donor = allLambs.find(l => l.id === f.donor_id);
+    const sire = f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : (f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : null);
+    const donorName = ((donor?.name||'') + ' ' + (donor?.ear_tag||'')).toLowerCase();
+    const sireName = (sire?.name || f.sire_text || '').toLowerCase();
+    const flushType = f.flush_type || 'MOET';
+    if (filters.donor && !donorName.includes(filters.donor.toLowerCase())) return false;
+    if (filters.sire && !sireName.includes(filters.sire.toLowerCase())) return false;
+    if (filters.flushFrom && f.flush_date && f.flush_date < filters.flushFrom) return false;
+    if (filters.flushTo && f.flush_date && f.flush_date > filters.flushTo) return false;
+    if (filters.type && flushType !== filters.type) return false;
+    return true;
+  });
+
+  // Transfers passed in from renderFlushes
+  const transfers = allTransfers || [];
   const totalCollected = recs.reduce((s,f) => s + (f.embryos_collected||0), 0);
+
+  const flushIds = new Set(recs.map(f => f.id));
+  const relatedTransfers = transfers.filter(t => flushIds.has(t.flush_id) && ['Confirmed Pregnant','Lamb Born','Not Pregnant','Failed'].includes(t.outcome));
+  const conceived = relatedTransfers.filter(t => t.outcome === 'Confirmed Pregnant' || t.outcome === 'Lamb Born');
+  const recipConceptionRate = relatedTransfers.length ? Math.round(conceived.length/relatedTransfers.length*100)+'%' : '—';
+  const totalBorn = transfers.filter(t => flushIds.has(t.flush_id) && t.lamb_born).reduce((s,t) => s+(t.lamb_count||0), 0);
+  const totalEmbryosXferred = relatedTransfers.reduce((s,t) => s+(t.num_transferred||1), 0);
+  const embryoRetention = totalEmbryosXferred > 0 ? Math.round(totalBorn/totalEmbryosXferred*100)+'%' : '—';
   const totalTransferred = recs.reduce((s,f) => s + (f.embryos_transferred||0), 0);
+  const avgCollected = recs.length ? (totalCollected/recs.length).toFixed(1) : '—';
   const ivfCount = recs.filter(f => f.flush_type === 'IVF').length;
   const moetCount = recs.filter(f => f.flush_type === 'MOET' || !f.flush_type).length;
 
-  let html = `
-    <div class="section-header"><div class="section-title" style="font-size:1.15rem">Embryo Flushes — All Donors</div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.75rem;margin-bottom:1.25rem">
-      <div class="card" style="text-align:center;padding:1rem">
-        <div style="font-size:1.6rem;font-weight:700;color:var(--accent)">${totalFlushes}</div>
-        <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-top:0.2rem">Total Flushes</div>
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Embryo Flushes</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddFlushGlobal()">+ Add Flush Record</button>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+        ${Object.entries(filters).filter(([k,v])=>v).map(([key,val]) => {
+          const labels = { donor:'Donor', sire:'Sire', flushFrom:'Flush From', flushTo:'Flush To', type:'Type' };
+          return `<span style="display:inline-flex;align-items:center;gap:0.35rem;background:var(--accent-glow);border:1px solid var(--accent2);color:var(--accent2);padding:0.25rem 0.5rem 0.25rem 0.65rem;border-radius:1rem;font-size:0.75rem;font-weight:600">
+            ${labels[key]}: ${val}
+            <button onclick="clearFlushFilter('${key}')" style="background:none;border:none;cursor:pointer;color:var(--accent2);font-size:0.9rem;line-height:1;padding:0 0.1rem">×</button>
+          </span>`;
+        }).join('')}
+
+        <div style="position:relative;display:inline-block" id="flush-filter-dropdown-wrap">
+          <button onclick="toggleFlushFilterMenu()" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:0.35rem">
+            <span style="font-size:0.9rem">＋</span> Add Filter
+          </button>
+          <div id="flush-filter-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:var(--shadow);z-index:100;min-width:200px;padding:0.5rem">
+            ${!filters.donor ? `<div class="filter-menu-item" onclick="showFlushFilterInput('donor')">Donor name / tag</div>` : ''}
+            ${!filters.sire ? `<div class="filter-menu-item" onclick="showFlushFilterInput('sire')">Sire name</div>` : ''}
+            ${!filters.flushFrom ? `<div class="filter-menu-item" onclick="showFlushFilterInput('flushFrom')">Flush from date</div>` : ''}
+            ${!filters.flushTo ? `<div class="filter-menu-item" onclick="showFlushFilterInput('flushTo')">Flush to date</div>` : ''}
+            ${!filters.type ? `<div style="border-top:1px solid var(--border);margin:0.25rem 0;padding-top:0.35rem">
+              <div style="font-size:0.68rem;color:var(--text3);padding:0 0.5rem;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.06em">Type</div>
+              ${['MOET','IVF'].map(t=>`<div class="filter-menu-item" onclick="window._flushFilters.type='${t}';closeFlushFilterMenu();renderFlushTable(window._flushAllRecs,window._flushAllTransfers||[],window._flushFilters)">${t}</div>`).join('')}
+            </div>` : ''}
+          </div>
+        </div>
+
+        <div id="flush-filter-input-wrap" style="display:none;align-items:center;gap:0.35rem">
+          <input id="flush-filter-input" style="width:160px;padding:0.3rem 0.6rem;font-size:0.82rem" placeholder="" onkeydown="if(event.key==='Enter')applyFlushFilterInput();if(event.key==='Escape'){document.getElementById('flush-filter-input-wrap').style.display='none';}">
+          <button class="btn btn-primary btn-sm" onclick="applyFlushFilterInput()">Apply</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('flush-filter-input-wrap').style.display='none'">✕</button>
+        </div>
+
+        ${Object.values(filters).some(v=>v) ? `<button onclick="window._flushFilters={donor:'',sire:'',flushFrom:'',flushTo:'',type:''};renderFlushTable(window._flushAllRecs,window._flushAllTransfers||[],window._flushFilters)" style="background:none;border:none;color:var(--text3);font-size:0.78rem;cursor:pointer;text-decoration:underline">Clear all</button>` : ''}
       </div>
-      <div class="card" style="text-align:center;padding:1rem">
-        <div style="font-size:1.6rem;font-weight:700;color:var(--green)">${totalCollected}</div>
-        <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-top:0.2rem">Embryos Collected</div>
+      ${(filters.females?.length||filters.sires?.length||filters.breedFrom||filters.breedTo||filters.dueFrom||filters.dueTo||filters.outcome) ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.4rem">Showing ${recs.length} of ${allRecs.length} records</div>` : ''}
+    </div>
+
+    <!-- SUMMARY STATS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${recs.length}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Flushes</div>
       </div>
-      <div class="card" style="text-align:center;padding:1rem">
-        <div style="font-size:1.6rem;font-weight:700;color:var(--blue)">${totalTransferred}</div>
-        <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-top:0.2rem">Embryos Transferred</div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--green)">${totalCollected}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Collected</div>
       </div>
-      <div class="card" style="text-align:center;padding:1rem">
-        <div style="font-size:1.6rem;font-weight:700;color:var(--purple)">${moetCount} / ${ivfCount}</div>
-        <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-top:0.2rem">MOET / IVF</div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--blue)">${totalTransferred}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Transferred</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${avgCollected}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Avg Collected</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--purple)">${moetCount} / ${ivfCount}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">MOET / IVF</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#16a34a">${recipConceptionRate}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Recip Conception</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--blue)">${embryoRetention}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Embryo Retention</div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead>
+            <tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Donor</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Sire</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Flush Date</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Type</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Collected</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Transferred</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Notes</th>
+              <th style="padding:0.75rem 1rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${recs.length === 0 ? `<tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--text3)">No flush records match your filters</td></tr>` :
+              recs.map(f => {
+                const donor = allLambs.find(l => l.id === f.donor_id);
+                const sire = f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : (f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : null);
+                const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||'—');
+                const flushType = f.flush_type || 'MOET';
+                const typeBg = flushType === 'IVF' ? '#f5f3ff' : '#eff6ff';
+                const typeColor = flushType === 'IVF' ? '#6d28d9' : '#1d4ed8';
+                return `<tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+                  <td style="padding:0.75rem 1rem">
+                    <span style="font-weight:600;color:var(--accent);cursor:pointer" onclick="showLamb('${f.donor_id}')">${donor?.name||'Unknown'}</span>
+                    ${donor?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${donor.ear_tag}</span>`:''}
+                  </td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}</td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${f.flush_date||'—'}</td>
+                  <td style="padding:0.75rem 1rem">
+                    <span style="background:${typeBg};color:${typeColor};padding:0.2rem 0.6rem;border-radius:1rem;font-size:0.75rem;font-weight:600">${flushType}</span>
+                  </td>
+                  <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_collected ?? '—'}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_transferred ?? '—'}</td>
+                  <td style="padding:0.75rem 1rem;color:var(--text3);font-size:0.82rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes||''}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center">
+                    <div style="display:flex;gap:0.35rem;justify-content:center">
+                      <button class="btn-icon btn-sm" onclick="openEditFlushGlobal('${f.id}','${f.donor_id}')" title="Edit">✏️</button>
+                      <button class="btn-icon btn-sm" onclick="showLambAtTab('${f.donor_id}','embryo')" title="View embryo tab">→</button>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
       </div>
     </div>`;
 
-  if (recs.length === 0) {
-    html += `<div class="empty"><div class="empty-icon">🔬</div><h3>No flush records yet</h3><p>Open a donor ewe's profile to log a flush</p></div>`;
-  } else {
-    // Group by donor
-    const byDonor = {};
-    recs.forEach(f => {
-      const donorId = f.donor_id;
-      if (!byDonor[donorId]) byDonor[donorId] = [];
-      byDonor[donorId].push(f);
-    });
-
-    Object.entries(byDonor).forEach(([donorId, donorFlushes]) => {
-      const donor = allLambs.find(l => l.id === donorId);
-      const donorName = donor ? donor.name + (donor.ear_tag ? ` #${donor.ear_tag}` : '') : 'Unknown';
-      const donorTotal = donorFlushes.reduce((s,f) => s + (f.embryos_collected||0), 0);
-
-      html += `
-        <div class="card" style="margin-bottom:0.75rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;cursor:pointer" onclick="showLamb('${donorId}')">
-            <div>
-              <div style="font-size:1rem;font-weight:700;color:var(--text)">${donorName}</div>
-              <div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">${donorFlushes.length} flush${donorFlushes.length!==1?'es':''} · ${donorTotal} embryos collected</div>
-            </div>
-            <span style="color:var(--accent);font-size:0.8rem">View Profile →</span>
-          </div>
-          ${donorFlushes.map(f => {
-            const sire = f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : (f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : null);
-            const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||'—');
-            const typeBadge = f.flush_type === 'IVF' ? 'badge-purple' : 'badge-blue';
-            return `<div style="padding:0.6rem 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
-              <div>
-                <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-                  <span style="font-size:0.85rem;font-weight:600;color:var(--text)">📅 ${f.flush_date}</span>
-                  <span class="badge ${typeBadge}">${f.flush_type||'MOET'}</span>
-                  ${f.embryos_collected!=null?`<span class="badge badge-green">${f.embryos_collected} collected</span>`:''}
-                  ${f.embryos_transferred!=null?`<span class="badge badge-blue">${f.embryos_transferred} transferred</span>`:''}
-                </div>
-                <div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;display:flex;gap:0.75rem;flex-wrap:wrap">
-                  <span>Sire: ${sireName}</span>
-                  ${f.notes?`<span style="font-style:italic">${f.notes}</span>`:''}
-                </div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`;
-    });
-  }
-
   document.getElementById('main-content').innerHTML = html;
 }
+
+// Flush filter helpers
+let _flushFilterTimer = null;
+let _activeFlushFilterKey = null;
+
+function toggleFlushFilterMenu() {
+  const menu = document.getElementById('flush-filter-menu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+function closeFlushFilterMenu() {
+  const menu = document.getElementById('flush-filter-menu');
+  if (menu) menu.style.display = 'none';
+}
+function showFlushFilterInput(key) {
+  closeFlushFilterMenu();
+  _activeFlushFilterKey = key;
+  const wrap = document.getElementById('flush-filter-input-wrap');
+  const input = document.getElementById('flush-filter-input');
+  if (!wrap || !input) return;
+  const isDate = key.includes('From') || key.includes('To');
+  input.type = isDate ? 'date' : 'text';
+  input.placeholder = key === 'donor' ? 'Donor name or tag…' : key === 'sire' ? 'Sire name…' : '';
+  input.value = window._flushFilters[key] || '';
+  wrap.style.display = 'inline-flex';
+  input.focus();
+}
+function applyFlushFilterInput() {
+  if (!_activeFlushFilterKey) return;
+  window._flushFilters[_activeFlushFilterKey] = document.getElementById('flush-filter-input')?.value || '';
+  document.getElementById('flush-filter-input-wrap').style.display = 'none';
+  _activeFlushFilterKey = null;
+  renderFlushTable(window._flushAllRecs, window._flushAllTransfers||[], window._flushFilters);
+}
+
+function openAddFlushGlobal() {
+  const donors = allLambs.filter(l => l.status === 'Active' && (l.role === 'Embryo Donor' || l.role === 'Both'));
+  const sireOpts = sireOptions('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🔬 Add Flush Record</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Donor *</label><select id="gfl-donor-id">
+      <option value="">— Select donor —</option>
+      ${donors.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('')}
+    </select></div>
+    <div class="row">
+      <div class="field"><label>Flush Date *</label><input type="date" id="gfl-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Flush Type</label><select id="gfl-type"><option>MOET</option><option>IVF</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Embryos Collected</label><input type="number" id="gfl-collected" placeholder="e.g. 8"></div>
+      <div class="field"><label>Embryos Transferred</label><input type="number" id="gfl-transferred" placeholder="e.g. 6"></div>
+    </div>
+    <div class="field"><label>Sire</label><select id="gfl-sire-id" onchange="updateGflSemenOpts()">${sireOpts}</select></div>
+    <div class="field"><label>Sire (if not in system)</label><input id="gfl-sire-text" placeholder="Sire name or ID"></div>
+    <div id="gfl-semen-section" style="display:none">
+      <div class="row">
+        <div class="field"><label>Semen Location</label><select id="gfl-semen-loc"></select></div>
+        <div class="field"><label>Straws Used</label><input type="number" id="gfl-straws-used" value="1" min="0" step="0.5"></div>
+      </div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="gfl-notes" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFlushGlobal()">Save Record</button>
+    </div>`);
+}
+
+function updateGflSemenOpts() {
+  const val = document.getElementById('gfl-sire-id')?.value || '';
+  const section = document.getElementById('gfl-semen-section');
+  const locSel = document.getElementById('gfl-semen-loc');
+  if (!section || !locSel) return;
+  if (val.startsWith('ai:')) {
+    const aiId = val.replace('ai:', '');
+    const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
+    section.style.display = hasInv ? '' : 'none';
+    locSel.innerHTML = getSemenOptionsForRam(aiId, '');
+  } else { section.style.display = 'none'; }
+}
+
+async function saveFlushGlobal() {
+  const donorId = v('gfl-donor-id');
+  const date = v('gfl-date');
+  if (!donorId) { toast('Select a donor'); return; }
+  if (!date) { toast('Date required'); return; }
+  const { sire_id, ai_sire_id } = parseSireSelection(v('gfl-sire-id'));
+  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes') };
+  const { data } = await db.from('embryo_flushes').insert(payload).select().single();
+  if (ai_sire_id && data?.id) {
+    const loc = v('gfl-semen-loc'); const straws = parseFloat(v('gfl-straws-used'))||0;
+    if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', data.id);
+  }
+  toast('Flush record saved');
+  closeModal();
+  renderFlushes();
+}
+
+async function openEditFlushGlobal(flushId, donorId) {
+  const { data: flush } = await db.from('embryo_flushes').select('*').eq('id', flushId).single();
+  if (!flush) return;
+  const prevLambId = currentLambId;
+  currentLambId = donorId;
+  showFlushModal(flush);
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveFlush(flushId);
+        currentLambId = prevLambId;
+        renderFlushes();
+      };
+    }
+  }, 50);
+}
+
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('flush-filter-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) closeFlushFilterMenu();
+});
 
 // ── ANALYTICS PAGE ────────────────────────────────────
 async function renderAnalytics() {
@@ -1778,7 +2445,7 @@ async function renderAnalytics() {
 
       <!-- NEEDS UPDATE -->
       ${(overdueBreeding.length > 0 || overdueTransfer.length > 0) ? `
-      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:1.25rem">
+      <div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:1rem;margin-bottom:1.25rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
           <div style="font-size:0.78rem;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:0.08em">⚠️ Pending Records (${overdueBreeding.length + overdueTransfer.length} need outcome)</div>
           <div style="display:flex;gap:0.35rem">
@@ -1791,7 +2458,7 @@ async function renderAnalytics() {
             const lamb = allLambs.find(l=>l.id===r.lamb_id);
             const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
             const isPastDue = r.expected_lamb_date && r.expected_lamb_date < today;
-            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLambAtTab('${r.lamb_id}','breeding')">
+            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid #fde68a;cursor:pointer" onclick="showLambAtTab('${r.lamb_id}','breeding')">
               <div>
                 <span style="font-weight:600;font-size:0.85rem">${lamb?.name||'Unknown'}</span>
                 <span style="color:var(--text3);font-size:0.78rem"> · Breeding ${r.breeding_date} · ${sire?.name||r.sire_text||'—'}</span>
@@ -1809,7 +2476,7 @@ async function renderAnalytics() {
             const recipName = recip?.name || t.recipient_text || '—';
             const checkDate = t.implant_date ? new Date(new Date(t.implant_date).getTime()+45*24*60*60*1000).toISOString().slice(0,10) : null;
             const isPastDue = checkDate && checkDate < today;
-            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(245,158,11,0.15);cursor:pointer" onclick="showLambAtTab('${flush?.donor_id||t.donor_id}','embryo')">
+            return `<div class="pending-record-row" data-pastdue="${isPastDue}" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid #fde68a;cursor:pointer" onclick="showLambAtTab('${flush?.donor_id||t.donor_id}','embryo')">
               <div>
                 <span style="font-weight:600;font-size:0.85rem">${recipName}</span>
                 <span style="color:var(--text3);font-size:0.78rem"> · Transfer ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</span>
