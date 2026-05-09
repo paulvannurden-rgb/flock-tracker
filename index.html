@@ -4849,6 +4849,16 @@ async function renderPlanning() {
   renderPlanningHTML();
 }
 
+function fmtStepTime(t) {
+  if (!t) return '';
+  try {
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+  } catch(e) { return t; }
+}
+
 function renderPlanningHTML() {
   const allGroups = window._planGroups || [];
   const protocols = window._planProtocols || [];
@@ -4872,7 +4882,7 @@ function renderPlanningHTML() {
     const nameColor = isPast ? 'var(--text3)' : 'var(--text)';
     const dateColor = isTarget ? 'var(--accent)' : isPast ? 'var(--text3)' : (isRecip ? '#1d4ed8' : 'var(--text2)');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${rowBg}">
-      <div style="font-size:0.78rem;color:${nameColor};font-weight:${isTarget?700:400};text-decoration:${isPast&&!isTarget?'line-through':'none'}"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${isRecip?'#1d4ed8':'var(--accent)'};margin-right:0.3rem">${isRecip?'Recip':'Donor'}</span>${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+      <div style="font-size:0.78rem;color:${nameColor};font-weight:${isTarget?700:400};text-decoration:${isPast&&!isTarget?'line-through':'none'}"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${isRecip?'#1d4ed8':'var(--accent)'};margin-right:0.3rem">${isRecip?'Recip':'Donor'}</span>${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
       <div style="font-size:0.78rem;font-weight:600;color:${dateColor}">${stepDate}</div>
     </div>`;
   }
@@ -5451,10 +5461,9 @@ async function confirmCompletePlanDom(groupId) {
   await db.from('breeding_groups').update({ status: 'Complete' }).eq('id', groupId);
   window._planGroups = (window._planGroups||[]).map(g => g.id === groupId ? {...g, status:'Complete'} : g);
 
-  toast(`${totalCreated} record${totalCreated!==1?'s':''} created!`);
+  toast(`${totalCreated} record${totalCreated!==1?'s':''} created! <a href="#" onclick="showPage('${isFlush?'flushes':'breeding'}')" style="color:#fff;text-decoration:underline">View ${isFlush?'Flushes':'Breeding'} →</a>`);
   closeModal();
   renderPlanningHTML();
-  setTimeout(() => { if (isFlush) showPage('flushes'); else showPage('breeding'); }, 1200);
 }
 
 function openNewGroupInline() {
@@ -5491,7 +5500,7 @@ async function saveNewGroupPage() {
   await db.from('breeding_groups').insert({ name, type, target_date, protocol_id: protocol_id||null, recip_protocol_id: recip_protocol_id||null, notes, status: 'Planned' });
   toast(`Group "${name}" created`);
   renderPlanning();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function deleteGroupPage(id) {
@@ -5511,7 +5520,7 @@ async function confirmDeleteGroup(id) {
   toast('Group deleted');
   closeModal();
   renderPlanningHTML();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function deleteProtocolPage(id) {
@@ -5590,7 +5599,7 @@ async function openEditGroupPage(id) {
       const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
       const isTarget = s.day_offset === 0;
       return `<div style="display:flex;justify-content:space-between;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
-        <div style="font-size:0.78rem;font-weight:${isTarget?700:400};color:var(--text)">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+        <div style="font-size:0.78rem;font-weight:${isTarget?700:400};color:var(--text)">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
         <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
       </div>`;
     }).join('');
@@ -5646,7 +5655,7 @@ async function saveEditGroupPage(id) {
   toast('Group updated');
   closeModal();
   renderPlanning();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 // ── PLANNING / BREEDING GROUPS ────────────────────────
@@ -5756,7 +5765,8 @@ function addProtocolStepRow() {
   row.innerHTML = `
     <input placeholder="Step name (e.g. CIDR Insert)" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${idx*3}"></div>
-    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="time" class="ps-step-time" style="width:90px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" placeholder="Optional"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
     <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
   container.appendChild(row);
 }
@@ -5774,7 +5784,8 @@ async function saveNewProtocol() {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
-    if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, sort_order: i });
+    const stepTime = row.querySelector('.ps-step-time')?.value || null;
+    if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, step_time: stepTime||null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   toast(`Protocol "${name}" saved with ${steps.length} steps`);
@@ -5789,7 +5800,7 @@ function buildScheduleRows(steps, targetDate, label, color) {
     const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
     const isTarget = s.day_offset === 0;
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
-      <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+      <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
       <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
     </div>`;
   }).join('');
@@ -5851,14 +5862,14 @@ async function saveNewGroup() {
   await db.from('breeding_groups').insert({ name, type, target_date: start_date, protocol_id: protocol_id||null, notes, status: 'Planned' });
   toast(`Group "${name}" created`);
   openPlanningManager();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function deleteGroup(id) {
   await db.from('breeding_groups').delete().eq('id', id);
   toast('Group deleted');
   openPlanningManager();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function deleteProtocol(id) {
@@ -5884,7 +5895,8 @@ async function openEditProtocol(id) {
       ${(steps||[]).map(s => `<div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center">
         <input value="${s.step_name}" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name" data-id="${s.id}">
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" value="${s.day_offset}" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day"></div>
-        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option ${(s.time_of_day||'AM')==='AM'?'selected':''}>AM</option><option ${(s.time_of_day||'AM')==='PM'?'selected':''}>PM</option><option ${(s.time_of_day||'AM')==='Both'?'selected':''}>Both</option></select></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="time" class="ps-step-time" value="${s.step_time||''}" style="width:90px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option ${(s.time_of_day||'AM')==='AM'?'selected':''}>AM</option><option ${(s.time_of_day||'AM')==='PM'?'selected':''}>PM</option><option ${(s.time_of_day||'AM')==='Both'?'selected':''}>Both</option></select></div>
         <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
       </div>`).join('')}
     </div>
@@ -5920,12 +5932,13 @@ async function saveEditProtocol(id) {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay2 = row.querySelector('.ps-time')?.value || 'AM';
-    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, sort_order: i });
+    const stepTime2 = row.querySelector('.ps-step-time')?.value || null;
+    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   toast('Protocol updated');
   openPlanningManager();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function openEditGroup(id) {
@@ -5999,7 +6012,7 @@ async function saveEditGroup(id) {
   } : g);
   toast('Group updated');
   openPlanningManager();
-  renderCalendar();
+  if(currentPage==='calendar') renderCalendar();
 }
 
 async function openManageGroupMembers(groupId, activeTab) {
