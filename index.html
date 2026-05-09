@@ -242,8 +242,10 @@
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
+        <button class="sidebar-btn" onclick="showPage('planning')" data-page="planning"><span>📋</span>Planning</button>
         <button class="sidebar-btn" onclick="showPage('costs')" data-page="costs"><span>💰</span>Costs</button>
         <button class="sidebar-btn" onclick="showPage('supplies')" data-page="supplies"><span>🌾</span>Supplies</button>
+        <button class="sidebar-btn" onclick="showPage('embryo_inventory')" data-page="embryo_inventory"><span>❄️</span>Frozen</button>
         <button class="sidebar-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span>Calendar</button>
         <button class="sidebar-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span>Pedigree</button>
         <button class="sidebar-btn" onclick="showPage('export')" data-page="export"><span>📊</span>Export</button>
@@ -376,6 +378,8 @@ function showPage(page) {
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
   else if (page === 'analytics') renderAnalytics();
+  else if (page === 'planning') renderPlanning();
+  else if (page === 'embryo_inventory') renderEmbryoInventory();
   else if (page === 'costs') renderCosts();
   else if (page === 'supplies') renderSupplies();
   else if (page === 'calendar') renderCalendar();
@@ -4437,6 +4441,1543 @@ function setupPedScrollZoom() {
 
   wrap.style.cursor = 'grab';
 }
+// ── EMBRYO INVENTORY ──────────────────────────────────
+
+async function renderEmbryoInventory() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const [{ data: inventory }, { data: flushes }] = await Promise.all([
+    db.from('embryo_inventory').select('*').order('date_frozen', {ascending:false}),
+    db.from('embryo_flushes').select('*'),
+  ]);
+  const items = inventory || [];
+  const totalFrozen = items.reduce((s, i) => s + (i.quantity||0), 0);
+  const totalDonors = new Set(items.map(i => i.donor_id)).size;
+
+  const rows = items.map(item => {
+    const donor = allLambs.find(l => l.id === item.donor_id);
+    const sire = item.ai_sire_id ? allAiRams.find(r => r.id === item.ai_sire_id) : item.sire_id ? allLambs.find(l => l.id === item.sire_id) : null;
+    const flush = flushes?.find(f => f.id === item.flush_id);
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:0.65rem 0.75rem">
+        <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${donor?.name||'Unknown'}</div>
+        <div style="font-size:0.75rem;color:var(--text3)">${donor?.ear_tag?'#'+donor.ear_tag:''}</div>
+      </td>
+      <td style="padding:0.65rem 0.75rem;font-size:0.85rem;color:var(--text2)">${sire ? sire.name+(item.ai_sire_id?' 🧬':'') : '—'}</td>
+      <td style="padding:0.65rem 0.75rem;font-size:0.85rem;color:var(--text2)">${flush?.flush_date||item.date_frozen||'—'} ${flush?.flush_type?`<span class="badge badge-purple" style="font-size:0.68rem">${flush.flush_type}</span>`:''}</td>
+      <td style="padding:0.65rem 0.75rem;text-align:center">
+        <span style="font-size:1.1rem;font-weight:700;color:#1d4ed8">${item.quantity}</span>
+      </td>
+      <td style="padding:0.65rem 0.75rem;font-size:0.82rem;color:var(--text3)">${item.grade||'—'}</td>
+      <td style="padding:0.65rem 0.75rem;font-size:0.82rem;color:var(--text3)">${item.notes||''}</td>
+      <td style="padding:0.65rem 0.75rem">
+        <div style="display:flex;gap:0.35rem">
+          <button class="btn btn-secondary btn-sm" onclick="openEditInventoryItem('${item.id}')">✏️ Edit</button>
+          <button class="btn btn-primary btn-sm" onclick="openUseInventory('${item.id}')" style="background:#1d4ed8;border-color:#1d4ed8">🔬 Use</button>
+          <button class="btn-icon btn-sm" onclick="deleteInventoryItem('${item.id}')" style="color:var(--danger)">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">❄️ Frozen Embryo Inventory</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddInventoryItem()">+ Add Entry</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.5rem">
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.8rem;font-weight:700;color:#1d4ed8">${totalFrozen}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Total Frozen</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--accent)">${totalDonors}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Donors</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--text)">${items.length}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Lots</div>
+      </div>
+    </div>
+    ${items.length === 0 ? `<div class="empty"><div class="empty-icon">❄️</div><h3>No frozen embryos</h3><p>Frozen embryos are added automatically when completing a flush plan, or you can add them manually.</p></div>` : `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Donor</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Sire</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Flush Date</th>
+          <th style="padding:0.6rem 0.75rem;text-align:center;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Qty</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Grade</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
+          <th style="padding:0.6rem 0.75rem"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`}`;
+}
+
+function openAddInventoryItem() {
+  const ewes = allLambs.filter(l => l.sex==='Ewe' && l.status==='Active');
+  const eweOpts = ewes.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  const sireOpts = sireOptions('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">❄️ Add Frozen Embryos</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Donor</label><select id="ei-donor"><option value="">— Select —</option>${eweOpts}</select></div>
+      <div class="field"><label>Sire</label><select id="ei-sire">${sireOpts}</select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Date Frozen</label><input type="date" id="ei-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Quantity</label><input type="number" id="ei-qty" min="1" placeholder="e.g. 6"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Grade</label><input id="ei-grade" placeholder="e.g. Excellent, Good"></div>
+      <div class="field"><label>Notes</label><input id="ei-notes" placeholder="Optional"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInventoryItem()">Save</button>
+    </div>`);
+}
+
+async function saveInventoryItem() {
+  const donorId = document.getElementById('ei-donor')?.value;
+  const qty = parseInt(document.getElementById('ei-qty')?.value);
+  if (!donorId) { toast('Select a donor'); return; }
+  if (!qty || qty < 1) { toast('Enter quantity'); return; }
+  const sireVal = document.getElementById('ei-sire')?.value || '';
+  const { sire_id, ai_sire_id } = parseSireSelection(sireVal);
+  await db.from('embryo_inventory').insert({
+    donor_id: donorId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
+    quantity: qty,
+    date_frozen: document.getElementById('ei-date')?.value||null,
+    grade: document.getElementById('ei-grade')?.value?.trim()||null,
+    notes: document.getElementById('ei-notes')?.value?.trim()||null,
+  });
+  toast('Inventory entry added');
+  closeModal();
+  renderEmbryoInventory();
+}
+
+async function openEditInventoryItem(id) {
+  const { data: item } = await db.from('embryo_inventory').select('*').eq('id', id).single();
+  if (!item) return;
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Date Frozen</label><input type="date" id="ei-date" value="${item.date_frozen||''}"></div>
+      <div class="field"><label>Quantity</label><input type="number" id="ei-qty" value="${item.quantity||''}" min="1"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Grade</label><input id="ei-grade" value="${item.grade||''}" placeholder="e.g. Excellent"></div>
+      <div class="field"><label>Notes</label><input id="ei-notes" value="${item.notes||''}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditInventoryItem('${id}')">Save</button>
+    </div>`);
+}
+
+async function saveEditInventoryItem(id) {
+  const qty = parseInt(document.getElementById('ei-qty')?.value);
+  if (!qty || qty < 1) { toast('Enter quantity'); return; }
+  await db.from('embryo_inventory').update({
+    quantity: qty,
+    date_frozen: document.getElementById('ei-date')?.value||null,
+    grade: document.getElementById('ei-grade')?.value?.trim()||null,
+    notes: document.getElementById('ei-notes')?.value?.trim()||null,
+  }).eq('id', id);
+  toast('Updated');
+  closeModal();
+  renderEmbryoInventory();
+}
+
+async function deleteInventoryItem(id) {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🗑 Delete Entry</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Permanently delete this inventory entry?</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmDeleteInventoryItem('${id}')">Delete</button>
+    </div>`);
+}
+
+async function confirmDeleteInventoryItem(id) {
+  await db.from('embryo_inventory').delete().eq('id', id);
+  toast('Deleted');
+  closeModal();
+  renderEmbryoInventory();
+}
+
+async function openUseInventory(id) {
+  const { data: item } = await db.from('embryo_inventory').select('*').eq('id', id).single();
+  if (!item) return;
+  const donor = allLambs.find(l => l.id === item.donor_id);
+  const sire = item.ai_sire_id ? allAiRams.find(r => r.id === item.ai_sire_id) : item.sire_id ? allLambs.find(l => l.id === item.sire_id) : null;
+  const ewes = allLambs.filter(l => l.sex==='Ewe' && l.status==='Active');
+  const eweOpts = ewes.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🔬 Use Frozen Embryos</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:0.65rem;margin-bottom:0.75rem;font-size:0.85rem">
+      <strong>${donor?.name||'Unknown'}</strong> × ${sire?sire.name+(item.ai_sire_id?' 🧬':''):'—'}
+      <span style="margin-left:0.75rem;color:#1d4ed8;font-weight:700">${item.quantity} available</span>
+    </div>
+    <div class="row">
+      <div class="field"><label>Recipient</label><select id="ui-recip"><option value="">— System lamb —</option>${eweOpts}</select></div>
+      <div class="field"><label>External Recipient</label><input id="ui-recip-text" placeholder="e.g. Schoenfeld Farm 1"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Transfer Date</label><input type="date" id="ui-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label># Embryos to Transfer</label><input type="number" id="ui-qty" min="1" max="${item.quantity}" value="1"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmUseInventory('${id}','${item.quantity}','${item.flush_id||''}','${item.donor_id}')">Create Transfer Record</button>
+    </div>`);
+}
+
+async function confirmUseInventory(id, available, flushId, donorId) {
+  const recipId = document.getElementById('ui-recip')?.value || null;
+  const recipText = document.getElementById('ui-recip-text')?.value?.trim() || null;
+  const qty = parseInt(document.getElementById('ui-qty')?.value) || 1;
+  const date = document.getElementById('ui-date')?.value;
+  if (!recipId && !recipText) { toast('Select or enter a recipient'); return; }
+  if (qty > parseInt(available)) { toast(`Only ${available} embryos available`); return; }
+  // Create transfer record
+  await db.from('embryo_transfers').insert({
+    recipient_id: recipId||null, recip_text: recipText||null,
+    flush_id: flushId||null, donor_id: donorId||null,
+    implant_date: date, outcome: 'Pending', num_transferred: qty,
+  });
+  // Deduct from inventory
+  const newQty = parseInt(available) - qty;
+  if (newQty <= 0) {
+    await db.from('embryo_inventory').delete().eq('id', id);
+    toast(`Transfer created — inventory lot depleted`);
+  } else {
+    await db.from('embryo_inventory').update({ quantity: newQty }).eq('id', id);
+    toast(`Transfer created — ${newQty} embryos remaining`);
+  }
+  closeModal();
+  renderEmbryoInventory();
+}
+
+// ── PLANNING PAGE ─────────────────────────────────────
+async function renderPlanning() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const [{ data: groups }, { data: protocols }, { data: steps }, { data: members }] = await Promise.all([
+    db.from('breeding_groups').select('*').order('target_date', {ascending:true}),
+    db.from('breeding_protocols').select('*').order('name', {ascending:true}),
+    db.from('protocol_steps').select('*').order('day_offset', {ascending:false}),
+    db.from('breeding_group_members').select('*'),
+  ]);
+  window._planGroups = groups || [];
+  window._planProtocols = protocols || [];
+  window._planSteps = steps || [];
+  window._planMembers = members || [];
+  window._planTab = window._planTab || 'groups';
+  renderPlanningHTML();
+}
+
+function renderPlanningHTML() {
+  const allGroups = window._planGroups || [];
+  const protocols = window._planProtocols || [];
+  const steps = window._planSteps || [];
+  const members = window._planMembers || [];
+  const tab = window._planTab || 'groups';
+  const hideComplete = window._planHideComplete !== false; // default true
+
+  // Filter groups
+  const groups = hideComplete ? allGroups.filter(g => g.status !== 'Complete' && g.status !== 'Cancelled') : allGroups;
+  const hiddenCount = allGroups.length - groups.length;
+
+  const statusColors = { Planned:'#eff6ff:#1d4ed8', Active:'#dcfce7:#15803d', Complete:'#f1f5f9:#475569', Cancelled:'#fef2f2:#b91c1c' };
+  const _today = new Date().toISOString().slice(0,10);
+
+  function renderStepRow(g, s, isRecip) {
+    const stepDate = new Date(new Date(g.target_date + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
+    const isTarget = s.day_offset === 0;
+    const isPast = stepDate < _today;
+    const rowBg = isTarget ? 'var(--accent-glow)' : isRecip ? (isPast?'#e0eeff':'#f0f7ff') : (isPast?'var(--surface2)':'transparent');
+    const nameColor = isPast ? 'var(--text3)' : 'var(--text)';
+    const dateColor = isTarget ? 'var(--accent)' : isPast ? 'var(--text3)' : (isRecip ? '#1d4ed8' : 'var(--text2)');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${rowBg}">
+      <div style="font-size:0.78rem;color:${nameColor};font-weight:${isTarget?700:400};text-decoration:${isPast&&!isTarget?'line-through':'none'}"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${isRecip?'#1d4ed8':'var(--accent)'};margin-right:0.3rem">${isRecip?'Recip':'Donor'}</span>${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+      <div style="font-size:0.78rem;font-weight:600;color:${dateColor}">${stepDate}</div>
+    </div>`;
+  }
+
+  // Groups HTML
+  const groupsHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Groups</div>
+        <label style="display:inline-flex;align-items:center;gap:0.3rem;font-size:0.78rem;color:var(--text3);cursor:pointer">
+          <input type="checkbox" ${hideComplete?'checked':''} onchange="window._planHideComplete=this.checked;renderPlanningHTML()" style="accent-color:var(--accent)">
+          Hide Complete/Cancelled
+        </label>
+        ${hiddenCount>0&&hideComplete?`<span style="font-size:0.75rem;color:var(--text3)">(${hiddenCount} hidden)</span>`:''}
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openNewGroupInline()">+ New Group</button>
+    </div>
+    <div id="plan-new-group-form" style="display:none"></div>
+    ${groups.length === 0 ? `<div class="empty"><div class="empty-icon">📋</div><h3>${allGroups.length>0?'All groups complete':'No groups yet'}</h3><p>${allGroups.length>0?'Uncheck "Hide Complete" to view them':'Create a group to start planning'}</p></div>` :
+      groups.map(g => {
+        const prot = protocols.find(p => p.id === g.protocol_id);
+        const recipProt = g.recip_protocol_id ? protocols.find(p => p.id === g.recip_protocol_id) : null;
+        const groupSteps = prot ? steps.filter(s => s.protocol_id === prot.id).sort((a,b) => b.day_offset - a.day_offset) : [];
+        const recipSteps = recipProt ? steps.filter(s => s.protocol_id === recipProt.id).sort((a,b) => b.day_offset - a.day_offset) : [];
+        const groupMembers = members.filter(m => m.group_id === g.id);
+        const donors = groupMembers.filter(m => (m.role||'donor') === 'donor');
+        const recips = groupMembers.filter(m => m.role === 'recip');
+        const [bg, col] = (statusColors[g.status]||'#f1f5f9:#475569').split(':');
+        const isComplete = g.status === 'Complete' || g.status === 'Cancelled';
+
+        const scheduleRows = g.target_date && (groupSteps.length > 0 || recipSteps.length > 0) ? (() => {
+          const all = [
+            ...groupSteps.map(s=>({...s,_isRecip:false})),
+            ...recipSteps.map(s=>({...s,_isRecip:true}))
+          ].sort((a,b) => b.day_offset - a.day_offset);
+          return all.map(s => renderStepRow(g, s, s._isRecip)).join('');
+        })() : '';
+        const donorNames = donors.map(m => {
+          const lamb = allLambs.find(l => l.id === m.lamb_id);
+          const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+          return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${lamb?.name||'?'}<span style="color:var(--text3)">× ${sire?.name||m.sire_text||'?'}</span></span>`;
+        }).join('');
+        const recipNames = recips.map(m => {
+          const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
+          const name = lamb ? lamb.name : (m.recip_text||'?');
+          return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:#1d4ed8">${name}</span>`;
+        }).join('');
+        const memberNames = donorNames + (recipNames ? `<span style="font-size:0.72rem;color:var(--text3);align-self:center"> | Recips: </span>${recipNames}` : '');
+        return `<div class="card" style="padding:1rem;margin-bottom:0.75rem;${isComplete?'opacity:0.7':''}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem;gap:0.5rem">
+            <div>
+              <div style="font-size:1rem;font-weight:700;color:var(--text)">${g.name}</div>
+              <div style="display:flex;gap:0.35rem;margin-top:0.3rem;flex-wrap:wrap;align-items:center">
+                <span class="badge ${g.type==='flush'?'badge-purple':'badge-green'}">${g.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
+                <span style="background:${bg};color:${col};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${g.status}</span>
+                ${g.target_date?`<span class="badge badge-blue">🎯 ${g.target_date}</span>`:''}
+                ${prot?`<span class="badge badge-gray">${prot.name}</span>`:''}
+                ${recipProt?`<span class="badge badge-gray">Recip: ${recipProt.name}</span>`:''}
+              </div>
+            </div>
+            <div style="display:flex;gap:0.35rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+              ${!isComplete?`
+              <button class="btn btn-secondary btn-sm" onclick="cancelPlan('${g.id}')" style="color:var(--danger);border-color:var(--danger)">✕ Cancel</button>
+              <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`:''}
+              <button class="btn-icon btn-sm" onclick="openEditGroupPage('${g.id}')" title="Edit">✏️</button>
+              <button class="btn-icon btn-sm" onclick="openManageGroupMembers('${g.id}')" title="Members">👥</button>
+              <button class="btn-icon btn-sm" onclick="deleteGroupPage('${g.id}')" style="color:var(--danger)" title="Delete">🗑</button>
+            </div>
+          </div>
+          ${memberNames ? `<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.65rem">${memberNames}</div>` : `<div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.65rem">No members yet — <a href="#" onclick="event.preventDefault();openManageGroupMembers('${g.id}')" style="color:var(--accent)">add members</a></div>`}
+          ${scheduleRows ? `<div style="border-top:1px solid var(--border);padding-top:0.5rem">${scheduleRows}</div>` : g.target_date && !prot ? `<div style="font-size:0.75rem;color:var(--text3);border-top:1px solid var(--border);padding-top:0.5rem">No protocol assigned</div>` : ''}
+          ${g.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.5rem;font-style:italic">${g.notes}</div>`:''}
+        </div>`;
+      }).join('')}`;
+
+  // Protocols HTML
+  const protocolsHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Protocol Library</div>
+      <button class="btn btn-primary btn-sm" onclick="openNewProtocolInline()">+ New Protocol</button>
+    </div>
+    <div id="plan-new-protocol-form" style="display:none"></div>
+    ${protocols.length === 0 ? `<div class="empty"><div class="empty-icon">🔬</div><h3>No protocols yet</h3><p>Build reusable step templates to assign to groups</p></div>` :
+      protocols.map(p => {
+        const protSteps = steps.filter(s => s.protocol_id === p.id).sort((a,b) => b.day_offset - a.day_offset);
+        return `<div class="card" style="padding:1rem;margin-bottom:0.75rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+            <div>
+              <div style="font-size:0.95rem;font-weight:700;color:var(--text)">${p.name}</div>
+              <span class="badge ${p.type==='flush'?'badge-purple':'badge-green'}" style="margin-top:0.2rem">${p.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
+            </div>
+            <div style="display:flex;gap:0.35rem">
+              <button class="btn-icon btn-sm" onclick="openEditProtocol('${p.id}')">✏️</button>
+              <button class="btn-icon btn-sm" onclick="deleteProtocolPage('${p.id}')" style="color:var(--danger)">🗑</button>
+            </div>
+          </div>
+          ${protSteps.length > 0 ? protSteps.map(s => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--border)">
+              <div style="font-size:0.82rem;color:var(--text)">${s.step_name} <span style="font-size:0.72rem;color:var(--text3)">${s.time_of_day||'AM'}</span></div>
+              <div style="font-size:0.78rem;color:var(--text3)">${s.day_offset===0?'<span style="color:var(--accent);font-weight:600">Target Day</span>':s.day_offset+' days before'}</div>
+            </div>`).join('') : `<div style="font-size:0.78rem;color:var(--text3)">No steps yet</div>`}
+          ${p.notes?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.4rem;font-style:italic">${p.notes}</div>`:''}
+        </div>`;
+      }).join('')}`;
+
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">📋 Breeding Planning</div>
+    </div>
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1.25rem">
+      <button class="tab ${tab==='groups'?'active':''}" onclick="window._planTab='groups';renderPlanningHTML()">Groups (${allGroups.length})</button>
+      <button class="tab ${tab==='protocols'?'active':''}" onclick="window._planTab='protocols';renderPlanningHTML()">Protocol Library (${protocols.length})</button>
+    </div>
+    <div id="plan-content">
+      ${tab==='groups' ? groupsHtml : protocolsHtml}
+    </div>`;
+
+  document.getElementById('main-content').innerHTML = html;
+}
+
+async function cancelPlan(groupId) {
+  const g = (window._planGroups||[]).find(x => x.id === groupId);
+  if (!g) return;
+  // Use modal confirm instead of browser confirm (blocked on file:// URLs)
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✕ Cancel Plan</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Cancel <strong>${g.name}</strong>? It will stay visible with Cancelled status and can be restored by editing it.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Keep Plan</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmCancelPlan('${groupId}')">Yes, Cancel Plan</button>
+    </div>`);
+}
+
+async function confirmCancelPlan(groupId) {
+  await db.from('breeding_groups').update({ status: 'Cancelled' }).eq('id', groupId);
+  window._planGroups = (window._planGroups||[]).map(g => g.id === groupId ? {...g, status:'Cancelled'} : g);
+  toast('Plan cancelled');
+  closeModal();
+  renderPlanningHTML();
+}
+
+async function openCompletePlan(groupId) {
+  const g = (window._planGroups||[]).find(x => x.id === groupId);
+  const groupMembers = (window._planMembers||[]).filter(m => m.group_id === groupId);
+  if (!g) return;
+
+  const isFlush = g.type === 'flush';
+  const donors = groupMembers.filter(m => (m.role||'donor') === 'donor');
+  const recips = isFlush ? groupMembers.filter(m => m.role === 'recip') : [];
+
+  if (donors.length === 0) { toast('Add donors to this group first'); return; }
+
+  const targetDate = g.target_date || new Date().toISOString().slice(0,10);
+  const expectedLambDate = !isFlush ? new Date(new Date(targetDate + 'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
+
+  window._cpIsFlush = isFlush;
+  window._cpTargetDate = targetDate;
+  window._cpExpectedDate = expectedLambDate;
+
+  const sireOpts = sireOptions('');
+  const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
+  const eweOpts = ewes.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+
+  function buildRow(i, lambId, aiSireId, sireText, rowType) {
+    const lamb = allLambs.find(l => l.id === lambId);
+    const sireSelectId = `cp-sire-${i}`;
+    const sireVal = aiSireId ? `ai:${aiSireId}` : '';
+    const bgColor = rowType==='recip' ? 'background:#eff6ff' : '';
+
+    // Build donor options for recip rows
+    const donorOpts = donors.map((d, di) => {
+      const dlamb = allLambs.find(l => l.id === d.lamb_id);
+      const dsire = d.ai_sire_id ? allAiRams.find(r => r.id === d.ai_sire_id) : null;
+      return `<option value="${di}">${dlamb?.name||'?'} × ${dsire?.name||d.sire_text||'?'}</option>`;
+    }).join('');
+
+    return `<tr id="cp-row-${i}" data-type="${rowType||'donor'}" style="border-bottom:1px solid var(--border);${bgColor}">
+      <td style="padding:0.5rem">
+        ${rowType==='recip' ? `<span style="font-size:0.68rem;color:#1d4ed8;font-weight:600;text-transform:uppercase">🐄 Recip</span><br>` : `<span style="font-size:0.68rem;color:var(--accent);font-weight:600;text-transform:uppercase">🐑 Donor</span><br>`}
+        ${lamb ? `<div style="font-weight:600;font-size:0.84rem;color:var(--text)">${lamb.name}</div><div style="font-size:0.72rem;color:var(--text3)">${lamb.ear_tag?'#'+lamb.ear_tag:''}</div>`
+               : (rowType==='recip'
+                  ? `<input id="cp-lamb-name-${i}" placeholder="Recipient name" value="${sireText||''}" style="width:110px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">`
+                  : `<select id="cp-lamb-${i}" style="width:110px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">— Select —</option>${eweOpts}</select>`)}
+        <input type="hidden" id="cp-lamb-id-${i}" value="${lambId||''}">
+      </td>
+      ${rowType==='recip' ?
+        `<td style="padding:0.5rem">
+          <select id="cp-donor-${i}" onchange="validateCpEmbryos()" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            <option value="">— From donor —</option>${donorOpts}
+          </select>
+        </td>
+        <td style="padding:0.5rem">
+          <input type="date" id="cp-transfer-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        </td>
+        <td style="padding:0.5rem">
+          <input type="number" id="cp-embryos-${i}" placeholder="# embryos" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:80px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        </td>` :
+        `<td style="padding:0.5rem">
+          <select id="${sireSelectId}" data-sire="${sireVal}" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+        </td>
+        <td style="padding:0.5rem">
+          <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
+        </td>
+        <td style="padding:0.5rem">
+          ${!isFlush
+            ? `<input type="date" id="cp-due-${i}" value="${expectedLambDate||''}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">`
+            : `<div style="display:flex;flex-direction:column;gap:0.25rem">
+                <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option>MOET</option><option>IVF</option></select>
+                <div style="display:flex;gap:0.25rem;align-items:center;flex-wrap:wrap">
+                  <div style="display:flex;flex-direction:column;gap:0.1rem">
+                    <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Collected</span>
+                    <input type="number" id="cp-collected-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:62px;padding:0.25rem 0.35rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:0.1rem">
+                    <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Transferred</span>
+                    <input type="number" id="cp-transferred-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:72px;padding:0.25rem 0.35rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:0.1rem">
+                    <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Frozen</span>
+                    <input type="number" id="cp-frozen-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:62px;padding:0.25rem 0.35rem;font-size:0.82rem;background:#eff6ff;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                  </div>
+                </div>
+                <div id="cp-balance-${i}" style="font-size:0.68rem;color:var(--text3);margin-top:0.2rem"></div>
+              </div>`}
+        </td>`}
+      <td style="padding:0.5rem;text-align:center">
+        <input type="checkbox" id="cp-include-${i}" checked style="accent-color:var(--accent);width:16px;height:16px">
+      </td>
+      <td style="padding:0.5rem;text-align:center">
+        <button type="button" onclick="document.getElementById('cp-row-${i}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1">×</button>
+      </td>
+    </tr>`;
+  }
+
+  const donorRows = donors.map((m, i) => buildRow(i, m.lamb_id, m.ai_sire_id, m.sire_text, 'donor')).join('');
+  const recipRows = recips.map((m, i) => buildRow(`r${i}`, m.lamb_id, null, m.recip_text, 'recip')).join('');
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">✅ Complete Plan: ${g.name}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div style="font-size:0.82rem;color:var(--text3);margin-bottom:0.75rem">
+      Review and adjust. Change sires, dates, add extra rows, or remove any.${isFlush&&recips.length>0?' Blue rows = recipients (embryo transfers).':''}
+    </div>
+    <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem" id="cp-table">
+        <thead style="position:sticky;top:0;z-index:1"><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.5rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">${isFlush?'Donor / Recip':'Female'}</th>
+          <th style="padding:0.5rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">${isFlush?'Sire / From Donor':'Sire'}</th>
+          <th style="padding:0.5rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">${isFlush?'Flush / Transfer Date':'Bred Date'}</th>
+          <th style="padding:0.5rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">${isFlush?'Type · Collected / Transferred':'Due Date'}</th>
+          <th style="padding:0.5rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">✓</th>
+          <th style="padding:0.5rem"></th>
+        </tr></thead>
+        <tbody id="cp-tbody">${donorRows}${recipRows}</tbody>
+      </table>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.6rem" onclick="addCpRow()">+ Add Donor Row</button>
+    ${isFlush?`<button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.6rem;margin-left:0.4rem" onclick="addCpRecipRow()">+ Add Recip Row</button>`:''}
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmCompletePlanDom('${groupId}')">
+        ✅ Create Records
+      </button>
+    </div>`, true);
+
+  setTimeout(() => {
+    document.querySelectorAll('[data-sire]').forEach(sel => {
+      const val = sel.getAttribute('data-sire');
+      if (val) sel.value = val;
+    });
+  }, 0);
+}
+
+let _cpNextRow = 0;
+function validateCpEmbryos() {
+  const tbody = document.getElementById('cp-tbody');
+  if (!tbody) return;
+
+  const donorRows = Array.from(tbody.querySelectorAll('tr[data-type="donor"]'));
+  const recipRows = Array.from(tbody.querySelectorAll('tr[data-type="recip"]'));
+
+  // Build maps: donorIdx -> collected, transferred, frozen
+  const collectedByDonor = {}, transferredByDonor = {}, frozenByDonor = {};
+  donorRows.forEach((row, di) => {
+    const rowId = row.id.replace('cp-row-','');
+    collectedByDonor[di] = parseInt(document.getElementById(`cp-collected-${rowId}`)?.value) || 0;
+    transferredByDonor[di] = parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value) || 0;
+    frozenByDonor[di] = parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value) || 0;
+  });
+
+  // Sum recip embryos assigned per donor
+  const assignedByDonor = {};
+  recipRows.forEach(row => {
+    const rowId = row.id.replace('cp-row-','');
+    const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
+    const embryos = parseInt(document.getElementById(`cp-embryos-${rowId}`)?.value) || 0;
+    if (donorIdx !== '' && donorIdx !== null && donorIdx !== undefined) {
+      const di = parseInt(donorIdx);
+      assignedByDonor[di] = (assignedByDonor[di] || 0) + embryos;
+    }
+  });
+
+  // Validate each donor row
+  donorRows.forEach((row, di) => {
+    const rowId = row.id.replace('cp-row-','');
+    const collected = collectedByDonor[di] || 0;
+    const transferred = transferredByDonor[di] || 0;
+    const frozen = frozenByDonor[di] || 0;
+    const assigned = assignedByDonor[di] || 0;
+    const accounted = transferred + frozen;
+    const unaccounted = collected - accounted;
+    const balanceEl = document.getElementById(`cp-balance-${rowId}`);
+
+    // Balance display
+    if (balanceEl && collected > 0) {
+      if (accounted > collected) {
+        balanceEl.style.color = '#dc2626';
+        balanceEl.textContent = `⚠️ ${accounted} accounted > ${collected} collected`;
+      } else if (unaccounted > 0) {
+        balanceEl.style.color = '#d97706';
+        balanceEl.textContent = `⚠️ ${unaccounted} embryo${unaccounted!==1?'s':''} unaccounted for`;
+      } else if (accounted === collected) {
+        balanceEl.style.color = '#16a34a';
+        balanceEl.textContent = `✓ All ${collected} accounted (${transferred} transferred, ${frozen} frozen)`;
+      }
+    } else if (balanceEl) {
+      balanceEl.textContent = '';
+    }
+
+    // Color borders
+    const collectedEl = document.getElementById(`cp-collected-${rowId}`);
+    const transferredEl = document.getElementById(`cp-transferred-${rowId}`);
+    const frozenEl = document.getElementById(`cp-frozen-${rowId}`);
+    const isOk = collected > 0 && accounted === collected;
+    const isOver = collected > 0 && accounted > collected;
+    if (collectedEl) collectedEl.style.borderColor = isOver ? '#dc2626' : isOk ? '#16a34a' : '';
+    if (transferredEl) transferredEl.style.borderColor = isOver ? '#dc2626' : isOk ? '#16a34a' : '';
+    if (frozenEl) frozenEl.style.borderColor = isOver ? '#dc2626' : isOk ? '#16a34a' : (frozen > 0 ? '#3b82f6' : '');
+
+    // Recip assigned warning
+    const assignWarnId = `cp-collected-warn-${rowId}`;
+    let assignWarnEl = document.getElementById(assignWarnId);
+    if (collected > 0 && assigned > collected) {
+      if (!assignWarnEl) {
+        assignWarnEl = document.createElement('div');
+        assignWarnEl.id = assignWarnId;
+        assignWarnEl.style.cssText = 'font-size:0.68rem;color:#dc2626;font-weight:600;margin-top:0.15rem';
+        collectedEl?.parentElement?.appendChild(assignWarnEl);
+      }
+      assignWarnEl.textContent = `⚠️ ${assigned} recips > ${collected} collected`;
+    } else {
+      if (assignWarnEl) assignWarnEl.remove();
+    }
+  });
+
+  // Validate recip rows
+  recipRows.forEach(row => {
+    const rowId = row.id.replace('cp-row-','');
+    const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
+    const embryosEl = document.getElementById(`cp-embryos-${rowId}`);
+    const embryos = parseInt(embryosEl?.value) || 0;
+    let warnEl = document.getElementById(`cp-embryos-warn-${rowId}`);
+    if (donorIdx !== '' && donorIdx !== undefined) {
+      const di = parseInt(donorIdx);
+      const collected = collectedByDonor[di] || 0;
+      const assigned = assignedByDonor[di] || 0;
+      if (collected > 0 && assigned > collected) {
+        if (!warnEl) {
+          warnEl = document.createElement('div');
+          warnEl.id = `cp-embryos-warn-${rowId}`;
+          warnEl.style.cssText = 'font-size:0.68rem;color:#dc2626;font-weight:600;margin-top:0.1rem';
+          embryosEl?.parentElement?.appendChild(warnEl);
+        }
+        warnEl.textContent = `Over by ${assigned - collected}`;
+        if (embryosEl) embryosEl.style.borderColor = '#dc2626';
+      } else {
+        if (warnEl) warnEl.remove();
+        if (embryosEl) embryosEl.style.borderColor = collected > 0 ? '#16a34a' : '';
+      }
+    }
+  });
+}
+
+function addCpRow() {
+  const tbody = document.getElementById('cp-tbody');
+  if (!tbody) return;
+  const isFlush = window._cpIsFlush;
+  const targetDate = window._cpTargetDate || new Date().toISOString().slice(0,10);
+  const expectedDate = window._cpExpectedDate || '';
+  const sireOpts = sireOptions('');
+  const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
+  const eweOpts = ewes.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+
+  // Use a unique id that won't collide
+  const i = 'extra_' + (++_cpNextRow);
+  const row = document.createElement('tr');
+  row.id = `cp-row-${i}`;
+  row.style.borderBottom = '1px solid var(--border)';
+  row.innerHTML = `
+    <td style="padding:0.5rem">
+      <select id="cp-lamb-${i}" style="width:120px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">— Select —</option>${eweOpts}
+      </select>
+      <input type="hidden" id="cp-lamb-id-${i}" value="">
+    </td>
+    <td style="padding:0.5rem">
+      <select id="cp-sire-${i}" style="width:140px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+    </td>
+    <td style="padding:0.5rem">
+      <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
+    </td>
+    ${!isFlush ? `<td style="padding:0.5rem">
+      <input type="date" id="cp-due-${i}" value="${expectedDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+    </td>` : `<td style="padding:0.5rem">
+      <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option>MOET</option><option>IVF</option></select>
+    </td>`}
+    <td style="padding:0.5rem;text-align:center">
+      <input type="checkbox" id="cp-include-${i}" checked style="accent-color:var(--accent);width:16px;height:16px">
+    </td>
+    <td style="padding:0.5rem;text-align:center">
+      <button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1">×</button>
+    </td>`;
+  tbody.appendChild(row);
+}
+
+function addCpRecipRow() {
+  const tbody = document.getElementById('cp-tbody');
+  if (!tbody) return;
+  const targetDate = window._cpTargetDate || new Date().toISOString().slice(0,10);
+  const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
+  const eweOpts = ewes.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  const donorOpts = Array.from(document.querySelectorAll('#cp-tbody tr[data-type="donor"]')).map((row, di) => {
+    const rowId = row.id.replace('cp-row-','');
+    const lambId = document.getElementById(`cp-lamb-id-${rowId}`)?.value || document.getElementById(`cp-lamb-${rowId}`)?.value;
+    const lamb = allLambs.find(l => l.id === lambId);
+    return `<option value="${di}">${lamb?.name||'Donor '+(di+1)}</option>`;
+  }).join('');
+  const i = 'recip_' + (++_cpNextRow);
+  const row = document.createElement('tr');
+  row.id = `cp-row-${i}`;
+  row.dataset.type = 'recip';
+  row.style.cssText = 'border-bottom:1px solid var(--border);background:#eff6ff';
+  row.innerHTML = `
+    <td style="padding:0.5rem">
+      <span style="font-size:0.68rem;color:#1d4ed8;font-weight:600;text-transform:uppercase">🐄 Recip</span><br>
+      <select id="cp-lamb-${i}" style="width:110px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">— System lamb —</option>${eweOpts}</select>
+      <input id="cp-lamb-name-${i}" placeholder="External name" style="width:110px;margin-top:0.2rem;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <input type="hidden" id="cp-lamb-id-${i}" value="">
+    </td>
+    <td style="padding:0.5rem">
+      <select id="cp-donor-${i}" onchange="validateCpEmbryos()" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">— From donor —</option>${donorOpts}
+      </select>
+    </td>
+    <td style="padding:0.5rem">
+      <input type="date" id="cp-transfer-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+    </td>
+    <td style="padding:0.5rem">
+      <input type="number" id="cp-embryos-${i}" placeholder="# embryos" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:80px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+    </td>
+    <td style="padding:0.5rem;text-align:center"><input type="checkbox" id="cp-include-${i}" checked style="accent-color:var(--accent);width:16px;height:16px"></td>
+    <td style="padding:0.5rem;text-align:center"><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button></td>`;
+  tbody.appendChild(row);
+}
+
+async function confirmCompletePlanDom(groupId) {
+  const isFlush = window._cpIsFlush;
+  const tbody = document.getElementById('cp-tbody');
+  if (!tbody) return;
+
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const flushInserts = [];
+  const breedInserts = [];
+  const transferInserts = [];
+
+  // First pass: collect donor rows and their indices for lookup
+  const donorRowIds = [];
+  for (const row of rows) {
+    if ((row.dataset.type||'donor') === 'donor') donorRowIds.push(row.id.replace('cp-row-',''));
+  }
+
+  for (const row of rows) {
+    const rowId = row.id.replace('cp-row-','');
+    const include = document.getElementById(`cp-include-${rowId}`)?.checked;
+    if (!include) continue;
+    const rowType = row.dataset.type || 'donor';
+
+    if (rowType === 'recip') {
+      const lambId = document.getElementById(`cp-lamb-id-${rowId}`)?.value ||
+                     document.getElementById(`cp-lamb-${rowId}`)?.value || null;
+      const recipText = document.getElementById(`cp-lamb-name-${rowId}`)?.value?.trim() || null;
+      if (!lambId && !recipText) continue;
+      const transferDate = document.getElementById(`cp-transfer-date-${rowId}`)?.value || window._cpTargetDate;
+      const numEmbryos = parseInt(document.getElementById(`cp-embryos-${rowId}`)?.value) || 1;
+      const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
+      // Store donor index — will resolve to flush ID after flush creation
+      transferInserts.push({ recipient_id: lambId||null, recip_text: recipText||null, implant_date: transferDate, outcome: 'Pending', num_transferred: numEmbryos, _donorIdx: donorIdx !== '' ? parseInt(donorIdx) : null });
+    } else {
+      const lambId = document.getElementById(`cp-lamb-id-${rowId}`)?.value ||
+                     document.getElementById(`cp-lamb-${rowId}`)?.value;
+      if (!lambId) continue;
+      const sireVal = document.getElementById(`cp-sire-${rowId}`)?.value || '';
+      const { sire_id, ai_sire_id } = parseSireSelection(sireVal);
+      const date = document.getElementById(`cp-date-${rowId}`)?.value;
+      if (isFlush) {
+        flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
+          flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
+          embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
+          embryos_transferred: parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value)||null,
+          _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
+      } else {
+        const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
+        breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
+          breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending' });
+      }
+    }
+  }
+
+  // Check for over-assignment
+  const tbody2 = document.getElementById('cp-tbody');
+  const donorRows2 = Array.from((tbody2||document).querySelectorAll('tr[data-type="donor"]'));
+  const collectedMap = {};
+  donorRows2.forEach((row, di) => {
+    const rid = row.id.replace('cp-row-','');
+    collectedMap[di] = parseInt(document.getElementById('cp-collected-'+rid)?.value)||0;
+  });
+  const assignedMap = {};
+  Array.from((tbody2||document).querySelectorAll('tr[data-type="recip"]')).forEach(row => {
+    const rid = row.id.replace('cp-row-','');
+    const di = document.getElementById('cp-donor-'+rid)?.value;
+    const emb = parseInt(document.getElementById('cp-embryos-'+rid)?.value)||0;
+    if (di!==''&&di!==undefined) assignedMap[parseInt(di)] = (assignedMap[parseInt(di)]||0) + emb;
+  });
+  const overAssigned = Object.keys(collectedMap).some(di => collectedMap[di]>0 && (assignedMap[di]||0) > collectedMap[di]);
+  if (overAssigned) { toast('⚠️ Some donors have more embryos assigned to recips than were collected — please fix before saving'); return; }
+
+  if (flushInserts.length === 0 && breedInserts.length === 0) { toast('No records to create'); return; }
+
+  // Insert flush records and capture IDs for transfer linking
+  let totalCreated = 0;
+  const createdFlushIds = []; // index matches flushInserts order
+
+  if (flushInserts.length > 0) {
+    for (const flush of flushInserts) {
+      const { data: f } = await db.from('embryo_flushes').insert(flush).select().single();
+      createdFlushIds.push(f?.id || null);
+      totalCreated++;
+      // Create embryo inventory record if frozen > 0
+      if (f?.id && flush._frozen > 0) {
+        await db.from('embryo_inventory').insert({
+          flush_id: f.id,
+          donor_id: flush.donor_id,
+          ai_sire_id: flush.ai_sire_id||null,
+          sire_id: flush.sire_id||null,
+          quantity: flush._frozen,
+          date_frozen: flush.flush_date,
+        });
+      }
+    }
+    // Create transfers linked to correct donor flush
+    for (const t of transferInserts) {
+      const flushId = t._donorIdx !== null && createdFlushIds[t._donorIdx] ? createdFlushIds[t._donorIdx] : (createdFlushIds[0]||null);
+      const donorId = flushId ? flushInserts[t._donorIdx ?? 0]?.donor_id : null;
+      const { _donorIdx, recip_text, ...rest } = t;
+      await db.from('embryo_transfers').insert({ ...rest, flush_id: flushId, donor_id: donorId, recip_text: recip_text||null });
+      totalCreated++;
+    }
+  }
+  if (breedInserts.length > 0) {
+    await Promise.all(breedInserts.map(b => db.from('breeding_records').insert(b)));
+    totalCreated += breedInserts.length;
+  }
+
+  await db.from('breeding_groups').update({ status: 'Complete' }).eq('id', groupId);
+  window._planGroups = (window._planGroups||[]).map(g => g.id === groupId ? {...g, status:'Complete'} : g);
+
+  toast(`${totalCreated} record${totalCreated!==1?'s':''} created!`);
+  closeModal();
+  renderPlanningHTML();
+  setTimeout(() => { if (isFlush) showPage('flushes'); else showPage('breeding'); }, 1200);
+}
+
+function openNewGroupInline() {
+  const protOpts = `<option value="">— None —</option>` + (window._planProtocols||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('plan-new-group-form').style.display = '';
+  document.getElementById('plan-new-group-form').innerHTML = `
+    <div class="card" style="padding:1rem;margin-bottom:1rem;border:2px solid var(--accent)">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">New Group</div>
+      <div class="row">
+        <div class="field"><label>Name *</label><input id="ng-name" placeholder="e.g. Fall 2026 Flush"></div>
+        <div class="field"><label>Type</label><select id="ng-type"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Target Date (Flush/AI Day)</label><input type="date" id="ng-date" onchange="previewGroupSchedule()"></div>
+        <div class="field"><label>Protocol</label><select id="ng-protocol" onchange="previewGroupSchedule()">${protOpts}</select></div>
+      </div>
+      <div id="ng-schedule-preview"></div>
+      <div class="field"><label>Notes</label><input id="ng-notes" placeholder="Optional notes"></div>
+      <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('plan-new-group-form').style.display='none'">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveNewGroupPage()">Save Group</button>
+      </div>
+    </div>`;
+}
+
+async function saveNewGroupPage() {
+  const name = document.getElementById('ng-name')?.value?.trim();
+  if (!name) { toast('Group name required'); return; }
+  const type = document.getElementById('ng-type')?.value || 'flush';
+  const target_date = document.getElementById('ng-date')?.value || null;
+  const protocol_id = document.getElementById('ng-protocol')?.value || null;
+  const notes = document.getElementById('ng-notes')?.value?.trim() || null;
+  const recip_protocol_id = document.getElementById('ng-recip-protocol')?.value||null;
+  await db.from('breeding_groups').insert({ name, type, target_date, protocol_id: protocol_id||null, recip_protocol_id: recip_protocol_id||null, notes, status: 'Planned' });
+  toast(`Group "${name}" created`);
+  renderPlanning();
+  renderCalendar();
+}
+
+async function deleteGroupPage(id) {
+  const g = (window._planGroups||[]).find(x => x.id === id);
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🗑 Delete Group</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Permanently delete <strong>${g?.name||'this group'}</strong>? This cannot be undone.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmDeleteGroup('${id}')">Delete</button>
+    </div>`);
+}
+
+async function confirmDeleteGroup(id) {
+  await db.from('breeding_groups').delete().eq('id', id);
+  window._planGroups = (window._planGroups||[]).filter(g => g.id !== id);
+  toast('Group deleted');
+  closeModal();
+  renderPlanningHTML();
+  renderCalendar();
+}
+
+async function deleteProtocolPage(id) {
+  const p = (window._planProtocols||[]).find(x => x.id === id);
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🗑 Delete Protocol</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Permanently delete <strong>${p?.name||'this protocol'}</strong>? Groups using it will lose their schedule.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmDeleteProtocol('${id}')">Delete</button>
+    </div>`);
+}
+
+async function confirmDeleteProtocol(id) {
+  await db.from('breeding_protocols').delete().eq('id', id);
+  window._planProtocols = (window._planProtocols||[]).filter(p => p.id !== id);
+  window._planSteps = (window._planSteps||[]).filter(s => s.protocol_id !== id);
+  toast('Protocol deleted');
+  closeModal();
+  renderPlanningHTML();
+}
+
+function openNewProtocolInline() {
+  document.getElementById('plan-new-protocol-form').style.display = '';
+  document.getElementById('plan-new-protocol-form').innerHTML = `
+    <div class="card" style="padding:1rem;margin-bottom:1rem;border:2px solid var(--accent)">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">New Protocol</div>
+      <div class="row">
+        <div class="field"><label>Name *</label><input id="np-name" placeholder="e.g. Standard MOET"></div>
+        <div class="field"><label>Type</label><select id="np-type"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+      </div>
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps <span style="font-weight:400;color:var(--text3)">(Days Before = days before target/flush day)</span></div>
+      <div id="np-steps"></div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addProtocolStepRow()" style="margin-top:0.35rem">+ Add Step</button>
+      <div style="display:flex;gap:0.5rem;margin-top:0.75rem">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('plan-new-protocol-form').style.display='none'">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveNewProtocolPage()">Save Protocol</button>
+      </div>
+    </div>`;
+}
+
+async function saveNewProtocolPage() {
+  const name = document.getElementById('np-name')?.value?.trim();
+  if (!name) { toast('Protocol name required'); return; }
+  const type = document.getElementById('np-type')?.value || 'flush';
+  const { data: prot } = await db.from('breeding_protocols').insert({ name, type }).select().single();
+  if (!prot?.id) { toast('Error saving protocol'); return; }
+  const stepRows = document.querySelectorAll('#np-steps > div');
+  const inserts = [];
+  stepRows.forEach((row, i) => {
+    const stepName = row.querySelector('.ps-name')?.value?.trim();
+    const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
+    const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
+    if (stepName) inserts.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, sort_order: i });
+  });
+  if (inserts.length > 0) await db.from('protocol_steps').insert(inserts);
+  toast(`Protocol "${name}" saved`);
+  renderPlanning();
+}
+
+async function openEditGroupPage(id) {
+  // Reuse modal edit but refresh planning page after
+  const [{ data: g }, { data: protocols }] = await Promise.all([
+    db.from('breeding_groups').select('*').eq('id', id).single(),
+    db.from('breeding_protocols').select('*').order('name', {ascending:true}),
+  ]);
+  if (!g) return;
+  const protOpts = `<option value="">— None —</option>` + (protocols||[]).map(p => `<option value="${p.id}" ${g.protocol_id===p.id?'selected':''}>${p.name}</option>`).join('');
+  const statuses = ['Planned','Active','Complete','Cancelled'];
+
+  function buildPreview(targetDate, protocolId, isRecip) {
+    if (!targetDate || !protocolId) return '';
+    const protSteps = (window._planSteps||[]).filter(s => s.protocol_id === protocolId).sort((a,b) => b.day_offset - a.day_offset);
+    if (protSteps.length === 0) return '';
+    const rows = protSteps.map(s => {
+      const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
+      const isTarget = s.day_offset === 0;
+      return `<div style="display:flex;justify-content:space-between;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
+        <div style="font-size:0.78rem;font-weight:${isTarget?700:400};color:var(--text)">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+        <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
+      </div>`;
+    }).join('');
+    const bg = isRecip ? '#eff6ff' : 'var(--surface2)';
+    const label = isRecip ? '🐄 Recip Protocol' : '🐑 Donor Protocol';
+    return `<div style="background:${bg};border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.25rem">
+      <div style="font-size:0.68rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">${label}</div>${rows}</div>`;
+  }
+
+  const recipProtOpts = `<option value="">— None —</option>` + (protocols||[]).map(p => `<option value="${p.id}" ${g.recip_protocol_id===p.id?'selected':''}>${p.name}</option>`).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit: ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Name</label><input id="eg-name" value="${g.name}"></div>
+      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Target Date</label><input type="date" id="eg-date" value="${g.target_date||''}" onchange="previewEditGroupSchedule()"></div>
+      <div class="field"><label>Status</label><select id="eg-status">${statuses.map(s=>`<option value="${s}" ${g.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Donor Protocol</label><select id="eg-protocol" onchange="previewEditGroupSchedule()">${protOpts}</select></div>
+    ${g.type==='flush'?`<div class="field"><label>Recip Protocol</label><select id="eg-recip-protocol" onchange="previewEditGroupSchedule()">${recipProtOpts}</select></div>`:''}
+    <div id="eg-schedule-preview">${buildPreview(g.target_date, g.protocol_id) + (g.type==='flush'&&g.recip_protocol_id ? buildPreview(g.target_date, g.recip_protocol_id, true) : '')}</div>
+    <div class="field"><label>Notes</label><textarea id="eg-notes" rows="2">${g.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditGroupPage('${id}')">Save</button>
+    </div>`);
+}
+
+async function saveEditGroupPage(id) {
+  const name = document.getElementById('eg-name')?.value?.trim();
+  if (!name) { toast('Name required'); return; }
+  const protocol_id = document.getElementById('eg-protocol')?.value || null;
+  const recip_protocol_id = document.getElementById('eg-recip-protocol')?.value || null;
+  await db.from('breeding_groups').update({
+    name, type: document.getElementById('eg-type')?.value,
+    target_date: document.getElementById('eg-date')?.value || null,
+    status: document.getElementById('eg-status')?.value,
+    protocol_id: protocol_id||null,
+    recip_protocol_id: recip_protocol_id||null,
+    notes: document.getElementById('eg-notes')?.value?.trim()||null,
+  }).eq('id', id);
+  // Update cache so renderPlanningHTML reflects immediately
+  window._planGroups = (window._planGroups||[]).map(g => g.id === id ? {
+    ...g, name, type: document.getElementById('eg-type')?.value,
+    target_date: document.getElementById('eg-date')?.value||null,
+    status: document.getElementById('eg-status')?.value,
+    protocol_id: protocol_id||null,
+    recip_protocol_id: recip_protocol_id||null,
+    notes: document.getElementById('eg-notes')?.value?.trim()||null,
+  } : g);
+  toast('Group updated');
+  closeModal();
+  renderPlanning();
+  renderCalendar();
+}
+
+// ── PLANNING / BREEDING GROUPS ────────────────────────
+
+async function openPlanningManager() {
+  const [{ data: groups }, { data: protocols }] = await Promise.all([
+    db.from('breeding_groups').select('*').order('target_date', {ascending:false}),
+    db.from('breeding_protocols').select('*').order('name', {ascending:true}),
+  ]);
+  const allGroups = groups || [];
+  const allProts = protocols || [];
+
+  const statusColors = { Planned:'#eff6ff:#1d4ed8', Active:'#dcfce7:#15803d', Complete:'#f3f4f6:#6b7280', Cancelled:'#fef2f2:#b91c1c' };
+  const groupRows = allGroups.length === 0 ? `<div style="color:var(--text3);font-size:0.85rem;padding:1rem 0;text-align:center">No groups yet — create one below</div>` :
+    allGroups.map(g => {
+      const prot = allProts.find(p => p.id === g.protocol_id);
+      const [bg, col] = (statusColors[g.status]||'#f3f4f6:#6b7280').split(':');
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${g.name}</div>
+          <div style="font-size:0.75rem;color:var(--text3);margin-top:0.1rem">
+            ${g.type==='flush'?'🔬':'🐏'} ${g.type} · ${g.target_date||'No date'} ${prot?'· '+prot.name:'· No protocol'}
+          </div>
+        </div>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <span style="background:${bg};color:${col};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${g.status}</span>
+          <button class="btn-icon btn-sm" onclick="openEditGroup('${g.id}')">✏️</button>
+          <button class="btn-icon btn-sm" onclick="openManageGroupMembers('${g.id}')">👥</button>
+          <button class="btn-icon btn-sm" onclick="deleteGroup('${g.id}')" style="color:var(--danger)">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+
+  const protRows = allProts.length === 0 ? `<div style="color:var(--text3);font-size:0.85rem;padding:0.5rem 0">No protocols yet</div>` :
+    allProts.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.85rem;color:var(--text)">${p.type==='flush'?'🔬':'🐏'} ${p.name}</div>
+      <div style="display:flex;gap:0.35rem">
+        <button class="btn-icon btn-sm" onclick="openEditProtocol('${p.id}')">✏️</button>
+        <button class="btn-icon btn-sm" onclick="deleteProtocol('${p.id}')" style="color:var(--danger)">🗑</button>
+      </div>
+    </div>`).join('');
+
+  const protOpts = `<option value="">— None —</option>` + allProts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">📋 Breeding Groups & Planning</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1rem">
+      <button class="tab active" id="plan-tab-groups" onclick="switchPlanTab('groups')">Groups (${allGroups.length})</button>
+      <button class="tab" id="plan-tab-protocols" onclick="switchPlanTab('protocols')">Protocols (${allProts.length})</button>
+    </div>
+
+    <!-- GROUPS PANEL -->
+    <div id="plan-panel-groups">
+      <div style="max-height:220px;overflow-y:auto;margin-bottom:0.75rem">${groupRows}</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Group</div>
+        <div class="row">
+          <div class="field" style="margin:0"><input id="ng-name" placeholder="Group name *" style="font-size:0.85rem"></div>
+          <div class="field" style="margin:0"><select id="ng-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+        </div>
+        <div class="row" style="margin-top:0.5rem">
+          <div class="field" style="margin:0"><label style="font-size:0.75rem">Target Date (Flush/AI Day)</label><input type="date" id="ng-date" style="font-size:0.85rem" onchange="previewGroupSchedule()"></div>
+          <div class="field" style="margin:0"><label style="font-size:0.75rem">Donor Protocol</label><select id="ng-protocol" style="font-size:0.85rem" onchange="previewGroupSchedule()">${protOpts}</select></div>
+        </div>
+        <div class="row" style="margin-top:0.5rem">
+          <div class="field" style="margin:0"><label style="font-size:0.75rem">Recip Protocol (flush only)</label><select id="ng-recip-protocol" style="font-size:0.85rem" onchange="previewGroupSchedule()">${protOpts}</select></div>
+          <div class="field" style="margin:0"></div>
+        </div>
+        <div id="ng-schedule-preview" style="margin-top:0.5rem"></div>
+        <div class="field" style="margin-top:0.5rem;margin-bottom:0"><input id="ng-notes" placeholder="Notes" style="font-size:0.85rem"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.5rem;width:100%" onclick="saveNewGroup()">+ Create Group</button>
+      </div>
+    </div>
+
+    <!-- PROTOCOLS PANEL -->
+    <div id="plan-panel-protocols" style="display:none">
+      <div style="max-height:180px;overflow-y:auto;margin-bottom:0.75rem">${protRows}</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Protocol</div>
+        <div class="row">
+          <div class="field" style="margin:0"><input id="np-name" placeholder="Protocol name *" style="font-size:0.85rem"></div>
+          <div class="field" style="margin:0"><select id="np-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+        </div>
+        <div id="np-steps" style="margin-top:0.5rem"></div>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.35rem" onclick="addProtocolStepRow()">+ Add Step</button>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.5rem;width:100%" onclick="saveNewProtocol()">Save Protocol</button>
+      </div>
+    </div>
+
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`, true);
+}
+
+function switchPlanTab(tab) {
+  document.getElementById('plan-panel-groups').style.display = tab==='groups' ? '' : 'none';
+  document.getElementById('plan-panel-protocols').style.display = tab==='protocols' ? '' : 'none';
+  document.getElementById('plan-tab-groups').classList.toggle('active', tab==='groups');
+  document.getElementById('plan-tab-protocols').classList.toggle('active', tab==='protocols');
+}
+
+function addProtocolStepRow() {
+  const container = document.getElementById('np-steps');
+  if (!container) return;
+  const idx = container.children.length;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center';
+  row.innerHTML = `
+    <input placeholder="Step name (e.g. CIDR Insert)" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${idx*3}"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
+    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
+  container.appendChild(row);
+}
+
+async function saveNewProtocol() {
+  const name = document.getElementById('np-name')?.value?.trim();
+  if (!name) { toast('Protocol name required'); return; }
+  const type = document.getElementById('np-type')?.value || 'flush';
+  const { data: prot } = await db.from('breeding_protocols').insert({ name, type }).select().single();
+  if (!prot?.id) { toast('Error saving protocol'); return; }
+  // Save steps
+  const stepRows = document.querySelectorAll('#np-steps > div');
+  const steps = [];
+  stepRows.forEach((row, i) => {
+    const stepName = row.querySelector('.ps-name')?.value?.trim();
+    const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
+    const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
+    if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, sort_order: i });
+  });
+  if (steps.length > 0) await db.from('protocol_steps').insert(steps);
+  toast(`Protocol "${name}" saved with ${steps.length} steps`);
+  openPlanningManager();
+}
+
+
+function buildScheduleRows(steps, targetDate, label, color) {
+  if (!steps || steps.length === 0) return '';
+  const sorted = steps.slice().sort((a,b) => b.day_offset - a.day_offset);
+  const rows = sorted.map(s => {
+    const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
+    const isTarget = s.day_offset === 0;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
+      <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.time_of_day||'AM'}</span></div>
+      <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
+    </div>`;
+  }).join('');
+  return `<div style="background:${color||'var(--surface2)'};border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.35rem">
+    <div style="font-size:0.68rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.3rem">${label}</div>
+    ${rows}
+  </div>`;
+}
+
+async function previewGroupSchedule() {
+  const targetDate = document.getElementById('ng-date')?.value;
+  const protocolId = document.getElementById('ng-protocol')?.value;
+  const recipProtocolId = document.getElementById('ng-recip-protocol')?.value;
+  const preview = document.getElementById('ng-schedule-preview');
+  if (!preview) return;
+  if (!targetDate || (!protocolId && !recipProtocolId)) { preview.innerHTML = ''; return; }
+
+  const fetches = [];
+  if (protocolId) fetches.push(db.from('protocol_steps').select('*').eq('protocol_id', protocolId));
+  else fetches.push(Promise.resolve({data:[]}));
+  if (recipProtocolId) fetches.push(db.from('protocol_steps').select('*').eq('protocol_id', recipProtocolId));
+  else fetches.push(Promise.resolve({data:[]}));
+
+  const [{ data: donorSteps }, { data: recipSteps }] = await Promise.all(fetches);
+
+  preview.innerHTML =
+    (donorSteps?.length ? buildScheduleRows(donorSteps, targetDate, '🐑 Donor Protocol', 'var(--surface)') : '') +
+    (recipSteps?.length ? buildScheduleRows(recipSteps, targetDate, '🐄 Recip Protocol', '#eff6ff') : '');
+}
+
+async function previewEditGroupSchedule() {
+  const targetDate = document.getElementById('eg-date')?.value;
+  const protocolId = document.getElementById('eg-protocol')?.value;
+  const recipProtocolId = document.getElementById('eg-recip-protocol')?.value;
+  const preview = document.getElementById('eg-schedule-preview');
+  if (!preview) return;
+  if (!targetDate || (!protocolId && !recipProtocolId)) { preview.innerHTML = ''; return; }
+
+  const fetches = [];
+  if (protocolId) fetches.push(db.from('protocol_steps').select('*').eq('protocol_id', protocolId));
+  else fetches.push(Promise.resolve({data:[]}));
+  if (recipProtocolId) fetches.push(db.from('protocol_steps').select('*').eq('protocol_id', recipProtocolId));
+  else fetches.push(Promise.resolve({data:[]}));
+
+  const [{ data: donorSteps }, { data: recipSteps }] = await Promise.all(fetches);
+
+  preview.innerHTML =
+    (donorSteps?.length ? buildScheduleRows(donorSteps, targetDate, '🐑 Donor Protocol', 'var(--surface2)') : '') +
+    (recipSteps?.length ? buildScheduleRows(recipSteps, targetDate, '🐄 Recip Protocol', '#eff6ff') : '');
+}
+
+async function saveNewGroup() {
+  const name = document.getElementById('ng-name')?.value?.trim();
+  if (!name) { toast('Group name required'); return; }
+  const type = document.getElementById('ng-type')?.value || 'flush';
+  const start_date = document.getElementById('ng-date')?.value || null;
+  const protocol_id = document.getElementById('ng-protocol')?.value || null;
+  const notes = document.getElementById('ng-notes')?.value?.trim() || null;
+  await db.from('breeding_groups').insert({ name, type, target_date: start_date, protocol_id: protocol_id||null, notes, status: 'Planned' });
+  toast(`Group "${name}" created`);
+  openPlanningManager();
+  renderCalendar();
+}
+
+async function deleteGroup(id) {
+  await db.from('breeding_groups').delete().eq('id', id);
+  toast('Group deleted');
+  openPlanningManager();
+  renderCalendar();
+}
+
+async function deleteProtocol(id) {
+  await db.from('breeding_protocols').delete().eq('id', id);
+  toast('Protocol deleted');
+  openPlanningManager();
+}
+
+async function openEditProtocol(id) {
+  const [{ data: prot }, { data: steps }] = await Promise.all([
+    db.from('breeding_protocols').select('*').eq('id', id).single(),
+    db.from('protocol_steps').select('*').eq('protocol_id', id).order('day_offset', {ascending:true}),
+  ]);
+  if (!prot) return;
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit Protocol: ${prot.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Name</label><input id="ep-name" value="${prot.name}"></div>
+      <div class="field"><label>Type</label><select id="ep-type"><option value="flush" ${prot.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${prot.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+    </div>
+    <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps</div>
+    <div id="ep-steps">
+      ${(steps||[]).map(s => `<div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center">
+        <input value="${s.step_name}" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name" data-id="${s.id}">
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" value="${s.day_offset}" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day"></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option ${(s.time_of_day||'AM')==='AM'?'selected':''}>AM</option><option ${(s.time_of_day||'AM')==='PM'?'selected':''}>PM</option><option ${(s.time_of_day||'AM')==='Both'?'selected':''}>Both</option></select></div>
+        <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
+      </div>`).join('')}
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="addEpStepRow()">+ Add Step</button>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="openPlanningManager()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditProtocol('${id}')">Save</button>
+    </div>`);
+}
+
+function addEpStepRow() {
+  const container = document.getElementById('ep-steps');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center';
+  row.innerHTML = `
+    <input placeholder="Step name" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="0"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
+    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
+  container.appendChild(row);
+}
+
+async function saveEditProtocol(id) {
+  const name = document.getElementById('ep-name')?.value?.trim();
+  if (!name) { toast('Name required'); return; }
+  await db.from('breeding_protocols').update({ name, type: document.getElementById('ep-type')?.value }).eq('id', id);
+  // Delete old steps and re-insert
+  await db.from('protocol_steps').delete().eq('protocol_id', id);
+  const rows = document.querySelectorAll('#ep-steps > div');
+  const steps = [];
+  rows.forEach((row, i) => {
+    const stepName = row.querySelector('.ps-name')?.value?.trim();
+    const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
+    const timeOfDay2 = row.querySelector('.ps-time')?.value || 'AM';
+    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, sort_order: i });
+  });
+  if (steps.length > 0) await db.from('protocol_steps').insert(steps);
+  toast('Protocol updated');
+  openPlanningManager();
+  renderCalendar();
+}
+
+async function openEditGroup(id) {
+  const [{ data: g }, { data: protocols }, { data: steps }] = await Promise.all([
+    db.from('breeding_groups').select('*').eq('id', id).single(),
+    db.from('breeding_protocols').select('*').order('name', {ascending:true}),
+    db.from('protocol_steps').select('*'),
+  ]);
+  if (!g) return;
+  const protOpts = `<option value="">— None —</option>` + (protocols||[]).map(p => `<option value="${p.id}" ${g.protocol_id===p.id?'selected':''}>${p.name}</option>`).join('');
+  const statuses = ['Planned','Active','Complete','Cancelled'];
+
+  // Build initial schedule preview
+  function buildPreview(targetDate, protocolId, isRecip) {
+    if (!targetDate || !protocolId) return '';
+    const protSteps = (steps||[]).filter(s => s.protocol_id === protocolId).sort((a,b) => b.day_offset - a.day_offset);
+    if (protSteps.length === 0) return '';
+    const rows = protSteps.map(s => {
+      const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
+      const isTarget = s.day_offset === 0;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
+        <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.72rem">${s.time_of_day||'AM'}</span></div>
+        <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
+      </div>`;
+    }).join('');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.25rem">
+      <div style="font-size:0.68rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">📋 Schedule Preview</div>
+      ${rows}
+    </div>`;
+  }
+
+  const initialPreview = buildPreview(g.target_date, g.protocol_id) + (g.type==='flush'&&g.recip_protocol_id ? buildPreview(g.target_date, g.recip_protocol_id, true) : '');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit Group: ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Name</label><input id="eg-name" value="${g.name}"></div>
+      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Target Date (Flush/AI Day)</label><input type="date" id="eg-date" value="${g.target_date||''}" onchange="previewEditGroupSchedule()"></div>
+      <div class="field"><label>Status</label><select id="eg-status">${statuses.map(s=>`<option value="${s}" ${g.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Protocol</label><select id="eg-protocol" onchange="previewEditGroupSchedule()">${protOpts}</select></div>
+    <div id="eg-schedule-preview">${initialPreview}</div>
+    <div class="field"><label>Notes</label><textarea id="eg-notes" rows="2">${g.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="openPlanningManager()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditGroup('${id}')">Save</button>
+    </div>`);
+}
+
+async function saveEditGroup(id) {
+  const name = document.getElementById('eg-name')?.value?.trim();
+  if (!name) { toast('Name required'); return; }
+  const protocol_id = document.getElementById('eg-protocol')?.value || null;
+  const recip_protocol_id = document.getElementById('eg-recip-protocol')?.value || null;
+  await db.from('breeding_groups').update({
+    name, type: document.getElementById('eg-type')?.value,
+    target_date: document.getElementById('eg-date')?.value || null,
+    status: document.getElementById('eg-status')?.value,
+    protocol_id: protocol_id || null,
+    recip_protocol_id: recip_protocol_id || null,
+    notes: document.getElementById('eg-notes')?.value?.trim() || null,
+  }).eq('id', id);
+  window._planGroups = (window._planGroups||[]).map(g => g.id === id ? {
+    ...g, name, protocol_id: protocol_id||null, recip_protocol_id: recip_protocol_id||null,
+    target_date: document.getElementById('eg-date')?.value||null,
+    status: document.getElementById('eg-status')?.value,
+    notes: document.getElementById('eg-notes')?.value?.trim()||null,
+  } : g);
+  toast('Group updated');
+  openPlanningManager();
+  renderCalendar();
+}
+
+async function openManageGroupMembers(groupId, activeTab) {
+  activeTab = activeTab || 'donors';
+  const [{ data: g }, { data: members }] = await Promise.all([
+    db.from('breeding_groups').select('*').eq('id', groupId).single(),
+    db.from('breeding_group_members').select('*').eq('group_id', groupId),
+  ]);
+  if (!g) return;
+  const isFlush = g.type === 'flush';
+  const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
+  const sireOpts = sireOptions('');
+  const donors = (members||[]).filter(m => (m.role||'donor') === 'donor');
+  const recips = (members||[]).filter(m => m.role === 'recip');
+
+  const donorRows = donors.map(m => {
+    const lamb = allLambs.find(l => l.id === m.lamb_id);
+    const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+    const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || '—');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.85rem"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span></div>
+      <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
+    </div>`;
+  }).join('') || `<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No donors yet</div>`;
+
+  const recipRows = recips.map(m => {
+    const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
+    const name = lamb ? lamb.name + (lamb.ear_tag?' #'+lamb.ear_tag:'') : (m.recip_text||'Unknown');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.85rem;color:var(--text)"><span style="font-weight:600">${name}</span> ${!lamb?'<span style="font-size:0.72rem;color:var(--text3)">(external)</span>':''}</div>
+      <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','recips')" style="color:var(--danger)">🗑</button>
+    </div>`;
+  }).join('') || `<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No recipients yet</div>`;
+
+  const recipLambs = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active' && (l.role === 'Embryo Recipient' || l.role === 'Both'));
+  const allEweOpts = ewes.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  const recipLambOpts = recipLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">👥 ${g.name} — Members</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:0.75rem">
+      <button class="tab ${activeTab==='donors'?'active':''}" id="gm-tab-donors" onclick="switchGmTab('donors')">🐑 Donors (${donors.length})</button>
+      ${isFlush?`<button class="tab ${activeTab==='recips'?'active':''}" id="gm-tab-recips" onclick="switchGmTab('recips')">🐄 Recipients (${recips.length})</button>`:''}
+    </div>
+
+    <!-- DONORS -->
+    <div id="gm-panel-donors" style="${activeTab!=='donors'?'display:none':''}">
+      <div style="max-height:180px;overflow-y:auto;margin-bottom:0.75rem">${donorRows}</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Add Donor</div>
+        <div class="field" style="margin-bottom:0.4rem"><label>Female</label>
+          <select id="gm-lamb"><option value="">— Select ewe —</option>${allEweOpts}</select>
+        </div>
+        <div class="field" style="margin-bottom:0.4rem"><label>Sire</label><select id="gm-sire">${sireOpts}</select></div>
+        <div class="field" style="margin-bottom:0.5rem"><label>Sire (if not in system)</label><input id="gm-sire-text" placeholder="Sire name"></div>
+        <button class="btn btn-primary btn-sm" style="width:100%" onclick="addGroupMember('${groupId}','donor')">+ Add Donor</button>
+      </div>
+    </div>
+
+    <!-- RECIPS -->
+    ${isFlush?`<div id="gm-panel-recips" style="${activeTab!=='recips'?'display:none':''}">
+      <div style="max-height:180px;overflow-y:auto;margin-bottom:0.75rem">${recipRows}</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Add Recipient</div>
+        <div class="field" style="margin-bottom:0.4rem"><label>Recipient (system lamb)</label>
+          <select id="gm-recip-lamb"><option value="">— Select or use name below —</option>${allEweOpts}</select>
+        </div>
+        <div class="field" style="margin-bottom:0.5rem"><label>External Recipient Name</label>
+          <input id="gm-recip-text" placeholder="e.g. Schoenfeld 2024"></div>
+        <button class="btn btn-primary btn-sm" style="width:100%" onclick="addGroupMember('${groupId}','recip')">+ Add Recipient</button>
+      </div>
+    </div>`:''}
+
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal();if(currentPage==='planning')renderPlanning();else openPlanningManager()">Back</button></div>`);
+}
+
+function switchGmTab(tab) {
+  document.getElementById('gm-panel-donors').style.display = tab==='donors'?'':'none';
+  const recipPanel = document.getElementById('gm-panel-recips');
+  if (recipPanel) recipPanel.style.display = tab==='recips'?'':'none';
+  document.getElementById('gm-tab-donors')?.classList.toggle('active', tab==='donors');
+  document.getElementById('gm-tab-recips')?.classList.toggle('active', tab==='recips');
+}
+
+async function addGroupMember(groupId, role) {
+  role = role || 'donor';
+  if (role === 'recip') {
+    const lambId = document.getElementById('gm-recip-lamb')?.value || null;
+    const recipText = document.getElementById('gm-recip-text')?.value?.trim() || null;
+    if (!lambId && !recipText) { toast('Select a recipient or enter a name'); return; }
+    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId||null, recip_text: recipText||null, role: 'recip' });
+    toast('Recipient added');
+  } else {
+    const lambId = document.getElementById('gm-lamb')?.value;
+    if (!lambId) { toast('Select a female'); return; }
+    const { sire_id, ai_sire_id } = parseSireSelection(document.getElementById('gm-sire')?.value || '');
+    const sireText = document.getElementById('gm-sire-text')?.value?.trim() || null;
+    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_text: sireText, role: 'donor' });
+    toast('Donor added');
+  }
+  if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, role==='recip'?'recips':'donors'); }
+  else openManageGroupMembers(groupId, role==='recip'?'recips':'donors');
+}
+
+async function removeGroupMember(memberId, groupId, activeTab) {
+  await db.from('breeding_group_members').delete().eq('id', memberId);
+  toast('Removed');
+  if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, activeTab||'donors'); }
+  else openManageGroupMembers(groupId, activeTab||'donors');
+}
+
+async function showPlanGroupDetail(groupId) {
+  const [{ data: g }, { data: members }, { data: steps }] = await Promise.all([
+    db.from('breeding_groups').select('*').eq('id', groupId).single(),
+    db.from('breeding_group_members').select('*').eq('group_id', groupId),
+    db.from('protocol_steps').select('*'),
+  ]);
+  if (!g) return;
+  const groupSteps = g.protocol_id ? (steps||[]).filter(s => s.protocol_id === g.protocol_id).sort((a,b) => a.day_offset - b.day_offset) : [];
+  const stepRows = groupSteps.map(s => {
+    const stepDate = g.target_date ? new Date(new Date(g.target_date + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10) : null;
+    return `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.85rem;color:var(--text)">${s.step_name} <span style="color:var(--text3);font-size:0.78rem">${s.day_offset===0?'Target Day':s.day_offset+' days before'} · ${s.time_of_day||'AM'}</span></div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--accent)">${stepDate||'—'}</div>
+    </div>`;
+  }).join('');
+  const memberRows = (members||[]).map(m => {
+    const lamb = allLambs.find(l => l.id === m.lamb_id);
+    const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+    return `<div style="font-size:0.85rem;padding:0.3rem 0;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span> <span style="color:var(--text3)">× ${sire?sire.name+' 🧬':(m.sire_text||'—')}</span>
+    </div>`;
+  }).join('') || `<div style="color:var(--text3);font-size:0.82rem">No members</div>`;
+  showModal(`
+    <div class="modal-header"><div class="modal-title">📋 ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
+      <span class="badge ${g.type==='flush'?'badge-purple':'badge-green'}">${g.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
+      <span class="badge badge-gray">${g.status}</span>
+      ${g.target_date?`<span class="badge badge-blue">Target: ${g.target_date}</span>`:''}
+    </div>
+    ${stepRows ? `<div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">Protocol Steps</div>${stepRows}<div style="margin-bottom:0.75rem"></div>` : ''}
+    <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">Members (${members?.length||0})</div>
+    ${memberRows}
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="closeModal();openManageGroupMembers('${groupId}')">Manage Members</button>
+    </div>`);
+}
+
 // ── CALENDAR ──────────────────────────────────────────
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
@@ -4482,6 +6023,38 @@ async function loadCalendarEvents() {
   (transfers||[]).forEach(t => {
     if (t.implant_date) {
       calEvents.push({ date: t.implant_date, type: 'embryo', label: `🐑 Transfer`, lamb_id: t.recipient_id||t.donor_id, extra: t.outcome||'Pending' });
+    }
+  });
+
+  // Planned breeding/flush group protocol steps
+  const { data: groups } = await db.from('breeding_groups').select('*');
+  const { data: steps } = await db.from('protocol_steps').select('*');
+  const { data: members } = await db.from('breeding_group_members').select('*');
+  (groups||[]).filter(g => g.target_date && g.status !== 'Cancelled').forEach(g => {
+    const donorSteps = (steps||[]).filter(s => s.protocol_id === g.protocol_id);
+    const recipSteps = g.recip_protocol_id ? (steps||[]).filter(s => s.protocol_id === g.recip_protocol_id) : [];
+    const allSteps = [
+      ...donorSteps.map(s => ({...s, _isRecip: false})),
+      ...recipSteps.map(s => ({...s, _isRecip: true})),
+    ];
+    const donorMembers = (members||[]).filter(m => m.group_id === g.id && (m.role||'donor') === 'donor');
+    const recipMembers = (members||[]).filter(m => m.group_id === g.id && m.role === 'recip');
+    const donorNames = donorMembers.map(m => allLambs.find(l => l.id === m.lamb_id)?.name || '?').join(', ');
+    const recipNames = recipMembers.map(m => {
+      const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
+      return lamb?.name || m.recip_text || '?';
+    }).join(', ');
+
+    if (allSteps.length > 0) {
+      allSteps.forEach(step => {
+        const stepDate = new Date(new Date(g.target_date + 'T12:00:00').getTime() - step.day_offset*24*60*60*1000).toISOString().slice(0,10);
+        const roleLabel = step._isRecip ? 'Recip' : 'Donor';
+        const memberList = step._isRecip ? (recipNames||donorNames) : donorNames;
+        const timeLabel = step.time_of_day && step.time_of_day !== 'AM' ? ' ' + step.time_of_day : '';
+        calEvents.push({ date: stepDate, type: 'planned', label: `📋 ${roleLabel}: ${step.step_name}${timeLabel}`, group_id: g.id, group_name: g.name, extra: memberList, group_type: g.type, isRecip: step._isRecip });
+      });
+    } else {
+      calEvents.push({ date: g.target_date, type: 'planned', label: `📋 ${g.name}`, group_id: g.id, group_name: g.name, extra: donorNames, group_type: g.type });
     }
   });
 }
@@ -4537,6 +6110,7 @@ function drawCalendar() {
     { key: 'lambing', label: '🐑 Lambing' },
     { key: 'treatment', label: '💉 Treatments' },
     { key: 'embryo', label: '🔬 Embryo' },
+    { key: 'planned', label: '📋 Planned' },
   ].map(f => `<button class="filter-btn ${calFilter===f.key?'active':''}" onclick="calFilter='${f.key}';jumpToMostRecentEvent();drawCalendar()">${f.label}</button>`).join('');
 
   let html = `
@@ -4548,10 +6122,12 @@ function drawCalendar() {
           <button class="btn btn-secondary btn-sm" onclick="calMonth++;if(calMonth>11){calMonth=0;calYear++;}drawCalendar()">›</button>
           <button class="btn btn-secondary btn-sm" onclick="calYear=new Date().getFullYear();calMonth=new Date().getMonth();drawCalendar()">Today</button>
         </div>
-        <select style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.75rem;font-size:0.85rem;font-family:'Source Serif 4',serif" onchange="calLambFilter=this.value;drawCalendar()">
-          <option value="">Whole Flock</option>
-          ${lambOptions}
-        </select>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+          <select style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.45rem 0.75rem;font-size:0.85rem" onchange="calLambFilter=this.value;drawCalendar()">
+            <option value="">Whole Flock</option>
+            ${lambOptions}
+          </select>
+        </div>
       </div>
       <div class="search-bar" style="margin-bottom:0.85rem">${filterBtns}</div>
     </div>
@@ -4582,10 +6158,10 @@ function drawCalendar() {
         const lamb = allLambs.find(l => l.id === e.lamb_id);
         const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
         const sireName = sire ? sire.name : (e.sire_text||'');
-        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':'#3a3010';
-        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':'#e8c040';
-        return `<div onclick="showCalEventDetail('${dateStr}')" style="font-size:0.68rem;background:${color};color:${textColor};border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.label}${lamb?' — '+lamb.name:''}${sireName?' x '+sireName:''}">
-          ${e.label}${lamb?` <span style="opacity:0.8">${lamb.name}</span>`:''}
+        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':e.type==='planned'?(e.isRecip?'#1a2a5a':'#0a3a5a'):'#3a3010';
+        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':e.type==='planned'?(e.isRecip?'#a0c0ff':'#60c8f8'):'#e8c040';
+        return `<div onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : `showCalEventDetail('${dateStr}')`}" style="font-size:0.68rem;background:${color};color:${textColor};border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.label}${e.group_name?' — '+e.group_name:''}${e.extra?' ('+e.extra+')':''}">
+          ${e.label}${e.group_name?` <span style="opacity:0.8">${e.group_name}</span>`:(lamb?` <span style="opacity:0.8">${lamb.name}</span>`:'')}
         </div>`;
       }).join('')}
       ${uniqueTreatmentProducts.map(prod => {
@@ -4614,8 +6190,8 @@ function drawCalendar() {
       const lamb = allLambs.find(l => l.id === e.lamb_id);
       const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
       const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
-      const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':'badge-yellow';
-      html += `<div class="record-row" style="cursor:pointer" onclick="${lamb?`showLamb('${lamb.id}')`:``}">
+      const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?'badge-blue':'badge-yellow';
+      html += `<div class="record-row" style="cursor:pointer" onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : (lamb?`showLamb('${lamb.id}')`:``)}">
         <div style="display:flex;gap:0.75rem;align-items:center;flex:1">
           <div style="text-align:center;min-width:40px">
             <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--accent);font-weight:700">${parseInt(e.date.split('-')[2])}</div>
