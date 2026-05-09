@@ -2838,49 +2838,24 @@ async function renderSupplies() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const { data } = await db.from('supply_log').select('*').order('date', {ascending:false});
   const logs = data || [];
-  const byItem = {};
-  logs.forEach(l => { if(!byItem[l.item]) byItem[l.item]={item:l.item,category:l.category,unit:l.unit,entries:[]}; byItem[l.item].entries.push(l); });
-  const today = new Date().toISOString().slice(0,10);
-  const predictions = Object.values(byItem).map(item => {
-    const sorted=[...item.entries].sort((a,b)=>a.date>b.date?1:-1);
-    const totalQty=sorted.reduce((s,e)=>s+(e.quantity||0),0);
-    const totalCost=sorted.reduce((s,e)=>s+(e.cost||0),0);
-    let avgDays=null, nextPurchase=null;
-    if(sorted.length>=2){
-      const gaps=[];
-      for(let i=1;i<sorted.length;i++){const d1=new Date(sorted[i-1].date),d2=new Date(sorted[i].date);gaps.push((d2-d1)/(1000*60*60*24));}
-      avgDays=Math.round(gaps.reduce((s,g)=>s+g,0)/gaps.length);
-      nextPurchase=new Date(new Date(sorted[sorted.length-1].date).getTime()+avgDays*24*60*60*1000).toISOString().slice(0,10);
-    }
-    return {...item,totalQty,totalCost,avgDays,nextPurchase,lastDate:sorted[sorted.length-1]?.date};
-  });
-  const dueSoon=predictions.filter(p=>p.nextPurchase&&p.nextPurchase<=today);
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
       <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🌾 Feed & Supplies</div>
       <button class="btn btn-primary btn-sm" onclick="openAddSupply()">+ Log Purchase</button>
     </div>
-    ${dueSoon.length>0?`<div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:1.25rem">
-      <div style="font-size:0.78rem;font-weight:700;color:#92560a;margin-bottom:0.4rem">⚠️ Due for Reorder (${dueSoon.length})</div>
-      <div style="display:flex;flex-wrap:wrap;gap:0.4rem">${dueSoon.map(p=>`<span style="background:#fef3cd;border:1px solid #fcd68a;border-radius:0.25rem;padding:0.2rem 0.6rem;font-size:0.78rem;font-weight:600;color:#92560a">${p.item}</span>`).join('')}</div>
-    </div>`:''}
-    ${predictions.length>0?`<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Overview</div>
-    <div class="flock-grid" style="margin-bottom:1.25rem">
-      ${predictions.map(p=>{
-        const isDue=p.nextPurchase&&p.nextPurchase<=today;
-        const isSoon=p.nextPurchase&&p.nextPurchase>today&&p.nextPurchase<=new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
-        return `<div class="card" style="padding:1rem${isDue?';border-color:#fcd68a':isSoon?';border-color:#fde68a':''}">
-          <div style="font-weight:700;color:var(--text)">${p.item}</div>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${p.category}</div>
-          <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.2rem">
-            <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total purchased</span><span style="font-weight:600">${p.totalQty} ${p.unit||''}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total spent</span><span style="font-weight:600;color:var(--accent)">$${p.totalCost.toFixed(0)}</span></div>
-            ${p.avgDays?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Avg reorder</span><span style="font-weight:600">every ${p.avgDays}d</span></div>`:''}
-            ${p.nextPurchase?`<div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-top:0.1rem"><span style="color:var(--text3)">Next est.</span><span style="font-weight:600;color:${isDue?'#dc2626':isSoon?'#d97706':'var(--text)'}">${p.nextPurchase}${isDue?' ⚠️':isSoon?' 🔔':''}</span></div>`:''}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;align-items:center">
+      <input id="sup-filter-item" placeholder="Search item..." oninput="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:150px">
+      <input id="sup-filter-supplier" placeholder="Supplier..." oninput="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:140px">
+      <select id="sup-filter-cat" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Categories</option>
+        ${SUPPLY_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}
+      </select>
+      <input type="date" id="sup-filter-from" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <input type="date" id="sup-filter-to" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <button class="btn btn-secondary btn-sm" onclick="clearSupplyFilters()">Clear</button>
+      <span id="sup-filter-count" style="font-size:0.78rem;color:var(--text3);margin-left:0.25rem"></span>
+    </div>
+    <div id="sup-overview"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Purchase Log</div>
     <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
@@ -2894,56 +2869,252 @@ async function renderSupplies() {
           <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Supplier</th>
           <th style="padding:0.65rem 1rem;text-align:center"></th>
         </tr></thead>
-        <tbody>
-          ${logs.length===0?`<tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--text3)">No purchases logged yet</td></tr>`:
-            logs.map(l=>`<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
-              <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${l.date}</td>
-              <td style="padding:0.65rem 1rem;font-weight:600;color:var(--text)">${l.item}</td>
-              <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${l.category||'—'}</span></td>
-              <td style="padding:0.65rem 1rem;color:var(--text2)">${l.quantity?l.quantity+' '+(l.unit||''):'—'}</td>
-              <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">${l.cost?'$'+parseFloat(l.cost).toFixed(2):'—'}</td>
-              <td style="padding:0.65rem 1rem;text-align:right;color:var(--text3);font-size:0.82rem">${l.cost&&l.quantity?'$'+(parseFloat(l.cost)/parseFloat(l.quantity)).toFixed(2)+'/'+( l.unit||'unit'):'—'}</td>
-              <td style="padding:0.65rem 1rem;color:var(--text3);font-size:0.82rem">${l.supplier||''}</td>
-              <td style="padding:0.65rem 1rem;text-align:center"><button class="btn-icon btn-sm" onclick="deleteSupply('${l.id}')" style="color:var(--danger)">🗑</button></td>
-            </tr>`).join('')}
+        <tbody id="sup-log-tbody">
+          <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--text3)">No purchases logged yet</td></tr>
         </tbody>
       </table>
     </div></div>`;
+  window._supplyLogs = logs;
   document.getElementById('main-content').innerHTML = html;
+  filterSupplyLog();
 }
 
-function openAddSupply() {
-  showModal(`
-    <div class="modal-header"><div class="modal-title">🌾 Log Purchase</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+function filterSupplyLog() {
+  const item = document.getElementById('sup-filter-item')?.value?.toLowerCase() || '';
+  const supplier = document.getElementById('sup-filter-supplier')?.value?.toLowerCase() || '';
+  const cat = document.getElementById('sup-filter-cat')?.value || '';
+  const from = document.getElementById('sup-filter-from')?.value || '';
+  const to = document.getElementById('sup-filter-to')?.value || '';
+  const logs = window._supplyLogs || [];
+
+  const filtered = logs.filter(l => {
+    if (item && !l.item?.toLowerCase().includes(item)) return false;
+    if (supplier && !(l.supplier||'').toLowerCase().includes(supplier)) return false;
+    if (cat && l.category !== cat) return false;
+    if (from && l.date < from) return false;
+    if (to && l.date > to) return false;
+    return true;
+  });
+
+  // Update count
+  const countEl = document.getElementById('sup-filter-count');
+  if (countEl) countEl.textContent = filtered.length < logs.length ? `${filtered.length} of ${logs.length} shown` : '';
+
+  // Rebuild overview from filtered logs
+  const today = new Date().toISOString().slice(0,10);
+  const byItem = {};
+  filtered.forEach(l => {
+    if (!byItem[l.item]) byItem[l.item] = { item: l.item, category: l.category, unit: l.unit, entries: [] };
+    byItem[l.item].entries.push(l);
+  });
+  const predictions = Object.values(byItem).map(it => {
+    const sorted = [...it.entries].sort((a,b) => a.date > b.date ? 1 : -1);
+    const totalQty = sorted.reduce((s,e) => s+(e.quantity||0), 0);
+    const totalCost = sorted.reduce((s,e) => s+(e.cost||0), 0);
+    let avgDays=null, nextPurchase=null;
+    if (sorted.length >= 2) {
+      const gaps = [];
+      for (let i=1; i<sorted.length; i++) {
+        const d1=new Date(sorted[i-1].date), d2=new Date(sorted[i].date);
+        gaps.push((d2-d1)/(1000*60*60*24));
+      }
+      avgDays = Math.round(gaps.reduce((s,g)=>s+g,0)/gaps.length);
+      nextPurchase = new Date(new Date(sorted[sorted.length-1].date).getTime()+avgDays*24*60*60*1000).toISOString().slice(0,10);
+    }
+    return {...it, totalQty, totalCost, avgDays, nextPurchase, lastDate: sorted[sorted.length-1]?.date};
+  });
+  const dueSoon = predictions.filter(p => p.nextPurchase && p.nextPurchase <= today);
+
+  const overviewEl = document.getElementById('sup-overview');
+  if (overviewEl) {
+    overviewEl.innerHTML = `
+      ${dueSoon.length>0?`<div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:1.25rem">
+        <div style="font-size:0.78rem;font-weight:700;color:#92560a;margin-bottom:0.4rem">⚠️ Due for Reorder (${dueSoon.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem">${dueSoon.map(p=>`<span style="background:#fef3cd;border:1px solid #fcd68a;border-radius:0.25rem;padding:0.2rem 0.6rem;font-size:0.78rem;font-weight:600;color:#92560a">${p.item}</span>`).join('')}</div>
+      </div>`:''}
+      ${predictions.length>0?`
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Overview${item||supplier||cat||from||to?' (filtered)':''}</div>
+        <div class="flock-grid" style="margin-bottom:1.25rem">
+          ${predictions.map(p => {
+            const isDue = p.nextPurchase && p.nextPurchase <= today;
+            const isSoon = p.nextPurchase && p.nextPurchase > today && p.nextPurchase <= new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
+            return `<div class="card" style="padding:1rem${isDue?';border-color:#fcd68a':isSoon?';border-color:#fde68a':''}">
+              <div style="font-weight:700;color:var(--text)">${p.item}</div>
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${p.category||''}</div>
+              <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.2rem">
+                <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total purchased</span><span style="font-weight:600">${p.totalQty} ${p.unit||''}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total spent</span><span style="font-weight:600;color:var(--accent)">$${p.totalCost.toFixed(0)}</span></div>
+                ${p.avgDays?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Avg reorder</span><span style="font-weight:600">every ${p.avgDays}d</span></div>`:''}
+                ${p.nextPurchase?`<div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-top:0.1rem"><span style="color:var(--text3)">Next est.</span><span style="font-weight:600;color:${isDue?'#dc2626':isSoon?'#d97706':'var(--text)'}">${p.nextPurchase}${isDue?' ⚠️':isSoon?' 🔔':''}</span></div>`:''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`:''}`;
+  }
+
+  // Rebuild log table
+  const tbody = document.getElementById('sup-log-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = filtered.length === 0
+    ? `<tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--text3)">No matching purchases</td></tr>`
+    : filtered.map(l => `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${l.date}</td>
+        <td style="padding:0.65rem 1rem;font-weight:600;color:var(--text)">${l.item}</td>
+        <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${l.category||'—'}</span></td>
+        <td style="padding:0.65rem 1rem;color:var(--text2)">${l.quantity?l.quantity+' '+(l.unit||''):'—'}</td>
+        <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">${l.cost?'$'+parseFloat(l.cost).toFixed(2):'—'}</td>
+        <td style="padding:0.65rem 1rem;text-align:right;color:var(--text3);font-size:0.82rem">${l.cost&&l.quantity?'$'+(parseFloat(l.cost)/parseFloat(l.quantity)).toFixed(2)+'/'+(l.unit||'unit'):'—'}</td>
+        <td style="padding:0.65rem 1rem;color:var(--text3);font-size:0.82rem">${l.supplier||''}</td>
+        <td style="padding:0.65rem 1rem;text-align:center;white-space:nowrap">
+          <button class="btn-icon btn-sm" onclick="openEditSupply('${l.id}')" style="margin-right:0.25rem">✏️</button>
+          <button class="btn-icon btn-sm" onclick="deleteSupply('${l.id}')" style="color:var(--danger)">🗑</button>
+        </td>
+      </tr>`).join('');
+}
+
+function clearSupplyFilters() {
+  ['sup-filter-item','sup-filter-supplier','sup-filter-cat','sup-filter-from','sup-filter-to'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  filterSupplyLog();
+}
+
+function _supplyModalHtml(title, saveFunc, vals) {
+  // Build item and supplier datalists from custom_products
+  const itemOpts = (window._supplyItems||[]).map(i=>`<option value="${i}">`).join('');
+  const supplierOpts = (window._supplySuppliers||[]).map(s=>`<option value="${s}">`).join('');
+  const v = (k) => vals?.[k] ?? '';
+  return `
+    <div class="modal-header"><div class="modal-title">${title}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <datalist id="sup-item-list">${itemOpts}</datalist>
+    <datalist id="sup-supplier-list">${supplierOpts}</datalist>
     <div class="row">
-      <div class="field"><label>Item *</label><input id="sup-item" placeholder="e.g. Calf Manna, Timothy Hay"></div>
-      <div class="field"><label>Category</label><select id="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Item *</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <input id="sup-item" list="sup-item-list" placeholder="e.g. Calf Manna" value="${v('item')}" style="flex:1" oninput="updateSupplyCostPerUnit()">
+          <button type="button" title="Save item to list" onclick="saveSupplyItem()" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem">💾</button>
+        </div>
+      </div>
+      <div class="field"><label>Category</label><select id="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option ${v('category')===c?'selected':''}>${c}</option>`).join('')}</select></div>
     </div>
     <div class="row">
-      <div class="field"><label>Date *</label><input type="date" id="sup-date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Supplier</label><input id="sup-supplier" placeholder="Store or supplier name"></div>
+      <div class="field"><label>Date *</label><input type="date" id="sup-date" value="${v('date')||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Supplier</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <input id="sup-supplier" list="sup-supplier-list" placeholder="Store or supplier" value="${v('supplier')||''}" style="flex:1">
+          <button type="button" title="Save supplier to list" onclick="saveSupplySupplier()" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem">💾</button>
+        </div>
+      </div>
     </div>
     <div class="row">
-      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" placeholder="e.g. 10"></div>
-      <div class="field"><label>Unit</label><select id="sup-unit"><option value="">— Select —</option>${SUPPLY_UNITS.map(u=>`<option>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="updateSupplyCostPerUnit()"></div>
+      <div class="field"><label>Unit</label><select id="sup-unit" onchange="updateSupplyCostPerUnit()">${SUPPLY_UNITS.map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('')}</select></div>
     </div>
-    <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" placeholder="0.00"></div>
-    <div class="field"><label>Notes</label><textarea id="sup-notes" rows="2"></textarea></div>
+    <div class="row">
+      <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" value="${v('cost')||''}" placeholder="0.00" oninput="updateSupplyCostPerUnit()"></div>
+      <div class="field"><label>Cost per Unit</label>
+        <div id="sup-cost-per-unit" style="padding:0.55rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:var(--accent);min-height:38px">—</div>
+      </div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="sup-notes" rows="2">${v('notes')||''}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSupply()">Save</button>
-    </div>`);
+      <button class="btn btn-primary" onclick="${saveFunc}">Save</button>
+    </div>`;
+}
+
+function updateSupplyCostPerUnit() {
+  const cost = parseFloat(document.getElementById('sup-cost')?.value) || 0;
+  const qty = parseFloat(document.getElementById('sup-qty')?.value) || 0;
+  const unit = document.getElementById('sup-unit')?.value || 'unit';
+  const el = document.getElementById('sup-cost-per-unit');
+  if (el) el.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
+}
+
+async function saveSupplyItem() {
+  const item = document.getElementById('sup-item')?.value?.trim();
+  if (!item) return;
+  const existing = window._supplyItems || [];
+  if (!existing.includes(item)) {
+    await db.from('custom_products').insert({ name: item, type: 'supply_item' });
+    window._supplyItems = [...existing, item];
+    // Refresh datalist
+    const dl = document.getElementById('sup-item-list');
+    if (dl) dl.innerHTML = window._supplyItems.map(i=>`<option value="${i}">`).join('');
+  }
+  toast(`"${item}" saved to list`);
+}
+
+async function saveSupplySupplier() {
+  const supplier = document.getElementById('sup-supplier')?.value?.trim();
+  if (!supplier) return;
+  const existing = window._supplySuppliers || [];
+  if (!existing.includes(supplier)) {
+    await db.from('custom_products').insert({ name: supplier, type: 'supply_supplier' });
+    window._supplySuppliers = [...existing, supplier];
+    const dl = document.getElementById('sup-supplier-list');
+    if (dl) dl.innerHTML = window._supplySuppliers.map(s=>`<option value="${s}">`).join('');
+  }
+  toast(`"${supplier}" saved to list`);
+}
+
+async function openAddSupply() {
+  const [{ data: items }, { data: suppliers }] = await Promise.all([
+    db.from('custom_products').select('*').eq('type', 'supply_item'),
+    db.from('custom_products').select('*').eq('type', 'supply_supplier'),
+  ]);
+  window._supplyItems = (items||[]).map(p=>p.name);
+  window._supplySuppliers = (suppliers||[]).map(p=>p.name);
+  showModal(_supplyModalHtml('🌾 Log Purchase', 'saveSupply()'));
 }
 
 async function saveSupply() {
-  const item=v('sup-item'), date=v('sup-date');
-  if(!item){toast('Item required');return;} if(!date){toast('Date required');return;}
-  await db.from('supply_log').insert({item,category:v('sup-cat'),date,quantity:v('sup-qty')?parseFloat(v('sup-qty')):null,unit:v('sup-unit')||null,cost:v('sup-cost')?parseFloat(v('sup-cost')):null,supplier:v('sup-supplier')||null,notes:v('sup-notes')||null});
+  const item = document.getElementById('sup-item')?.value?.trim();
+  const date = document.getElementById('sup-date')?.value;
+  if (!item) { toast('Item required'); return; }
+  if (!date) { toast('Date required'); return; }
+  await db.from('supply_log').insert({
+    item, category: document.getElementById('sup-cat')?.value||null,
+    date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
+    unit: document.getElementById('sup-unit')?.value||null,
+    cost: document.getElementById('sup-cost')?.value ? parseFloat(document.getElementById('sup-cost').value) : null,
+    supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
+    notes: document.getElementById('sup-notes')?.value?.trim()||null,
+  });
   toast('Logged'); closeModal(); renderSupplies();
 }
 
+async function openEditSupply(id) {
+  const [{ data: log }, { data: items }, { data: suppliers }] = await Promise.all([
+    db.from('supply_log').select('*').eq('id', id).single(),
+    db.from('custom_products').select('*').eq('type', 'supply_item'),
+    db.from('custom_products').select('*').eq('type', 'supply_supplier'),
+  ]);
+  if (!log) return;
+  window._supplyItems = (items||[]).map(p=>p.name);
+  window._supplySuppliers = (suppliers||[]).map(p=>p.name);
+  showModal(_supplyModalHtml('✏️ Edit Purchase', `saveEditSupply('${id}')`, log));
+  setTimeout(() => updateSupplyCostPerUnit(), 0);
+}
+
+async function saveEditSupply(id) {
+  const item = document.getElementById('sup-item')?.value?.trim();
+  const date = document.getElementById('sup-date')?.value;
+  if (!item) { toast('Item required'); return; }
+  if (!date) { toast('Date required'); return; }
+  await db.from('supply_log').update({
+    item, category: document.getElementById('sup-cat')?.value||null,
+    date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
+    unit: document.getElementById('sup-unit')?.value||null,
+    cost: document.getElementById('sup-cost')?.value ? parseFloat(document.getElementById('sup-cost').value) : null,
+    supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
+    notes: document.getElementById('sup-notes')?.value?.trim()||null,
+  }).eq('id', id);
+  toast('Updated'); closeModal(); renderSupplies();
+}
+
 async function deleteSupply(id) {
-  await db.from('supply_log').delete().eq('id',id);
+  await db.from('supply_log').delete().eq('id', id);
   toast('Deleted'); renderSupplies();
 }
 
