@@ -3215,19 +3215,24 @@ function openFlockExport() {
 
     <!-- SELECT PANEL -->
     <div id="fe-panel-select" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-        <input id="fe-search" placeholder="Search name, ear tag..." oninput="feFilterList()" style="padding:0.35rem 0.6rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:200px">
-        <div style="display:flex;gap:0.35rem">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.fe-cb').forEach(c=>c.checked=true);updateFePreview()">✓ All</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.fe-cb').forEach(c=>c.checked=false);updateFePreview()">✕ None</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.4rem">
+        <input id="fe-search" placeholder="Search name, ear tag, alt ID..." oninput="feFilterList()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:160px">
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+          <button type="button" id="fe-sel-all-btn" onclick="feSelFilter('all')" style="padding:0.25rem 0.6rem;font-size:0.75rem;font-weight:600;background:var(--accent);color:#fff;border:none;cursor:pointer">All</button>
+          <button type="button" id="fe-sel-show-btn" onclick="feSelFilter('show')" style="padding:0.25rem 0.6rem;font-size:0.75rem;font-weight:600;background:var(--surface2);color:var(--text);border:none;border-left:1px solid var(--border);cursor:pointer">Show</button>
+          <button type="button" id="fe-sel-breeding-btn" onclick="feSelFilter('breeding')" style="padding:0.25rem 0.6rem;font-size:0.75rem;font-weight:600;background:var(--surface2);color:var(--text);border:none;border-left:1px solid var(--border);cursor:pointer">Breeding</button>
+        </div>
+        <div style="display:flex;gap:0.3rem">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="feCheckVisible(true)">✓ All</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="feCheckVisible(false)">✕ None</button>
         </div>
       </div>
-      <div id="fe-animal-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.65rem">
+      <div id="fe-animal-list" style="height:200px;overflow-y:scroll;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.65rem">
         ${allLambs.map(l => `
-          <label id="fe-row-${l.id}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer">
-            <input type="checkbox" class="fe-cb" value="${l.id}" checked onchange="updateFePreview()" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-            <span style="font-size:0.84rem;font-weight:600;color:var(--text);flex:1">${l.name}</span>
-            <span style="font-size:0.73rem;color:var(--text3)">${l.ear_tag?'#'+l.ear_tag+' ':''}${l.sex||''} ${l.flock_type?'· '+l.flock_type:''} <span style="padding:0.1rem 0.35rem;border-radius:0.2rem;background:${(l.status||'Active')==='Active'?'#dcfce7':'var(--surface2)'};color:${(l.status||'Active')==='Active'?'#15803d':'var(--text3)'};font-size:0.7rem">${l.status||'Active'}</span></span>
+          <label id="fe-row-${l.id}" data-flock="${l.flock_type||''}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;min-width:0;width:100%;box-sizing:border-box">
+            <input type="checkbox" class="fe-cb" value="${l.id}" checked onchange="updateFePreview()" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap">${l.name}</span>
+            <span style="font-size:0.75rem;color:var(--text3);white-space:nowrap">${l.ear_tag?'#'+l.ear_tag:''} ${l.scrapie_id?'· '+l.scrapie_id:''} ${l.sex?'· '+l.sex:''} ${l.flock_type?'· '+l.flock_type:''}</span>
           </label>`).join('')}
       </div>
     </div>
@@ -3251,20 +3256,49 @@ function feShowTab(tab) {
   updateFePreview();
 }
 
+function feCheckVisible(checked) {
+  document.querySelectorAll('.fe-cb').forEach(cb => {
+    const label = cb.closest('label');
+    if (label && label.style.display !== 'none') cb.checked = checked;
+  });
+  updateFePreview();
+}
+
+function feSelFilter(filter) {
+  ['all','show','breeding'].forEach(f => {
+    const btn = document.getElementById(`fe-sel-${f}-btn`);
+    if (btn) { btn.style.background = f===filter?'var(--accent)':'var(--surface2)'; btn.style.color = f===filter?'#fff':'var(--text)'; }
+  });
+  allLambs.forEach(l => {
+    const row = document.getElementById(`fe-row-${l.id}`);
+    if (!row) return;
+    const ft = l.flock_type || '';
+    const show = filter==='all'
+      || (filter==='show' && (ft==='Show'||ft==='Both'||(!ft&&l.sex==='Wether')))
+      || (filter==='breeding' && (ft==='Breeding'||ft==='Both'||(!ft&&l.sex!=='Wether')));
+    row.style.display = show ? 'flex' : 'none';
+  });
+  updateFePreview();
+}
+
 function feFilterList() {
   const q = document.getElementById('fe-search')?.value?.toLowerCase() || '';
   allLambs.forEach(l => {
     const row = document.getElementById(`fe-row-${l.id}`);
     if (!row) return;
-    const match = !q || l.name.toLowerCase().includes(q) || (l.ear_tag||'').toLowerCase().includes(q) || (l.alt_id||'').toLowerCase().includes(q);
-    row.style.display = match ? '' : 'none';
+    const match = !q || l.name.toLowerCase().includes(q) || (l.ear_tag||'').toLowerCase().includes(q) || (l.alt_id||'').toLowerCase().includes(q) || (l.scrapie_id||'').toLowerCase().includes(q);
+    row.style.display = match ? 'flex' : 'none';
   });
+  updateFePreview();
 }
 
 function updateFePreview() {
-  const count = window._feTab === 'select'
-    ? document.querySelectorAll('.fe-cb:checked').length
-    : getFlockExportFiltered().length;
+  let count;
+  if (window._feTab === 'select') {
+    count = Array.from(document.querySelectorAll('.fe-cb:checked')).length;
+  } else {
+    count = getFlockExportFiltered().length;
+  }
   const el = document.getElementById('fe-preview');
   if (el) el.textContent = `${count} animal${count!==1?'s':''} will be exported`;
 }
