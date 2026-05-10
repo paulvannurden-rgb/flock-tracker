@@ -354,7 +354,12 @@ async function loadAiRams() {
 async function loadCustomProducts() {
   const { data } = await db.from('custom_products').select('*').order('name');
   customProducts = { vaccine: [], medication: [], cost: [] };
-  (data || []).forEach(p => { if (customProducts[p.type]) customProducts[p.type].push({ name: p.name }); else if (p.type === 'cost') customProducts.cost.push({ name: p.name }); });
+  (data || []).forEach(p => {
+    if (p.type === 'vaccine') customProducts.vaccine.push(p.name);
+    else if (p.type === 'medication') customProducts.medication.push(p.name);
+    else if (p.type === 'cost') customProducts.cost.push({ name: p.name });
+    else if (p.type === 'supply_item' || p.type === 'supply_supplier') {} // handled separately
+  });
 }
 
 // ── NAVIGATION ────────────────────────────────────────
