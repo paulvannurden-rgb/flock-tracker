@@ -3313,7 +3313,10 @@ function getFlockExportFiltered() {
   const dobTo = document.getElementById('fe-dob-to')?.value || '';
 
   return allLambs.filter(l => {
-    if (flock && l.flock_type !== flock) return false;
+    const ft = l.flock_type || '';
+    if (flock === 'Show' && !(ft==='Show' || ft==='Both' || (!ft && l.sex==='Wether'))) return false;
+    if (flock === 'Breeding' && !(ft==='Breeding' || ft==='Both' || (!ft && l.sex!=='Wether'))) return false;
+    if (flock === 'Both' && ft !== 'Both') return false;
     if (status && (l.status||'Active') !== status) return false;
     if (sex && l.sex !== sex) return false;
     if (breed && l.breed !== breed) return false;
