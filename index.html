@@ -5268,6 +5268,29 @@ async function renderPlanning() {
   renderPlanningHTML();
 }
 
+function fmtTimeInput(el) {
+  let v = el.value.trim().replace(/[^0-9:apmAPM]/g, '');
+  if (!v) return;
+  // Strip am/pm suffix
+  const isPM = /pm/i.test(v);
+  const isAM = /am/i.test(v);
+  v = v.replace(/[apmAM]/gi, '').trim();
+  // Parse digits
+  const digits = v.replace(/:/g, '');
+  let h, m;
+  if (digits.length <= 2) { h = parseInt(digits); m = 0; }
+  else if (digits.length === 3) { h = parseInt(digits.slice(0,1)); m = parseInt(digits.slice(1)); }
+  else { h = parseInt(digits.slice(0,2)); m = parseInt(digits.slice(2,4)); }
+  if (isNaN(h)) return;
+  m = isNaN(m) ? 0 : m;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  h = Math.min(23, Math.max(0, h));
+  m = Math.min(59, Math.max(0, m));
+  el.value = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  el.style.borderColor = '';
+}
+
 function fmtStepTime(t) {
   if (!t) return '';
   try {
@@ -6139,6 +6162,7 @@ async function saveNewProtocolPage() {
   });
   if (inserts.length > 0) await db.from('protocol_steps').insert(inserts);
   toast(`Protocol "${name}" saved`);
+  document.getElementById('plan-new-protocol-form').style.display='none';
   renderPlanning();
 }
 
@@ -6326,7 +6350,7 @@ function addProtocolStepRow() {
   row.innerHTML = `
     <input placeholder="Step name (e.g. CIDR Insert)" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${idx*3}"></div>
-    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="time" class="ps-step-time" style="width:90px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" placeholder="Optional"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
     <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
   container.appendChild(row);
@@ -6350,6 +6374,7 @@ async function saveNewProtocol() {
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   toast(`Protocol "${name}" saved with ${steps.length} steps`);
+  closeModal();
   openPlanningManager();
 }
 
@@ -6453,10 +6478,10 @@ async function openEditProtocol(id) {
     </div>
     <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps</div>
     <div id="ep-steps">
-      ${(steps||[]).map(s => `<div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center">
+      ${(steps||[]).map((s,idx) => `<div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center">
         <input value="${s.step_name}" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name" data-id="${s.id}">
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" value="${s.day_offset}" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day"></div>
-        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="time" class="ps-step-time" value="${s.step_time||''}" style="width:90px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" data-time="${(s.step_time&&s.step_time!=='null')?s.step_time:''}" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option ${(s.time_of_day||'AM')==='AM'?'selected':''}>AM</option><option ${(s.time_of_day||'AM')==='PM'?'selected':''}>PM</option><option ${(s.time_of_day||'AM')==='Both'?'selected':''}>Both</option></select></div>
         <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
       </div>`).join('')}
@@ -6466,6 +6491,14 @@ async function openEditProtocol(id) {
       <button class="btn btn-secondary" onclick="openPlanningManager()">Cancel</button>
       <button class="btn btn-primary" onclick="saveEditProtocol('${id}')">Save</button>
     </div>`);
+
+  // Set time input values programmatically (value attribute alone doesn't work reliably for type=time)
+  setTimeout(() => {
+    document.querySelectorAll('#ep-steps .ps-step-time').forEach(el => {
+      const t = el.getAttribute('data-time');
+      if (t && t !== 'null' && t !== '') el.value = t;
+    });
+  }, 100);
 }
 
 function addEpStepRow() {
@@ -6476,7 +6509,7 @@ function addEpStepRow() {
   row.innerHTML = `
     <input placeholder="Step name" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="0"></div>
-    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="time" class="ps-step-time" style="width:90px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" placeholder="Optional"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
     <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
   container.appendChild(row);
@@ -6494,8 +6527,8 @@ async function saveEditProtocol(id) {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay2 = row.querySelector('.ps-time')?.value || 'AM';
-    const stepTime2 = row.querySelector('.ps-step-time')?.value || null;
-    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, sort_order: i });
+    const stepTime2 = row.querySelector('.ps-step-time')?.value?.trim() || null;
+    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: (stepTime2 && stepTime2 !== 'null') ? stepTime2 : null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   // Update local cache
@@ -6504,6 +6537,7 @@ async function saveEditProtocol(id) {
     window._planSteps.push(...steps);
   }
   toast('Protocol updated');
+  closeModal();
   if (currentPage === 'planning') renderPlanning();
   else openPlanningManager();
   if(currentPage==='calendar') renderCalendar();
