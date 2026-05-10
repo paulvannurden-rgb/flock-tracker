@@ -5366,6 +5366,7 @@ function renderPlanningHTML() {
               ${!isComplete?`
               <button class="btn btn-secondary btn-sm" onclick="cancelPlan('${g.id}')" style="color:var(--danger);border-color:var(--danger)">✕ Cancel</button>
               <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`:''}
+              <button class="btn-icon btn-sm" onclick="printPlan('${g.id}')" title="Print / Export">🖨️</button>
               <button class="btn-icon btn-sm" onclick="openEditGroupPage('${g.id}')" title="Edit">✏️</button>
               <button class="btn-icon btn-sm" onclick="openManageGroupMembers('${g.id}')" title="Members">👥</button>
               <button class="btn-icon btn-sm" onclick="deleteGroupPage('${g.id}')" style="color:var(--danger)" title="Delete">🗑</button>
@@ -5422,7 +5423,148 @@ function renderPlanningHTML() {
   document.getElementById('main-content').innerHTML = html;
 }
 
-async function cancelPlan(groupId) {
+async function printPlan(groupId) {
+  const g = (window._planGroups||[]).find(x => x.id === groupId);
+  if (!g) return;
+
+  const members = (window._planMembers||[]).filter(m => m.group_id === groupId);
+  const donors = members.filter(m => (m.role||'donor') === 'donor');
+  const recips = members.filter(m => m.role === 'recip');
+  const steps = window._planSteps || [];
+  const protocols = window._planProtocols || [];
+
+  const prot = g.protocol_id ? protocols.find(p => p.id === g.protocol_id) : null;
+  const recipProt = g.recip_protocol_id ? protocols.find(p => p.id === g.recip_protocol_id) : null;
+  const donorSteps = prot ? steps.filter(s => s.protocol_id === prot.id).sort((a,b) => b.day_offset - a.day_offset) : [];
+  const recipSteps = recipProt ? steps.filter(s => s.protocol_id === recipProt.id).sort((a,b) => b.day_offset - a.day_offset) : [];
+  const isFlush = g.type === 'flush';
+
+  function stepDate(dayOffset) {
+    if (!g.target_date) return '—';
+    return new Date(new Date(g.target_date + 'T12:00:00').getTime() - dayOffset*24*60*60*1000).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+  }
+
+  function donorRow(m) {
+    const lamb = allLambs.find(l => l.id === m.lamb_id);
+    const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+    return `<tr>
+      <td style="padding:5px 8px;font-size:11px;font-weight:600">${lamb?.name||'Unknown'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.ear_tag?'#'+lamb.ear_tag:'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.scrapie_id||'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.breed||'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${sire ? sire.name+' 🧬' : (m.sire_text||'—')}</td>
+    </tr>`;
+  }
+
+  function recipRow(m) {
+    const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
+    const name = lamb ? lamb.name : (m.recip_text||'Unknown');
+    return `<tr>
+      <td style="padding:5px 8px;font-size:11px;font-weight:600">${name}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.ear_tag?'#'+lamb.ear_tag:'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.scrapie_id||'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?.breed||'—'}</td>
+      <td style="padding:5px 8px;font-size:11px">${lamb?'System':'External'}</td>
+    </tr>`;
+  }
+
+  function scheduleSection(sectionSteps, label, color) {
+    if (!sectionSteps.length) return '';
+    const rows = sectionSteps.map(s => `
+      <tr style="border-bottom:1px solid #e5e7eb">
+        <td style="padding:6px 8px;font-size:11px;font-weight:600">${stepDate(s.day_offset)}</td>
+        <td style="padding:6px 8px;font-size:11px">${s.step_name}</td>
+        <td style="padding:6px 8px;font-size:11px">${s.step_time ? fmtStepTime(s.step_time) : ''}</td>
+        <td style="padding:6px 8px;font-size:11px">${s.time_of_day||'AM'}</td>
+        <td style="padding:6px 8px;font-size:11px">${s.day_offset===0?'<strong>TARGET DAY</strong>':s.day_offset+' days before'}</td>
+        <td style="padding:6px 8px;font-size:11px"></td>
+      </tr>`).join('');
+    return `
+      <div style="margin-bottom:16px">
+        <div style="background:${color};color:#fff;padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-radius:3px 3px 0 0">${label}</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-top:none">
+          <thead><tr style="background:#f9fafb">
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Date</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Step</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Time</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Period</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Days Before</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;text-transform:uppercase;color:#6b7280">Notes</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const printDate = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
+  const targetFmt = g.target_date ? new Date(g.target_date+'T12:00:00').toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'}) : '—';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${g.name} — Protocol Plan</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Arial,sans-serif; font-size:12px; color:#111; background:#fff; padding:24px; }
+    h1 { font-size:18px; font-weight:700; margin-bottom:2px; }
+    h2 { font-size:12px; font-weight:400; color:#555; margin-bottom:16px; }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; margin-bottom:18px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:4px; padding:10px 14px; }
+    .meta-row { display:flex; gap:6px; font-size:11px; }
+    .meta-label { font-weight:700; min-width:110px; color:#374151; }
+    .section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#374151; border-bottom:2px solid #111; padding-bottom:3px; margin:18px 0 10px; }
+    table { width:100%; border-collapse:collapse; }
+    thead tr { background:#111; color:#fff; }
+    thead th { padding:6px 8px; font-size:10px; text-align:left; text-transform:uppercase; letter-spacing:0.04em; }
+    tbody tr:nth-child(even) { background:#f9fafb; }
+    .footer { text-align:center; font-size:9px; color:#9ca3af; margin-top:24px; border-top:1px solid #e5e7eb; padding-top:8px; }
+    @media print { body { padding:12px; } }
+  </style>
+</head>
+<body>
+  <h1>${g.name}</h1>
+  <h2>${isFlush ? '🔬 Embryo Flush Plan' : '🐏 AI Breeding Plan'} · Generated ${printDate}</h2>
+
+  <div class="meta">
+    <div class="meta-row"><span class="meta-label">Type:</span><span>${isFlush?'Flush':'AI Breeding'}</span></div>
+    <div class="meta-row"><span class="meta-label">Status:</span><span>${g.status}</span></div>
+    <div class="meta-row"><span class="meta-label">Target Date:</span><span>${targetFmt}</span></div>
+    <div class="meta-row"><span class="meta-label">Donor Protocol:</span><span>${prot?.name||'—'}</span></div>
+    ${isFlush?`<div class="meta-row"><span class="meta-label">Recip Protocol:</span><span>${recipProt?.name||'—'}</span></div>`:''}
+    ${g.notes?`<div class="meta-row" style="grid-column:1/-1"><span class="meta-label">Notes:</span><span>${g.notes}</span></div>`:''}
+  </div>
+
+  <div class="section-title">${isFlush?'Donors':'Animals'} (${donors.length})</div>
+  <table>
+    <thead><tr>
+      <th>Name</th><th>Ear Tag</th><th>Scrapie ID</th><th>Breed</th><th>Sire</th>
+    </tr></thead>
+    <tbody>${donors.map(m => donorRow(m)).join('')}</tbody>
+  </table>
+
+  ${isFlush && recips.length > 0 ? `
+  <div class="section-title">Recipients (${recips.length})</div>
+  <table>
+    <thead><tr>
+      <th>Name</th><th>Ear Tag</th><th>Scrapie ID</th><th>Breed</th><th>Source</th>
+    </tr></thead>
+    <tbody>${recips.map(m => recipRow(m)).join('')}</tbody>
+  </table>` : ''}
+
+  <div class="section-title">Protocol Schedule</div>
+  ${scheduleSection(donorSteps, `🐑 Donor Protocol${prot?' — '+prot.name:''}`, '#2e7d4f')}
+  ${isFlush ? scheduleSection(recipSteps, `🐄 Recip Protocol${recipProt?' — '+recipProt.name:''}`, '#1d4ed8') : ''}
+
+  <div class="footer">Hidden Creek Lambs · Flock Health Ledger · ${printDate}</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
+  else toast('Allow pop-ups to print plan');
+}
+
+function cancelPlan(groupId) {
   const g = (window._planGroups||[]).find(x => x.id === groupId);
   if (!g) return;
   // Use modal confirm instead of browser confirm (blocked on file:// URLs)
