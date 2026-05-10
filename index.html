@@ -440,7 +440,7 @@ function renderFlock() {
     const matchStatus = flockFilter === 'All' || l.status === flockFilter;
     const matchType = flockTypeFilter === 'All' || flockType === flockTypeFilter || flockType === 'Both';
     const matchRole = flockRoleFilter === 'All Roles' || l.role === flockRoleFilter || (flockRoleFilter === 'Embryo Donor' && l.role === 'Both') || (flockRoleFilter === 'Embryo Recipient' && l.role === 'Both');
-    const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase());
+    const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.alt_id||'').toLowerCase().includes(flockSearch.toLowerCase());
     return matchStatus && matchType && matchRole && matchSearch;
   });
 
@@ -479,7 +479,7 @@ function renderFlock() {
           <div style="min-width:0">
             <div style="font-size:1rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lamb.name}</div>
             <div style="display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap;align-items:center">
-              ${lamb.ear_tag?`<span style="font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
+              ${lamb.ear_tag?`<span style="font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''} ${lamb.alt_id?`<span style="font-size:0.72rem;color:var(--text3);padding:0.1rem 0.4rem;border-radius:0.25rem;border:1px solid var(--border)">${lamb.alt_id}</span>`:''}
               <span class="badge ${statusBadge}">${lamb.status}</span>
               <span class="badge ${flockBadge}" style="font-size:0.62rem">${flockType}</span>
               ${lamb.role!=='Standard'?`<span class="badge badge-yellow" style="font-size:0.62rem">${lamb.role==='Embryo Donor'?'Donor':lamb.role==='Embryo Recipient'?'Recip':'Both'}</span>`:''}
@@ -529,7 +529,7 @@ async function renderLambDetail() {
           <div class="profile-name">${lamb.name}</div>
           <div class="profile-meta">
             ${lamb.ear_tag?`<span style="font-size:0.78rem;font-weight:600;padding:0.12rem 0.5rem;border-radius:0.25rem;background:${color}22;border:1px solid ${color}55;color:${color}">#${lamb.ear_tag}</span>`:''}
-            ${lamb.scrapie_id?`<span class="badge badge-gray">Scrapie: ${lamb.scrapie_id}</span>`:''}
+            ${lamb.alt_id?`<span class="badge badge-gray">Alt ID: ${lamb.alt_id}</span>`:''} ${lamb.scrapie_id?`<span class="badge badge-gray">Scrapie: ${lamb.scrapie_id}</span>`:''}
             <span class="badge ${statusBadge}">${lamb.status}</span>
             ${lamb.flock_type?`<span class="badge ${lamb.flock_type==='Show'?'badge-purple':lamb.flock_type==='Breeding'?'badge-blue':'badge-gray'}">${lamb.flock_type} Flock</span>`:''}
             ${lamb.role!=='Standard'?`<span class="badge badge-yellow">${lamb.role}</span>`:''}
@@ -819,7 +819,7 @@ async function openEditBreedingResult(resultId, breedingId) {
 function showBreedingResultModal(breedingId, result, existingLambs) {
   const isEdit = !!result;
   window._brLambs = existingLambs ? existingLambs.map(l=>({...l})) : [];
-  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}${l.alt_id?' ['+l.alt_id+']':''}</option>`).join('');
 
   showModal(`
     <div class="modal-header">
@@ -877,7 +877,7 @@ function renderBrLambRows(flockOptions) {
     </div>`).join('');
 }
 
-const _flockOptionsCache = () => allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+const _flockOptionsCache = () => allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}${l.alt_id?' ['+l.alt_id+']':''}</option>`).join('');
 
 function addBrLambRow() {
   window._brLambs.push({ ear_tag:'', sex:'', birth_weight:'', lamb_id:'' });
@@ -3149,7 +3149,7 @@ async function exportFlock() {
   const rows = allLambs.map(l => {
     const sire = l.sire_id ? allLambs.find(x=>x.id===l.sire_id) : null;
     const dam = l.dam_id ? allLambs.find(x=>x.id===l.dam_id) : null;
-    return { Name:l.name, 'Ear Tag':l.ear_tag||'', 'Scrapie ID':l.scrapie_id||'', 'Genetic Code':l.genetic_code||'', DOB:l.dob||'', Sex:l.sex||'', Breed:l.breed||'', Role:l.role||'Standard', Status:l.status||'Active', 'Status Date':l.status_date||'', 'Status Note':l.status_note||'', Sire:sire?sire.name:(l.sire_text||''), Dam:dam?dam.name:(l.dam_text||''), Notes:l.notes||'' };
+    return { Name:l.name, 'Ear Tag':l.ear_tag||'', 'Alt ID':l.alt_id||'', 'Scrapie ID':l.scrapie_id||'', 'Genetic Code':l.genetic_code||'', DOB:l.dob||'', Sex:l.sex||'', Breed:l.breed||'', Role:l.role||'Standard', Status:l.status||'Active', 'Status Date':l.status_date||'', 'Status Note':l.status_note||'', Sire:sire?sire.name:(l.sire_text||''), Dam:dam?dam.name:(l.dam_text||''), Notes:l.notes||'' };
   });
   downloadXLSX(rows, 'flock-export');
   toast('Flock exported!');
@@ -3214,7 +3214,9 @@ function showLambModal(lamb) {
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="row"><div class="field"><label>Name *</label><input id="lm-name" value="${lamb?.name||''}" placeholder="e.g. Daisy"></div>
-    <div class="field"><label>Ear Tag</label><input id="lm-tag" value="${lamb?.ear_tag||''}" placeholder="e.g. A04"></div></div>
+    <div class="field"></div></div>
+    <div class="row"><div class="field"><label>Ear Tag</label><input id="lm-tag" value="${lamb?.ear_tag||''}" placeholder="e.g. A04"></div>
+    <div class="field"><label>Alt ID</label><input id="lm-alt-id" value="${lamb?.alt_id||''}" placeholder="e.g. USDA tag, registry #"></div></div>
     <div class="row"><div class="field"><label>Scrapie ID</label><input id="lm-scrapie" value="${lamb?.scrapie_id||''}" placeholder="Scrapie ID"></div>
     <div class="field"><label>Genetic Code</label><input id="lm-genetic" value="${lamb?.genetic_code||''}" placeholder="Free text"></div></div>
     <div class="row"><div class="field"><label>Date of Birth</label><input type="date" id="lm-dob" value="${lamb?.dob||''}"></div>
@@ -3265,7 +3267,7 @@ async function saveLamb(id) {
   const { sire_id, ai_sire_id } = parseSireSelection(v('lm-sire-id'));
   const flock_type = v('lm-flock-type') || (v('lm-sex') === 'Wether' ? 'Show' : 'Breeding');
   const payload = {
-    name, ear_tag: v('lm-tag'), scrapie_id: v('lm-scrapie'), genetic_code: v('lm-genetic'),
+    name, ear_tag: v('lm-tag'), alt_id: v('lm-alt-id')||null, scrapie_id: v('lm-scrapie'), genetic_code: v('lm-genetic'),
     dob: v('lm-dob')||null, sex: v('lm-sex'), breed: v('lm-breed'), role: v('lm-role'),
     flock_type, sire_id, ai_sire_id, sire_text: v('lm-sire-text'),
     dam_id: v('lm-dam-id')||null, dam_text: v('lm-dam-text'), notes: v('lm-notes'),
@@ -3735,7 +3737,7 @@ function showTransferModal(flushId, transfer) {
 }
 
 function renderTrLambRows() {
-  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  const flockOptions = allLambs.map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}${l.alt_id?' ['+l.alt_id+']':''}</option>`).join('');
   if (!window._trLambs || window._trLambs.length === 0) {
     return `<div style="font-size:0.82rem;color:var(--text3);padding:0.4rem 0">No individual lambs added yet</div>`;
   }
