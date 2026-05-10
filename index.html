@@ -6442,7 +6442,7 @@ async function deleteProtocol(id) {
 async function openEditProtocol(id) {
   const [{ data: prot }, { data: steps }] = await Promise.all([
     db.from('breeding_protocols').select('*').eq('id', id).single(),
-    db.from('protocol_steps').select('*').eq('protocol_id', id).order('day_offset', {ascending:true}),
+    db.from('protocol_steps').select('*').eq('protocol_id', id).order('sort_order', {ascending:true}),
   ]);
   if (!prot) return;
   showModal(`
@@ -6498,8 +6498,14 @@ async function saveEditProtocol(id) {
     if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
+  // Update local cache
+  if (window._planSteps) {
+    window._planSteps = window._planSteps.filter(s => s.protocol_id !== id);
+    window._planSteps.push(...steps);
+  }
   toast('Protocol updated');
-  openPlanningManager();
+  if (currentPage === 'planning') renderPlanning();
+  else openPlanningManager();
   if(currentPage==='calendar') renderCalendar();
 }
 
