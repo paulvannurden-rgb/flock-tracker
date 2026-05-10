@@ -3142,6 +3142,11 @@ function renderExport() {
         <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All breeding and lambing records</div>
         <button class="btn btn-primary btn-sm" onclick="exportBreeding()">Download Spreadsheet</button>
       </div>
+      <div class="card">
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">📋 Health Papers</div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">Print-ready health certificate for shows & sales</div>
+        <button class="btn btn-primary btn-sm" onclick="openHealthPapers()">Generate Health Papers</button>
+      </div>
     </div>`;
 }
 
@@ -3177,6 +3182,230 @@ async function exportBreeding() {
   });
   downloadXLSX(rows, 'breeding-records');
   toast('Breeding records exported!');
+}
+
+function openHealthPapers() {
+  const activeAnimals = allLambs.filter(l => l.status === 'Active');
+
+  function buildCheckboxes(filter) {
+    const filtered = filter === 'all' ? activeAnimals
+      : filter === 'show' ? activeAnimals.filter(l => l.flock_type === 'Show' || l.flock_type === 'Both' || (!l.flock_type && l.sex === 'Wether'))
+      : filter === 'breeding' ? activeAnimals.filter(l => l.flock_type === 'Breeding' || l.flock_type === 'Both' || (!l.flock_type && l.sex !== 'Wether'))
+      : activeAnimals;
+    return filtered.map(l => `
+      <label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="hp-lamb" value="${l.id}" style="accent-color:var(--accent);width:15px;height:15px">
+        <span style="font-size:0.85rem;color:var(--text);font-weight:500">${l.name}</span>
+        <span style="font-size:0.75rem;color:var(--text3)">${l.ear_tag?'#'+l.ear_tag:''} ${l.scrapie_id?'· '+l.scrapie_id:''} ${l.sex?'· '+l.sex:''} ${l.flock_type?'· '+l.flock_type:''}</span>
+      </label>`).join('') || '<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No animals in this flock</div>';
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  const weekOut = new Date(Date.now() + 7*24*60*60*1000).toISOString().slice(0,10);
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">📋 Generate Health Papers</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Show / Event Name *</label><input id="hp-show-name" placeholder="e.g. Minnesota State Fair"></div>
+      <div class="field"><label>Destination / Venue</label><input id="hp-destination" placeholder="e.g. Falcon Heights, MN"></div>
+    </div>
+    <div class="field"><label>Show Address</label><input id="hp-address" placeholder="e.g. 1265 Snelling Ave N, St. Paul, MN 55108"></div>
+    <div class="row">
+      <div class="field"><label>Travel Date From</label><input type="date" id="hp-date-from" value="${today}"></div>
+      <div class="field"><label>Travel Date To</label><input type="date" id="hp-date-to" value="${weekOut}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Owner / Farm Name</label><input id="hp-owner" value="Hidden Creek Lambs" placeholder="Farm name"></div>
+      <div class="field"><label>Owner Address</label><input id="hp-owner-address" placeholder="Farm address"></div>
+    </div>
+    <div class="field"><label>Veterinarian</label><input id="hp-vet" placeholder="Dr. Name, Clinic"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:0.75rem 0 0.4rem">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Select Animals</div>
+      <div style="display:flex;gap:0.35rem;align-items:center">
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+          <button type="button" id="hp-filter-all" onclick="hpSetFilter('all')" style="padding:0.2rem 0.55rem;font-size:0.75rem;font-weight:600;background:var(--accent);color:#fff;border:none;cursor:pointer">All</button>
+          <button type="button" id="hp-filter-show" onclick="hpSetFilter('show')" style="padding:0.2rem 0.55rem;font-size:0.75rem;font-weight:600;background:var(--surface2);color:var(--text);border:none;cursor:pointer;border-left:1px solid var(--border)">Show</button>
+          <button type="button" id="hp-filter-breeding" onclick="hpSetFilter('breeding')" style="padding:0.2rem 0.55rem;font-size:0.75rem;font-weight:600;background:var(--surface2);color:var(--text);border:none;cursor:pointer;border-left:1px solid var(--border)">Breeding</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:0.15rem 0.5rem" onclick="document.querySelectorAll('.hp-lamb').forEach(c=>c.checked=true)">✓ All</button>
+        <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:0.15rem 0.5rem" onclick="document.querySelectorAll('.hp-lamb').forEach(c=>c.checked=false)">✕ None</button>
+      </div>
+    </div>
+    <div id="hp-animal-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 0.75rem">${buildCheckboxes('all')}</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateHealthPapers()">🖨️ Generate & Print</button>
+    </div>`, true);
+
+  // Store buildCheckboxes for filter buttons
+  window._hpBuildCheckboxes = buildCheckboxes;
+}
+
+function hpSetFilter(filter) {
+  const list = document.getElementById('hp-animal-list');
+  if (list && window._hpBuildCheckboxes) list.innerHTML = window._hpBuildCheckboxes(filter);
+  ['all','show','breeding'].forEach(f => {
+    const btn = document.getElementById(`hp-filter-${f}`);
+    if (btn) {
+      btn.style.background = f === filter ? 'var(--accent)' : 'var(--surface2)';
+      btn.style.color = f === filter ? '#fff' : 'var(--text)';
+    }
+  });
+}
+
+async function generateHealthPapers() {
+  const showName = document.getElementById('hp-show-name')?.value?.trim();
+  if (!showName) { toast('Show name required'); return; }
+
+  const selectedIds = Array.from(document.querySelectorAll('.hp-lamb:checked')).map(c => c.value);
+  if (selectedIds.length === 0) { toast('Select at least one animal'); return; }
+
+  const destination = document.getElementById('hp-destination')?.value?.trim() || '';
+  const address = document.getElementById('hp-address')?.value?.trim() || '';
+  const dateFrom = document.getElementById('hp-date-from')?.value || '';
+  const dateTo = document.getElementById('hp-date-to')?.value || '';
+  const owner = document.getElementById('hp-owner')?.value?.trim() || 'Hidden Creek Lambs';
+  const ownerAddress = document.getElementById('hp-owner-address')?.value?.trim() || '';
+  const vet = document.getElementById('hp-vet')?.value?.trim() || '';
+
+  const selected = selectedIds.map(id => allLambs.find(l => l.id === id)).filter(Boolean);
+
+  function calcAge(dob) {
+    if (!dob) return '—';
+    const birth = new Date(dob);
+    const now = new Date();
+    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+    if (months < 24) return `${months} mo`;
+    return `${Math.floor(months/12)} yr ${months%12} mo`;
+  }
+
+  const animalRows = selected.map((l, i) => `
+    <tr style="border-bottom:1px solid #ddd">
+      <td style="padding:6px 8px;font-size:11px;text-align:center">${i+1}</td>
+      <td style="padding:6px 8px;font-size:11px;font-weight:600">${l.name}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.scrapie_id||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.ear_tag||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.alt_id||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.sex||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.breed||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.dob||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${calcAge(l.dob)}</td>
+    </tr>`).join('');
+
+  const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  const travelRange = dateFrom && dateTo ? `${dateFrom} — ${dateTo}` : dateFrom || dateTo || '—';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Health Papers — ${showName}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; padding: 24px; }
+    .header { text-align: center; border-bottom: 3px double #333; padding-bottom: 12px; margin-bottom: 16px; }
+    .header h1 { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .header h2 { font-size: 14px; font-weight: 400; margin-top: 4px; color: #444; }
+    .section { margin-bottom: 14px; }
+    .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #555; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 8px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+    .info-row { display: flex; gap: 6px; }
+    .info-label { font-weight: 700; min-width: 110px; font-size: 11px; }
+    .info-val { font-size: 11px; color: #222; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    thead tr { background: #222; color: #fff; }
+    thead th { padding: 6px 8px; font-size: 10px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; }
+    tbody tr:nth-child(even) { background: #f5f5f5; }
+    .sig-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 24px; }
+    .sig-block { border-top: 1px solid #333; padding-top: 4px; }
+    .sig-label { font-size: 10px; color: #555; }
+    .footer { text-align: center; font-size: 9px; color: #888; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 8px; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Certificate of Veterinary Inspection</h1>
+    <h2>Health Papers — Ovine (Sheep)</h2>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Event Information</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="info-label">Show / Event:</span><span class="info-val">${showName}</span></div>
+      <div class="info-row"><span class="info-label">Destination:</span><span class="info-val">${destination||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Show Address:</span><span class="info-val">${address||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Travel Dates:</span><span class="info-val">${travelRange}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Owner / Origin</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="info-label">Owner / Farm:</span><span class="info-val">${owner}</span></div>
+      <div class="info-row"><span class="info-label">Address:</span><span class="info-val">${ownerAddress||'—'}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Animals — ${selected.length} Head of Sheep</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Scrapie ID</th>
+          <th>Ear Tag</th>
+          <th>Alt ID</th>
+          <th>Sex</th>
+          <th>Breed</th>
+          <th>Date of Birth</th>
+          <th>Age</th>
+        </tr>
+      </thead>
+      <tbody>${animalRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Certification</div>
+    <p style="font-size:11px;line-height:1.6;color:#333">
+      I hereby certify that I have this day examined the above-described animals and find them free from symptoms of infectious or communicable disease, and to the best of my knowledge have not been exposed to such disease within 30 days prior to this certificate. The animals described herein are identified as above and are permitted to move as indicated.
+    </p>
+  </div>
+
+  <div class="sig-grid">
+    <div class="sig-block">
+      <div style="height:40px"></div>
+      <div class="sig-label">Veterinarian Signature</div>
+      <div style="font-size:11px;margin-top:2px">${vet||'___________________________'}</div>
+    </div>
+    <div class="sig-block">
+      <div style="height:40px"></div>
+      <div class="sig-label">License No. / Date</div>
+    </div>
+    <div class="sig-block">
+      <div style="height:40px"></div>
+      <div class="sig-label">Owner Signature</div>
+      <div style="font-size:11px;margin-top:2px">${owner}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generated ${printDate} · Hidden Creek Lambs · Flock Health Ledger
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 500);
+  } else {
+    toast('Allow pop-ups to print health papers');
+  }
+  closeModal();
 }
 
 function downloadXLSX(rows, filename) {
