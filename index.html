@@ -3310,12 +3310,12 @@ function renderInvoiceEditor() {
   const total = subtotal + taxAmt;
   const statuses = ['Draft','Sent','Paid','Void'];
   const p = getFarmProfile();
-  const fromName = inv.from_name !== undefined ? inv.from_name : (p.type==='business' ? (p.bizname||p.name||'') : (p.name||''));
-  const fromContact = inv.from_contact !== undefined ? inv.from_contact : (p.owner||'');
-  const fromAddr = inv.from_address !== undefined ? inv.from_address : ([p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'');
-  const fromPhone = inv.from_phone !== undefined ? inv.from_phone : (p.phone||'');
-  const fromEmail = inv.from_email !== undefined ? inv.from_email : (p.email||'');
-  const fromEin = inv.from_ein !== undefined ? inv.from_ein : (p.ein||'');
+  const fromName = (inv.from_name != null) ? inv.from_name : (p.type==='business' ? (p.bizname||p.name||'') : (p.name||''));
+  const fromContact = (inv.from_contact != null) ? inv.from_contact : (p.owner||'');
+  const fromAddr = (inv.from_address != null) ? inv.from_address : ([p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'');
+  const fromPhone = (inv.from_phone != null) ? inv.from_phone : (p.phone||'');
+  const fromEmail = (inv.from_email != null) ? inv.from_email : (p.email||'');
+  const fromEin = (inv.from_ein != null) ? inv.from_ein : (p.ein||'');
 
   const itemRows = items.map(item => `
     <tr style="border-bottom:1px solid var(--border)">
@@ -3452,7 +3452,23 @@ async function saveInvoiceAll() {
     status: document.getElementById('inv-status')?.value,
     tax_rate: taxRate, tax_amount: taxAmt, subtotal, total,
   }).eq('id', id);
-  Object.assign(window._currentInvoice, { subtotal, tax_rate: taxRate, tax_amount: taxAmt, total });
+  Object.assign(window._currentInvoice, {
+    invoice_number: document.getElementById('inv-number')?.value,
+    invoice_date: document.getElementById('inv-date')?.value,
+    from_name: document.getElementById('inv-from-name')?.value,
+    from_contact: document.getElementById('inv-from-contact')?.value,
+    from_address: document.getElementById('inv-from-address')?.value,
+    from_phone: document.getElementById('inv-from-phone')?.value,
+    from_email: document.getElementById('inv-from-email')?.value,
+    from_ein: document.getElementById('inv-from-ein')?.value,
+    buyer_name: document.getElementById('inv-buyer')?.value,
+    buyer_address: document.getElementById('inv-address')?.value,
+    buyer_email: document.getElementById('inv-email')?.value,
+    buyer_phone: document.getElementById('inv-phone')?.value,
+    notes: document.getElementById('inv-notes')?.value,
+    status: document.getElementById('inv-status')?.value,
+    subtotal, tax_rate: taxRate, tax_amount: taxAmt, total,
+  });
   toast('Invoice saved!');
   renderInvoiceEditor();
 }
