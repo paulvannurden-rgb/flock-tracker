@@ -212,7 +212,7 @@
   <div class="login-box">
     <div class="login-logo">🐑</div>
     <h1>Flock Health Ledger</h1>
-    <p>Hidden Creek Lambs</p>
+    <p id="login-farm-name">Hidden Creek Lambs</p>
     <div class="login-error" id="login-error"></div>
     <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="Enter flock password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
@@ -249,6 +249,7 @@
         <button class="sidebar-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span>Calendar</button>
         <button class="sidebar-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span>Pedigree</button>
         <button class="sidebar-btn" onclick="showPage('export')" data-page="export"><span>📊</span>Export</button>
+        <button class="sidebar-btn" onclick="showPage('invoices')" data-page="invoices"><span>🧾</span>Invoices</button>
         <div style="height:1px;background:var(--border);margin:0.5rem 0"></div>
         <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openFlockTreatment()"><span>💉</span>Flock Treatment</button>
         <button class="sidebar-btn" id="sidebar-bulk-breed-btn" onclick="openBulkBreeding()" style="display:none"><span>🐏</span>Bulk Breeding</button>
@@ -259,6 +260,7 @@
       <!-- Bottom actions -->
       <div style="padding:0.75rem 0.5rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:0.25rem">
         <button class="btn btn-primary btn-sm" id="header-action-btn" onclick="openAddLamb()" style="width:100%;justify-content:center">+ Add Lamb</button>
+        <button class="sidebar-btn" onclick="openFarmSettings()" style="color:var(--text3)"><span>⚙️</span>Settings</button>
         <button class="sidebar-btn" onclick="doLogout()" style="color:var(--text3)"><span>🚪</span>Sign Out</button>
       </div>
     </aside>
@@ -323,6 +325,95 @@ function doLogin() {
     el.style.display = 'block';
   }
 }
+// Farm profile stored in localStorage
+function getFarmProfile() {
+  try {
+    return JSON.parse(localStorage.getItem('flock_farm_profile') || '{}');
+  } catch(e) { return {}; }
+}
+function saveFarmProfile(data) {
+  localStorage.setItem('flock_farm_profile', JSON.stringify(data));
+}
+
+function openFarmSettings() {
+  const p = getFarmProfile();
+  showModal(`
+    <div class="modal-header"><div class="modal-title">⚙️ Farm Settings</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.82rem;color:var(--text3);margin-bottom:0.85rem">Used on invoices, health papers, and reports.</div>
+
+    <input type="hidden" id="fs-type-val" value="${p.type||'personal'}">
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:0.85rem">
+      <button type="button" id="fs-type-personal" onclick="fsSetType('personal')" style="flex:1;padding:0.45rem;font-size:0.82rem;font-weight:600;background:${(p.type||'personal')==='personal'?'var(--accent)':'var(--surface2)'};color:${(p.type||'personal')==='personal'?'#fff':'var(--text)'};border:none;cursor:pointer">👤 Personal / Farm</button>
+      <button type="button" id="fs-type-business" onclick="fsSetType('business')" style="flex:1;padding:0.45rem;font-size:0.82rem;font-weight:600;background:${p.type==='business'?'var(--accent)':'var(--surface2)'};color:${p.type==='business'?'#fff':'var(--text)'};border:none;border-left:1px solid var(--border);cursor:pointer">🏢 Business</button>
+    </div>
+
+    <div id="fs-personal-section" style="${p.type==='business'?'display:none':''}">
+      <div class="row">
+        <div class="field"><label>Farm / Operation Name</label><input id="fs-name" value="${p.name||''}" placeholder="e.g. Hidden Creek Lambs"></div>
+        <div class="field"><label>Owner Name</label><input id="fs-owner-personal" value="${p.owner||''}" placeholder="e.g. Paul VanNurden"></div>
+      </div>
+    </div>
+    <div id="fs-business-section" style="${p.type==='business'?'':'display:none'}">
+      <div class="row">
+        <div class="field"><label>Business Name</label><input id="fs-bizname" value="${p.bizname||''}" placeholder="e.g. Hidden Creek Lambs LLC"></div>
+        <div class="field"><label>Contact Name</label><input id="fs-owner-business" value="${p.owner||''}" placeholder="e.g. Paul VanNurden"></div>
+      </div>
+      <div class="field"><label>EIN / Tax ID</label><input id="fs-ein" value="${p.ein||''}" placeholder="XX-XXXXXXX"></div>
+    </div>
+
+    <div class="field"><label>Street Address</label><input id="fs-street" value="${p.street||''}" placeholder="e.g. 1234 County Road 5"></div>
+    <div class="row">
+      <div class="field"><label>City</label><input id="fs-city" value="${p.city||''}" placeholder="Willmar"></div>
+      <div class="field"><label>State</label><input id="fs-state" value="${p.state||''}" placeholder="MN" style="max-width:80px"></div>
+      <div class="field"><label>ZIP</label><input id="fs-zip" value="${p.zip||''}" placeholder="56201" style="max-width:100px"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Phone</label><input id="fs-phone" value="${p.phone||''}" placeholder="(320) 555-0000"></div>
+      <div class="field"><label>Email</label><input id="fs-email" value="${p.email||''}" placeholder="email@example.com"></div>
+    </div>
+    <div class="field"><label>Website</label><input id="fs-website" value="${p.website||''}" placeholder="www.example.com"></div>
+    <div class="field"><label>Invoice Notes / Payment Terms</label><textarea id="fs-terms" rows="2" placeholder="e.g. Payment due within 30 days. Checks payable to Hidden Creek Lambs.">${p.terms||''}</textarea></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFarmSettings()">Save Settings</button>
+    </div>`, true);
+}
+
+function fsSetType(type) {
+  const hidden = document.getElementById('fs-type-val');
+  if (hidden) hidden.value = type;
+  ['personal','business'].forEach(t => {
+    const btn = document.getElementById(`fs-type-${t}`);
+    if (btn) { btn.style.background = t===type?'var(--accent)':'var(--surface2)'; btn.style.color = t===type?'#fff':'var(--text)'; }
+  });
+  const ps = document.getElementById('fs-personal-section');
+  const bs = document.getElementById('fs-business-section');
+  if (ps) ps.style.display = type==='personal' ? '' : 'none';
+  if (bs) bs.style.display = type==='business' ? '' : 'none';
+}
+
+function saveFarmSettings() {
+  const type = document.getElementById('fs-type-val')?.value || 'personal';
+  saveFarmProfile({
+    type,
+    name: document.getElementById('fs-name')?.value?.trim() || '',
+    bizname: document.getElementById('fs-bizname')?.value?.trim() || '',
+    owner: (type==='business' ? document.getElementById('fs-owner-business') : document.getElementById('fs-owner-personal'))?.value?.trim() || '',
+    ein: document.getElementById('fs-ein')?.value?.trim() || '',
+    street: document.getElementById('fs-street')?.value?.trim() || '',
+    city: document.getElementById('fs-city')?.value?.trim() || '',
+    state: document.getElementById('fs-state')?.value?.trim() || '',
+    zip: document.getElementById('fs-zip')?.value?.trim() || '',
+    phone: document.getElementById('fs-phone')?.value?.trim() || '',
+    email: document.getElementById('fs-email')?.value?.trim() || '',
+    website: document.getElementById('fs-website')?.value?.trim() || '',
+    terms: document.getElementById('fs-terms')?.value?.trim() || '',
+  });
+  toast('Settings saved!');
+  closeModal();
+}
+
 function doLogout() {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
@@ -390,6 +481,7 @@ function showPage(page) {
   else if (page === 'calendar') renderCalendar();
   else if (page === 'pedigree') renderPedigreeNetwork();
   else if (page === 'export') renderExport();
+  else if (page === 'invoices') renderInvoices();
 }
 
 function toggleMobileMenu() {
@@ -3123,6 +3215,568 @@ async function deleteSupply(id) {
   toast('Deleted'); renderSupplies();
 }
 
+// ── INVOICES ──────────────────────────────────────────
+
+async function renderInvoices() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const { data: invoices } = await db.from('invoices').select('*').order('created_at', {ascending:false});
+  const list = invoices || [];
+
+  const statusColor = { Draft:'#f3f4f6:#6b7280', Sent:'#eff6ff:#1d4ed8', Paid:'#dcfce7:#15803d', Void:'#fef2f2:#b91c1c' };
+  const totalRevenue = list.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.total||0),0);
+  const outstanding = list.filter(i=>i.status==='Sent').reduce((s,i)=>s+(i.total||0),0);
+
+  const rows = list.map(inv => {
+    const [bg,col] = (statusColor[inv.status]||'#f3f4f6:#6b7280').split(':');
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openInvoice('${inv.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      <td style="padding:0.65rem 1rem;font-weight:600;color:var(--text)">${inv.invoice_number||'—'}</td>
+      <td style="padding:0.65rem 1rem;color:var(--text2)">${inv.invoice_date||'—'}</td>
+      <td style="padding:0.65rem 1rem;font-weight:600;color:var(--text)">${inv.buyer_name||'—'}</td>
+      <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${(inv.total||0).toFixed(2)}</td>
+      <td style="padding:0.65rem 1rem"><span style="background:${bg};color:${col};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${inv.status||'Draft'}</span></td>
+      <td style="padding:0.65rem 1rem;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
+        <button class="btn-icon btn-sm" onclick="openInvoice('${inv.id}')" title="Edit">✏️</button>
+        <button class="btn-icon btn-sm" onclick="printInvoice('${inv.id}')" title="Print/PDF">🖨️</button>
+        <button class="btn-icon btn-sm" onclick="deleteInvoice('${inv.id}')" style="color:var(--danger)" title="Delete">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🧾 Invoices</div>
+      <button class="btn btn-primary btn-sm" onclick="openNewInvoice()">+ New Invoice</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.5rem">
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--accent)">$${totalRevenue.toFixed(0)}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Total Paid</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.6rem;font-weight:700;color:#1d4ed8">$${outstanding.toFixed(0)}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Outstanding</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--text)">${list.length}</div>
+        <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Total Invoices</div>
+      </div>
+    </div>
+    ${list.length === 0 ? `<div class="empty"><div class="empty-icon">🧾</div><h3>No invoices yet</h3><p>Create your first invoice for an animal sale</p></div>` : `
+    <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.6rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Invoice #</th>
+          <th style="padding:0.6rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Date</th>
+          <th style="padding:0.6rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Buyer</th>
+          <th style="padding:0.6rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Total</th>
+          <th style="padding:0.6rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+          <th style="padding:0.6rem 1rem"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`}`;
+}
+
+async function openNewInvoice() {
+  const { data: last } = await db.from('invoices').select('invoice_number').order('created_at', {ascending:false}).limit(1).single();
+  let nextNum = 'INV-001';
+  if (last?.invoice_number) {
+    const match = last.invoice_number.match(/(\d+)$/);
+    if (match) nextNum = 'INV-' + String(parseInt(match[1]) + 1).padStart(3, '0');
+  }
+  const today = new Date().toISOString().slice(0,10);
+  const { data: inv } = await db.from('invoices').insert({
+    invoice_number: nextNum, invoice_date: today, status: 'Draft', total: 0, subtotal: 0, tax_rate: 0, tax_amount: 0
+  }).select().single();
+  if (inv?.id) openInvoice(inv.id);
+}
+
+async function openInvoice(id) {
+  const [{ data: inv }, { data: items }] = await Promise.all([
+    db.from('invoices').select('*').eq('id', id).single(),
+    db.from('invoice_items').select('*').eq('invoice_id', id),
+  ]);
+  if (!inv) return;
+  window._currentInvoice = inv;
+  window._currentInvoiceItems = items || [];
+  renderInvoiceEditor();
+}
+
+function renderInvoiceEditor() {
+  const inv = window._currentInvoice;
+  const items = window._currentInvoiceItems || [];
+  const subtotal = items.reduce((s,i) => s + (i.total||0), 0);
+  const taxAmt = subtotal * ((inv.tax_rate||0)/100);
+  const total = subtotal + taxAmt;
+  const statuses = ['Draft','Sent','Paid','Void'];
+  const p = getFarmProfile();
+  const fromName = inv.from_name !== undefined ? inv.from_name : (p.type==='business' ? (p.bizname||p.name||'') : (p.name||''));
+  const fromContact = inv.from_contact !== undefined ? inv.from_contact : (p.owner||'');
+  const fromAddr = inv.from_address !== undefined ? inv.from_address : ([p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'');
+  const fromPhone = inv.from_phone !== undefined ? inv.from_phone : (p.phone||'');
+  const fromEmail = inv.from_email !== undefined ? inv.from_email : (p.email||'');
+  const fromEin = inv.from_ein !== undefined ? inv.from_ein : (p.ein||'');
+
+  const itemRows = items.map(item => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:0.5rem">
+        <div style="font-size:0.82rem;font-weight:600;color:var(--text)">${item.description||'—'}</div>
+        ${item.lamb_id ? `<div style="font-size:0.72rem;color:var(--text3)">${allLambs.find(l=>l.id===item.lamb_id)?.name||''}</div>` : ''}
+      </td>
+      <td style="padding:0.5rem;text-align:center;font-size:0.85rem">${item.quantity||1}</td>
+      <td style="padding:0.5rem;text-align:right;font-size:0.85rem">$${(item.unit_price||0).toFixed(2)}</td>
+      <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--accent)">$${(item.total||0).toFixed(2)}</td>
+      <td style="padding:0.5rem;text-align:center;white-space:nowrap">
+        <button class="btn-icon btn-sm" onclick="editInvoiceItem('${item.id}')">✏️</button>
+        <button class="btn-icon btn-sm" onclick="deleteInvoiceItem('${item.id}')" style="color:var(--danger)">🗑</button>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div>
+        <button class="btn btn-secondary btn-sm" onclick="renderInvoices()" style="margin-right:0.5rem">← Back</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text)">${inv.invoice_number||'Invoice'}</span>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <select id="inv-status" onchange="saveInvoiceField('status',this.value)" style="padding:0.35rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          ${statuses.map(s=>`<option ${inv.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="printInvoice('${inv.id}')">🖨️ Print / PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="saveInvoiceAll()">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:1rem">
+      <div class="card" style="padding:1rem">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Invoice Details</div>
+        <div class="row">
+          <div class="field"><label>Invoice #</label><input id="inv-number" onchange="saveInvoiceField('invoice_number',this.value)" value="${inv.invoice_number||''}"></div>
+          <div class="field"><label>Date</label><input type="date" id="inv-date" value="${inv.invoice_date||''}"></div>
+        </div>
+        <div class="field"><label>Notes</label><textarea id="inv-notes" onchange="saveInvoiceField('notes',this.value)" rows="2">${inv.notes||''}</textarea></div>
+      </div>
+      <div class="card" style="padding:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+          <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">From</div>
+          <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.7rem;padding:0.15rem 0.5rem" onclick="invFillFrom()">↩ Reset from Settings</button>
+        </div>
+        <div class="field"><label>Name / Business</label><input id="inv-from-name" onchange="saveInvoiceField('from_name',this.value)" value="${fromName}" placeholder="Farm or business name"></div>
+        <div class="field"><label>Contact Name</label><input id="inv-from-contact" onchange="saveInvoiceField('from_contact',this.value)" value="${fromContact}" placeholder="Owner or contact"></div>
+        <div class="field"><label>Address</label><input id="inv-from-address" onchange="saveInvoiceField('from_address',this.value)" value="${fromAddr}" placeholder="City, State ZIP"></div>
+        <div class="row">
+          <div class="field"><label>Phone</label><input id="inv-from-phone" onchange="saveInvoiceField('from_phone',this.value)" value="${fromPhone}" placeholder="Phone"></div>
+          <div class="field"><label>Email</label><input id="inv-from-email" onchange="saveInvoiceField('from_email',this.value)" value="${fromEmail}" placeholder="Email"></div>
+        </div>
+        <div class="field"><label>EIN / Tax ID</label><input id="inv-from-ein" onchange="saveInvoiceField('from_ein',this.value)" value="${fromEin}" placeholder="Optional"></div>
+      </div>
+      <div class="card" style="padding:1rem">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Bill To</div>
+        <div class="field"><label>Buyer Name</label><input id="inv-buyer" onchange="saveInvoiceField('buyer_name',this.value)" value="${inv.buyer_name||''}" placeholder="Full name"></div>
+        <div class="field"><label>Address</label><input id="inv-address" onchange="saveInvoiceField('buyer_address',this.value)" value="${inv.buyer_address||''}" placeholder="Street, City, State ZIP"></div>
+        <div class="row">
+          <div class="field"><label>Email</label><input id="inv-email" onchange="saveInvoiceField('buyer_email',this.value)" value="${inv.buyer_email||''}" placeholder="email@example.com"></div>
+          <div class="field"><label>Phone</label><input id="inv-phone" onchange="saveInvoiceField('buyer_phone',this.value)" value="${inv.buyer_phone||''}" placeholder="(555) 555-5555"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:1rem;margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Line Items</div>
+        <button class="btn btn-primary btn-sm" onclick="openAddInvoiceItem()">+ Add Item</button>
+      </div>
+      ${items.length === 0 ? `<div style="text-align:center;color:var(--text3);font-size:0.85rem;padding:1rem 0">No items yet — add animals or other charges</div>` : `
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.5rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Description</th>
+          <th style="padding:0.5rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Qty</th>
+          <th style="padding:0.5rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Unit Price</th>
+          <th style="padding:0.5rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Total</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table></div>`}
+      <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+        <div style="min-width:220px">
+          <div style="display:flex;justify-content:space-between;padding:0.3rem 0;font-size:0.85rem"><span style="color:var(--text3)">Subtotal</span><span style="font-weight:600">$${subtotal.toFixed(2)}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.85rem">
+            <span style="color:var(--text3)">Tax <input type="number" id="inv-tax" value="${inv.tax_rate||0}" min="0" max="100" step="0.1" onchange="updateInvoiceTax(this.value)" style="width:48px;padding:0.2rem 0.35rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);margin:0 0.25rem">%</span>
+            <span style="font-weight:600">$${taxAmt.toFixed(2)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:0.4rem 0;font-size:1rem;font-weight:700;border-top:2px solid var(--border);margin-top:0.25rem"><span>Total</span><span style="color:var(--accent)">$${total.toFixed(2)}</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveInvoiceField(field, value) {
+  if (!window._currentInvoice) return;
+  await db.from('invoices').update({ [field]: value }).eq('id', window._currentInvoice.id);
+  window._currentInvoice[field] = value;
+}
+
+function invFillFrom() {
+  const p = getFarmProfile();
+  const name = p.type==='business' ? (p.bizname||p.name||'') : (p.name||'');
+  const addr = [p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val||''; };
+  set('inv-from-name', name);
+  set('inv-from-contact', p.owner||'');
+  set('inv-from-address', addr);
+  set('inv-from-phone', p.phone||'');
+  set('inv-from-email', p.email||'');
+  set('inv-from-ein', p.ein||'');
+}
+
+async function saveInvoiceAll() {
+  if (!window._currentInvoice) return;
+  const id = window._currentInvoice.id;
+  const items = window._currentInvoiceItems || [];
+  const subtotal = items.reduce((s,i) => s+(i.total||0), 0);
+  const taxRate = parseFloat(document.getElementById('inv-tax')?.value) || 0;
+  const taxAmt = subtotal * (taxRate/100);
+  const total = subtotal + taxAmt;
+  await db.from('invoices').update({
+    invoice_number: document.getElementById('inv-number')?.value,
+    invoice_date: document.getElementById('inv-date')?.value,
+    from_name: document.getElementById('inv-from-name')?.value,
+    from_contact: document.getElementById('inv-from-contact')?.value,
+    from_address: document.getElementById('inv-from-address')?.value,
+    from_phone: document.getElementById('inv-from-phone')?.value,
+    from_email: document.getElementById('inv-from-email')?.value,
+    from_ein: document.getElementById('inv-from-ein')?.value,
+    buyer_name: document.getElementById('inv-buyer')?.value,
+    buyer_address: document.getElementById('inv-address')?.value,
+    buyer_email: document.getElementById('inv-email')?.value,
+    buyer_phone: document.getElementById('inv-phone')?.value,
+    notes: document.getElementById('inv-notes')?.value,
+    status: document.getElementById('inv-status')?.value,
+    tax_rate: taxRate, tax_amount: taxAmt, subtotal, total,
+  }).eq('id', id);
+  Object.assign(window._currentInvoice, { subtotal, tax_rate: taxRate, tax_amount: taxAmt, total });
+  toast('Invoice saved!');
+  renderInvoiceEditor();
+}
+
+async function updateInvoiceTax(rate) {
+  if (!window._currentInvoice) return;
+  const items = window._currentInvoiceItems || [];
+  const subtotal = items.reduce((s,i) => s+(i.total||0),0);
+  const taxAmt = subtotal * (parseFloat(rate)||0) / 100;
+  const total = subtotal + taxAmt;
+  Object.assign(window._currentInvoice, { tax_rate: parseFloat(rate)||0, tax_amount: taxAmt, total });
+  await db.from('invoices').update({ tax_rate: parseFloat(rate)||0, tax_amount: taxAmt, subtotal, total }).eq('id', window._currentInvoice.id);
+  renderInvoiceEditor();
+}
+
+function openAddInvoiceItem(editItemId) {
+  const editItem = editItemId ? (window._currentInvoiceItems||[]).find(i=>i.id===editItemId) : null;
+  const lambOpts = allLambs.map(l=>`<option value="${l.id}" ${editItem?.lamb_id===l.id?'selected':''}>${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  const isAnimal = !editItem || editItem.lamb_id;
+
+  // Load saved invoice items from localStorage
+  const savedItems = JSON.parse(localStorage.getItem('flock_invoice_items') || '[]');
+  const savedOpts = savedItems.map(s=>`<option value="${s.desc}|||${s.price}">${s.desc}${s.price?' — $'+parseFloat(s.price).toFixed(2):''}</option>`).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${editItem?'✏️ Edit Item':'+ Add Item'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:0.75rem">
+      <button type="button" id="ii-type-animal" onclick="iiSetType('animal')" style="flex:1;padding:0.45rem;font-size:0.82rem;font-weight:600;background:${isAnimal?'var(--accent)':'var(--surface2)'};color:${isAnimal?'#fff':'var(--text)'};border:none;cursor:pointer">🐑 Animal from Flock</button>
+      <button type="button" id="ii-type-other" onclick="iiSetType('other')" style="flex:1;padding:0.45rem;font-size:0.82rem;font-weight:600;background:${!isAnimal?'var(--accent)':'var(--surface2)'};color:${!isAnimal?'#fff':'var(--text)'};border:none;border-left:1px solid var(--border);cursor:pointer">📝 Other Item</button>
+    </div>
+    <div id="ii-animal-section" style="${!isAnimal?'display:none':''}">
+      <div class="field"><label>Select Animal</label>
+        <select id="ii-lamb" onchange="iiLambSelected()" style="font-size:0.85rem"><option value="">— Select —</option>${lambOpts}</select>
+      </div>
+    </div>
+    <div id="ii-saved-section" style="${isAnimal?'display:none':''}">
+      ${savedItems.length > 0 ? `<div class="field"><label>Saved Items</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <select id="ii-saved-pick" onchange="iiPickSaved()" style="flex:1;font-size:0.85rem">
+            <option value="">— Pick a saved item —</option>${savedOpts}
+          </select>
+          <button type="button" onclick="iiDeleteSaved()" title="Delete saved item" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--danger);font-size:0.85rem">🗑</button>
+        </div>
+      </div>` : ''}
+    </div>
+    <div class="field"><label>Description *</label>
+      <div style="display:flex;gap:0.35rem;align-items:center">
+        <input id="ii-desc" value="${editItem?.description||''}" placeholder="e.g. Delivery fee, halter, supplies..." style="flex:1">
+        <button type="button" id="ii-save-btn" onclick="iiSaveItem()" title="Save as default item" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem" ${isAnimal?'style="display:none"':''}>💾</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Quantity</label><input type="number" id="ii-qty" value="${editItem?.quantity||1}" min="1" oninput="iiUpdateTotal()"></div>
+      <div class="field"><label>Unit Price ($)</label><input type="number" id="ii-price" value="${editItem?.unit_price||''}" step="0.01" min="0" placeholder="0.00" oninput="iiUpdateTotal()"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;font-size:0.95rem;font-weight:700;border-top:1px solid var(--border);margin-top:0.1rem">
+      <span>Line Total</span><span id="ii-total" style="color:var(--accent)">$${editItem?((editItem.total||0).toFixed(2)):'0.00'}</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInvoiceItem('${editItemId||''}')">${editItem?'Update Item':'Add to Invoice'}</button>
+    </div>`);
+}
+
+function iiSetType(type) {
+  const sec = document.getElementById('ii-animal-section');
+  const savedSec = document.getElementById('ii-saved-section');
+  const saveBtn = document.getElementById('ii-save-btn');
+  if (sec) sec.style.display = type==='animal' ? '' : 'none';
+  if (savedSec) savedSec.style.display = type==='other' ? '' : 'none';
+  if (saveBtn) saveBtn.style.display = type==='other' ? '' : 'none';
+  ['animal','other'].forEach(t => {
+    const btn = document.getElementById(`ii-type-${t}`);
+    if (btn) { btn.style.background = t===type?'var(--accent)':'var(--surface2)'; btn.style.color = t===type?'#fff':'var(--text)'; }
+  });
+}
+
+function iiPickSaved() {
+  const val = document.getElementById('ii-saved-pick')?.value;
+  if (!val) return;
+  const [desc, price] = val.split('|||');
+  const descEl = document.getElementById('ii-desc');
+  const priceEl = document.getElementById('ii-price');
+  if (descEl) descEl.value = desc || '';
+  if (priceEl && price && price !== 'undefined') priceEl.value = price;
+  iiUpdateTotal();
+}
+
+function iiSaveItem() {
+  const desc = document.getElementById('ii-desc')?.value?.trim();
+  const price = document.getElementById('ii-price')?.value?.trim();
+  if (!desc) { toast('Enter a description first'); return; }
+  const saved = JSON.parse(localStorage.getItem('flock_invoice_items') || '[]');
+  if (saved.find(s => s.desc === desc)) { toast('Already saved'); return; }
+  saved.push({ desc, price: price||'' });
+  localStorage.setItem('flock_invoice_items', JSON.stringify(saved));
+  toast(`"${desc}" saved as default item`);
+  // Refresh the dropdown
+  const sel = document.getElementById('ii-saved-pick');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = `${desc}|||${price||''}`;
+    opt.textContent = desc + (price ? ` — $${parseFloat(price).toFixed(2)}` : '');
+    sel.appendChild(opt);
+    // Show the saved section if it was hidden
+    const savedSec = document.getElementById('ii-saved-section');
+    if (savedSec) savedSec.style.display = '';
+  }
+}
+
+function iiDeleteSaved() {
+  const sel = document.getElementById('ii-saved-pick');
+  const val = sel?.value;
+  if (!val) { toast('Select an item to delete'); return; }
+  const [desc] = val.split('|||');
+  const saved = JSON.parse(localStorage.getItem('flock_invoice_items') || '[]');
+  const updated = saved.filter(s => s.desc !== desc);
+  localStorage.setItem('flock_invoice_items', JSON.stringify(updated));
+  // Remove from dropdown
+  const opt = sel.querySelector(`option[value="${val}"]`);
+  if (opt) opt.remove();
+  sel.value = '';
+  toast(`"${desc}" removed`);
+}
+
+function iiLambSelected() {
+  const lambId = document.getElementById('ii-lamb')?.value;
+  if (!lambId) return;
+  const lamb = allLambs.find(l => l.id === lambId);
+  if (!lamb) return;
+  const descEl = document.getElementById('ii-desc');
+  if (descEl && !descEl.value) {
+    descEl.value = `${lamb.name} — ${[lamb.sex, lamb.breed, lamb.dob?'DOB: '+lamb.dob:'', lamb.ear_tag?'#'+lamb.ear_tag:''].filter(Boolean).join(', ')}`;
+  }
+}
+
+function iiUpdateTotal() {
+  const qty = parseFloat(document.getElementById('ii-qty')?.value) || 0;
+  const price = parseFloat(document.getElementById('ii-price')?.value) || 0;
+  const el = document.getElementById('ii-total');
+  if (el) el.textContent = `$${(qty*price).toFixed(2)}`;
+}
+
+async function saveInvoiceItem(editId) {
+  const lambId = document.getElementById('ii-lamb')?.value || null;
+  const desc = document.getElementById('ii-desc')?.value?.trim();
+  if (!desc) { toast('Description required'); return; }
+  const qty = parseInt(document.getElementById('ii-qty')?.value) || 1;
+  const price = parseFloat(document.getElementById('ii-price')?.value) || 0;
+  const total = qty * price;
+
+  if (editId) {
+    await db.from('invoice_items').update({ lamb_id: lambId||null, description: desc, quantity: qty, unit_price: price, total }).eq('id', editId);
+    window._currentInvoiceItems = (window._currentInvoiceItems||[]).map(i => i.id===editId ? {...i, lamb_id:lambId||null, description:desc, quantity:qty, unit_price:price, total} : i);
+  } else {
+    const { data: item } = await db.from('invoice_items').insert({ invoice_id: window._currentInvoice.id, lamb_id: lambId||null, description: desc, quantity: qty, unit_price: price, total }).select().single();
+    if (item) window._currentInvoiceItems = [...(window._currentInvoiceItems||[]), item];
+  }
+  // Recalc totals
+  const subtotal = (window._currentInvoiceItems||[]).reduce((s,i)=>s+(i.total||0),0);
+  const taxRate = window._currentInvoice.tax_rate || 0;
+  const taxAmt = subtotal * (taxRate/100);
+  const invTotal = subtotal + taxAmt;
+  await db.from('invoices').update({ subtotal, tax_amount: taxAmt, total: invTotal }).eq('id', window._currentInvoice.id);
+  Object.assign(window._currentInvoice, { subtotal, tax_amount: taxAmt, total: invTotal });
+  toast(editId ? 'Item updated' : 'Item added');
+  closeModal();
+  renderInvoiceEditor();
+}
+
+function editInvoiceItem(id) { openAddInvoiceItem(id); }
+
+async function deleteInvoiceItem(id) {
+  await db.from('invoice_items').delete().eq('id', id);
+  window._currentInvoiceItems = (window._currentInvoiceItems||[]).filter(i => i.id !== id);
+  const subtotal = (window._currentInvoiceItems||[]).reduce((s,i)=>s+(i.total||0),0);
+  const taxAmt = subtotal * ((window._currentInvoice.tax_rate||0)/100);
+  const invTotal = subtotal + taxAmt;
+  await db.from('invoices').update({ subtotal, tax_amount: taxAmt, total: invTotal }).eq('id', window._currentInvoice.id);
+  Object.assign(window._currentInvoice, { subtotal, tax_amount: taxAmt, total: invTotal });
+  toast('Item removed');
+  renderInvoiceEditor();
+}
+
+async function deleteInvoice(id) {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🗑 Delete Invoice</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Permanently delete this invoice? This cannot be undone.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmDeleteInvoice('${id}')">Delete</button>
+    </div>`);
+}
+
+async function confirmDeleteInvoice(id) {
+  await db.from('invoice_items').delete().eq('invoice_id', id);
+  await db.from('invoices').delete().eq('id', id);
+  toast('Invoice deleted');
+  closeModal();
+  renderInvoices();
+}
+
+async function printInvoice(id) {
+  let inv = window._currentInvoice?.id === id ? window._currentInvoice : null;
+  let items = window._currentInvoice?.id === id ? (window._currentInvoiceItems||[]) : null;
+  if (!inv) {
+    const [{ data: i }, { data: it }] = await Promise.all([
+      db.from('invoices').select('*').eq('id', id).single(),
+      db.from('invoice_items').select('*').eq('invoice_id', id),
+    ]);
+    inv = i; items = it || [];
+  }
+  if (!inv) { toast('Invoice not found'); return; }
+
+  const printDate = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+  const p = getFarmProfile();
+  const fromName = inv.from_name || (p.type==='business' ? (p.bizname||p.name||'') : (p.name||''));
+  const fromContact = inv.from_contact || p.owner || '';
+  const fromAddr = inv.from_address || ([p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'');
+  const fromPhone = inv.from_phone || p.phone || '';
+  const fromEmail = inv.from_email || p.email || '';
+  const fromEin = inv.from_ein || p.ein || '';
+  const paymentTerms = p.terms || '';
+  const statusColors = { Draft:'#f3f4f6:#6b7280', Sent:'#eff6ff:#1d4ed8', Paid:'#dcfce7:#15803d', Void:'#fef2f2:#b91c1c' };
+  const [sbg,scol] = (statusColors[inv.status]||'#f3f4f6:#6b7280').split(':');
+
+  const itemRows = items.map(item => `
+    <tr style="border-bottom:1px solid #e5e7eb">
+      <td style="padding:8px 10px;font-size:12px">${item.description||'—'}</td>
+      <td style="padding:8px 10px;font-size:12px;text-align:center">${item.quantity||1}</td>
+      <td style="padding:8px 10px;font-size:12px;text-align:right">$${(item.unit_price||0).toFixed(2)}</td>
+      <td style="padding:8px 10px;font-size:12px;text-align:right;font-weight:600">$${(item.total||0).toFixed(2)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Invoice ${inv.invoice_number||''}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:32px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:3px solid #111;padding-bottom:16px}
+  .farm{font-size:20px;font-weight:700} .farm-sub{font-size:11px;color:#555;margin-top:2px}
+  .inv-title{font-size:26px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;text-align:right}
+  .inv-meta{font-size:11px;color:#555;text-align:right;margin-top:4px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;background:${sbg};color:${scol}}
+  .bill{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;margin-bottom:20px}
+  .bill-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#6b7280;margin-bottom:5px}
+  .bill-name{font-size:13px;font-weight:700} .bill-detail{font-size:11px;color:#555;margin-top:1px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  thead tr{background:#111;color:#fff}
+  thead th{padding:7px 10px;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:0.04em}
+  tbody tr:nth-child(even){background:#f9fafb}
+  .totals{display:flex;justify-content:flex-end}
+  .t-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
+  .t-total{display:flex;justify-content:space-between;padding:7px 0 3px;font-size:14px;font-weight:700;border-top:2px solid #111;margin-top:3px}
+  .notes{margin-top:20px;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;color:#555}
+  .footer{text-align:center;font-size:9px;color:#9ca3af;margin-top:28px;border-top:1px solid #e5e7eb;padding-top:8px}
+  @media print{body{padding:16px}}
+</style></head><body>
+  <div class="header">
+    <div><div class="farm">${fromName}</div>
+    ${fromContact?`<div class="farm-sub">${fromContact}</div>`:''}
+    <div class="farm-sub">${fromAddr}</div>
+    ${fromPhone?`<div class="farm-sub">${fromPhone}</div>`:''}
+    ${fromEmail?`<div class="farm-sub">${fromEmail}</div>`:''}
+    ${fromEin?`<div class="farm-sub">EIN: ${fromEin}</div>`:''}
+    </div>
+    <div><div class="inv-title">Invoice</div><div class="inv-meta">${inv.invoice_number||''}</div><div class="inv-meta">Date: ${inv.invoice_date||printDate}</div><div style="text-align:right;margin-top:5px"><span class="badge">${inv.status||'Draft'}</span></div></div>
+  </div>
+  <div class="bill">
+    <div class="bill-label">Bill To</div>
+    <div class="bill-name">${inv.buyer_name||'—'}</div>
+    ${inv.buyer_address?`<div class="bill-detail">${inv.buyer_address}</div>`:''}
+    ${inv.buyer_email?`<div class="bill-detail">${inv.buyer_email}</div>`:''}
+    ${inv.buyer_phone?`<div class="bill-detail">${inv.buyer_phone}</div>`:''}
+  </div>
+  <table>
+    <thead><tr><th style="width:55%">Description</th><th style="width:10%;text-align:center">Qty</th><th style="width:17%;text-align:right">Unit Price</th><th style="width:18%;text-align:right">Amount</th></tr></thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+  <div class="totals"><div style="min-width:220px">
+    <div class="t-row"><span style="color:#555">Subtotal</span><span>$${(inv.subtotal||0).toFixed(2)}</span></div>
+    ${inv.tax_rate?`<div class="t-row"><span style="color:#555">Tax (${inv.tax_rate}%)</span><span>$${(inv.tax_amount||0).toFixed(2)}</span></div>`:''}
+    <div class="t-total"><span>Total</span><span style="color:#2e7d4f">$${(inv.total||0).toFixed(2)}</span></div>
+  </div></div>
+  ${inv.notes?`<div class="notes"><strong>Notes:</strong> ${inv.notes}</div>`:''}
+  ${paymentTerms?`<div class="notes" style="margin-top:8px"><strong>Payment Terms:</strong> ${paymentTerms}</div>`:''}
+  <div class="footer">${fromName ? fromName+' · ' : ''}Flock Health Ledger · Generated ${printDate}</div>
+</body></html>`;
+
+  openPrintWindow(html, 'Invoice');
+}
+
+function openPrintWindow(html, title) {
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  } else {
+    // Popup blocked — open in same tab via blob URL
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.click();
+    // Fallback: write to current page in a print overlay
+    setTimeout(() => {
+      if (!document.hidden) {
+        const overlay = document.createElement('div');
+        overlay.id = 'print-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;overflow:auto;padding:0';
+        overlay.innerHTML = `<div style="position:fixed;top:10px;right:10px;z-index:10000;display:flex;gap:0.5rem">
+          <button onclick="window.print()" style="padding:0.5rem 1rem;background:#2e7d4f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px">🖨️ Print</button>
+          <button onclick="document.getElementById('print-overlay').remove()" style="padding:0.5rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px">✕ Close</button>
+        </div>
+        <iframe srcdoc="" id="print-frame" style="width:100%;height:100vh;border:none"></iframe>`;
+        document.body.appendChild(overlay);
+        document.getElementById('print-frame').srcdoc = html;
+      }
+    }, 300);
+  }
+}
+
 function renderExport() {
   document.getElementById('main-content').innerHTML = `
     <div class="section-header"><div class="section-title" style="font-size:1.15rem">Export Data</div></div>
@@ -3688,19 +4342,12 @@ async function generateHealthPapers() {
   </div>
 
   <div class="footer">
-    Generated ${printDate} · Hidden Creek Lambs · Flock Health Ledger
+    Generated ${printDate} · ${getFarmProfile().name||getFarmProfile().bizname||'Hidden Creek Lambs'} · Flock Health Ledger
   </div>
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 500);
-  } else {
-    toast('Allow pop-ups to print health papers');
-  }
+  openPrintWindow(html, 'Health Papers');
   closeModal();
 }
 
@@ -5686,13 +6333,11 @@ async function printPlan(groupId) {
   ${scheduleSection(donorSteps, `🐑 Donor Protocol${prot?' — '+prot.name:''}`, '#2e7d4f')}
   ${isFlush ? scheduleSection(recipSteps, `🐄 Recip Protocol${recipProt?' — '+recipProt.name:''}`, '#1d4ed8') : ''}
 
-  <div class="footer">Hidden Creek Lambs · Flock Health Ledger · ${printDate}</div>
+  <div class="footer">${getFarmProfile().name||getFarmProfile().bizname||'Hidden Creek Lambs'} · Flock Health Ledger · ${printDate}</div>
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
-  else toast('Allow pop-ups to print plan');
+  openPrintWindow(html, 'Plan');
 }
 
 function cancelPlan(groupId) {
