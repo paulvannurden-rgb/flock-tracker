@@ -2001,7 +2001,6 @@ function renderShowDetail() {
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.showman||''}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
         <td style="padding:0.3rem 0.75rem;text-align:center;white-space:nowrap">
-          <button class="btn-icon btn-sm" onclick="openAddShowEntry('${e.show_id}','${e.lamb_id}')" title="Add another class">+</button>
           <button class="btn-icon btn-sm" onclick="openEditShowEntry('${e.id}')">✏️</button>
           <button class="btn-icon btn-sm" onclick="deleteShowEntry('${e.id}')" style="color:var(--danger)">🗑</button>
         </td>
@@ -2187,49 +2186,111 @@ async function saveShowEntry(showId) {
 }
 
 function openEditShowEntry(entryId) {
+  // Find the clicked entry to get the lamb
   const entry = (window._currentShowEntries||[]).find(e => e.id === entryId);
   if (!entry) return;
   const lamb = allLambs.find(l => l.id === entry.lamb_id);
   const lastWt = (window._lastWeightByLamb||{})[entry.lamb_id];
+  const showDate = window._currentShow?.show_date || '';
+
+  // Get ALL entries for this lamb in this show
+  const lambEntries = (window._currentShowEntries||[]).filter(e => e.lamb_id === entry.lamb_id);
+
+  const lambName = lamb?.name || 'Animal';
+  const lastWtHtml = lastWt ? `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Last weight log: <strong>${lastWt.weight_lbs} lbs</strong> on ${lastWt.date}</div>` : '';
+
+  // Build existing class rows
+  const existingRows = lambEntries.map(e =>
+    '<div class="ee-class-row" data-entry-id="' + e.id + '" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center">'
+    + '<input placeholder="Class (e.g. Market Lamb)" value="' + (e['class']||'') + '" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<input placeholder="Place (e.g. 1st)" value="' + (e.place||'') + '" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<button class="btn-icon" onclick="eeRemoveRow(this,\'' + e.id + '\')" title="Remove">✕</button>'
+    + '</div>'
+  ).join('');
+
+  // Use shared entry weight / showman / notes from the first entry
+  const firstEntry = lambEntries[0];
 
   showModal(`
-    <div class="modal-header"><div class="modal-title">✏️ Edit Entry — ${lamb?.name||'Animal'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-header"><div class="modal-title">✏️ Edit — ${lambName}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.4rem">Classes / Divisions</div>
+    <div id="ee-class-rows">${existingRows}</div>
+    <button class="btn btn-secondary btn-sm" onclick="eeAddClassRow()" style="margin-bottom:0.75rem">+ Add Another Class</button>
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.5rem 0 0.4rem">Entry Weight (optional)</div>
     <div class="row">
-      <div class="field"><label>Class / Division</label><input id="ee-class" value="${entry.class||''}" placeholder="e.g. Market Lamb"></div>
-      <div class="field"><label>Place / Result</label><input id="ee-place" value="${entry.place||''}" placeholder="e.g. 1st, Grand Champion"></div>
+      <div class="field"><label>Weight (lbs)</label><input type="number" step="0.1" id="ee-weight" value="${firstEntry?.entry_weight||''}" placeholder="e.g. 125.5"></div>
+      <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${firstEntry?.entry_weight_date||showDate}"></div>
     </div>
-    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Entry Weight</div>
-    <div class="row">
-      <div class="field"><label>Weight (lbs)</label><input type="number" step="0.1" id="ee-weight" value="${entry.entry_weight||''}" placeholder="e.g. 125.5"></div>
-      <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${entry.entry_weight_date||window._currentShow?.show_date||''}"></div>
-    </div>
-    ${lastWt ? `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Last weight log: <strong>${lastWt.weight_lbs} lbs</strong> on ${lastWt.date}</div>` : ''}
-    <div class="field"><label>Showman</label><input id="ee-showman" value="${entry.showman||''}" placeholder="e.g. Emma Smith"></div>
-    <div class="field"><label>Notes</label><input id="ee-notes" value="${entry.notes||''}" placeholder="Optional"></div>
+    ${lastWtHtml}
+    <div class="field"><label>Showman</label><input id="ee-showman" value="${firstEntry?.showman||''}" placeholder="e.g. Emma Smith"></div>
+    <div class="field"><label>Notes</label><input id="ee-notes" value="${firstEntry?.notes||''}" placeholder="Optional"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveEditShowEntry('${entryId}')">Save</button>
-    </div>`);
+      <button class="btn btn-primary" onclick="saveEditShowEntries('${entry.lamb_id}','${window._currentShow?.id}')">Save</button>
+    </div>`, true);
 }
 
-async function saveEditShowEntry(entryId) {
-  const entry = (window._currentShowEntries||[]).find(e => e.id === entryId);
-  if (!entry) return;
-  const cls = document.getElementById('ee-class')?.value?.trim()||null;
-  const place = document.getElementById('ee-place')?.value?.trim()||null;
+function eeAddClassRow() {
+  const container = document.getElementById('ee-class-rows');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'ee-class-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center';
+  row.innerHTML = '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<input placeholder="Place (e.g. 2nd)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<button class="btn-icon" onclick="this.closest(\'.ee-class-row\').remove()" title="Remove">✕</button>';
+  container.appendChild(row);
+}
+
+function eeRemoveRow(btn, entryId) {
+  const row = btn.closest('.ee-class-row');
+  // If it's the only row, don't remove
+  if (document.querySelectorAll('.ee-class-row').length <= 1) { toast('Must have at least one class'); return; }
+  row.remove();
+  // Mark for deletion
+  if (!window._eeDeleteIds) window._eeDeleteIds = [];
+  if (entryId) window._eeDeleteIds.push(entryId);
+}
+
+async function saveEditShowEntries(lambId, showId) {
   const wt = parseFloat(document.getElementById('ee-weight')?.value);
   const wtDate = document.getElementById('ee-wt-date')?.value;
   const notes = document.getElementById('ee-notes')?.value?.trim()||null;
   const showman = document.getElementById('ee-showman')?.value?.trim()||null;
+  const entryWeight = (wt && !isNaN(wt)) ? wt : null;
+  const entryWeightDate = wtDate||null;
 
-  await db.from('show_entries').update({
-    'class': cls, place, notes, showman,
-    entry_weight: (wt && !isNaN(wt)) ? wt : null,
-    entry_weight_date: wtDate||null,
-  }).eq('id', entryId);
+  // Delete removed rows
+  for (const id of (window._eeDeleteIds||[])) {
+    await db.from('show_entries').delete().eq('id', id);
+  }
+  window._eeDeleteIds = [];
+
+  // Update/insert remaining rows
+  const rows = document.querySelectorAll('.ee-class-row');
+  const existingEntries = (window._currentShowEntries||[]).filter(e => e.lamb_id === lambId);
+
+  for (let i = 0; i < rows.length; i++) {
+    const inputs = rows[i].querySelectorAll('input');
+    const cls = inputs[0]?.value?.trim()||null;
+    const place = inputs[1]?.value?.trim()||null;
+    const existingId = rows[i].getAttribute('data-entry-id');
+
+    if (existingId) {
+      await db.from('show_entries').update({
+        'class': cls, place, notes, showman, entry_weight: entryWeight, entry_weight_date: entryWeightDate
+      }).eq('id', existingId);
+    } else {
+      await db.from('show_entries').insert({
+        show_id: showId, lamb_id: lambId,
+        'class': cls, place, notes, showman, entry_weight: entryWeight, entry_weight_date: entryWeightDate
+      });
+    }
+  }
+
   toast('Entry updated');
   closeModal();
-  await openShowDetail(window._currentShow.id);
+  await openShowDetail(showId);
 }
 
 async function deleteShowEntry(entryId) {
@@ -2330,6 +2391,16 @@ function openBulkShowWeight(showId) {
   const entries = window._currentShowEntries || [];
   const defaultDate = show?.show_date || new Date().toISOString().slice(0,10);
 
+  // Deduplicate by lamb_id — one row per animal
+  const seen = new Set();
+  const uniqueEntries = entries.filter(e => {
+    if (seen.has(e.lamb_id)) return false;
+    seen.add(e.lamb_id);
+    return true;
+  });
+
+  const lastWtByLamb = window._lastWeightByLamb || {};
+
   showModal(`
     <div class="modal-header"><div class="modal-title">⚖️ Log Show Weights</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Enter weights for animals entered in this show.</div>
@@ -2339,13 +2410,17 @@ function openBulkShowWeight(showId) {
       <select id="bsw-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem"><option>AM</option><option>PM</option></select>
     </div>
     <div style="height:300px;overflow-y:scroll">
-      ${entries.length === 0 ? '<div style="text-align:center;color:var(--text3);padding:2rem">No animals in this show yet</div>' :
-        entries.map(e => {
+      ${uniqueEntries.length === 0 ? '<div style="text-align:center;color:var(--text3);padding:2rem">No animals in this show yet</div>' :
+        uniqueEntries.map(e => {
           const lamb = allLambs.find(l => l.id === e.lamb_id);
-          const wr = e.weight_records;
+          const lw = lastWtByLamb[e.lamb_id];
           return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-            <div style="flex:1;font-size:0.85rem;font-weight:600;color:var(--text)">${lamb?.name||'?'} <span style="font-size:0.75rem;color:var(--text3)">${lamb?.ear_tag?'#'+lamb.ear_tag:''}</span></div>
-            <input type="number" step="0.1" id="bsw-wt-${e.id}" value="${wr?.weight_lbs||''}" placeholder="lbs" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+            <div style="flex:1;min-width:0">
+              <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${lamb?.name||'?'}</span>
+              <span style="font-size:0.75rem;color:var(--text3)"> ${lamb?.ear_tag?'#'+lamb.ear_tag:''}</span>
+              ${lw ? `<span style="font-size:0.72rem;color:var(--text3)"> · Last: ${lw.weight_lbs} lbs</span>` : ''}
+            </div>
+            <input type="number" step="0.1" id="bsw-wt-${e.lamb_id}" placeholder="lbs" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
           </div>`;
         }).join('')}
     </div>
@@ -2359,25 +2434,23 @@ async function saveBulkShowWeight(showId) {
   const entries = window._currentShowEntries || [];
   const date = document.getElementById('bsw-date')?.value;
   const weigh_time = combineTimeAmPm('bsw-time','bsw-ampm');
-  const updates = [];
 
-  for (const e of entries) {
-    const wt = parseFloat(document.getElementById(`bsw-wt-${e.id}`)?.value);
+  // Deduplicate by lamb_id
+  const seen = new Set();
+  const uniqueLambIds = [];
+  entries.forEach(e => { if (!seen.has(e.lamb_id)) { seen.add(e.lamb_id); uniqueLambIds.push(e.lamb_id); } });
+
+  let saved = 0;
+  for (const lambId of uniqueLambIds) {
+    const wt = parseFloat(document.getElementById(`bsw-wt-${lambId}`)?.value);
     if (isNaN(wt)) continue;
-    if (e.weight_record_id) {
-      await db.from('weight_records').update({ weight_lbs: wt, date, weigh_time: weigh_time||null }).eq('id', e.weight_record_id);
-    } else {
-      const { data: wr } = await db.from('weight_records').insert({
-        lamb_id: e.lamb_id, weight_lbs: wt, date, weigh_time: weigh_time||null, show_id: showId
-      }).select().single();
-      if (wr) {
-        await db.from('show_entries').update({ weight_record_id: wr.id }).eq('id', e.id);
-      }
-    }
-    updates.push(e.id);
+    await db.from('weight_records').insert({
+      lamb_id: lambId, weight_lbs: wt, date, weigh_time: weigh_time||null, show_id: showId
+    });
+    saved++;
   }
 
-  toast(`${updates.length} weight${updates.length!==1?'s':''} saved`);
+  toast(`${saved} weight${saved!==1?'s':''} saved`);
   closeModal();
   await openShowDetail(showId);
 }
