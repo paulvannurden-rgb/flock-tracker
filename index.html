@@ -2220,9 +2220,10 @@ async function saveEditShowEntry(entryId) {
   const wt = parseFloat(document.getElementById('ee-weight')?.value);
   const wtDate = document.getElementById('ee-wt-date')?.value;
   const notes = document.getElementById('ee-notes')?.value?.trim()||null;
+  const showman = document.getElementById('ee-showman')?.value?.trim()||null;
 
   await db.from('show_entries').update({
-    'class': cls, place, notes,
+    'class': cls, place, notes, showman,
     entry_weight: (wt && !isNaN(wt)) ? wt : null,
     entry_weight_date: wtDate||null,
   }).eq('id', entryId);
