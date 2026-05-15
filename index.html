@@ -1989,8 +1989,8 @@ function renderShowDetail() {
       entryRows += `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <td style="padding:${isFirst?'0.6rem 0.85rem 0.3rem':'0.2rem 0.85rem 0.3rem'};font-weight:${isFirst?'600':'400'};color:${isFirst?'var(--text)':'var(--text3)'}">
           ${isFirst ? (lamb?.name||'Unknown') : ''}
-          ${isFirst && lamb?.ear_tag ? '<span style="font-size:0.75rem;font-weight:400;color:var(--text3)"> #'+lamb.ear_tag+'</span>' : ''}
         </td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${isFirst && lamb?.ear_tag ? '#'+lamb.ear_tag : ''}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.class||'—'}</td>
         <td style="padding:0.3rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs'+(e.entry_weight_date?' · '+e.entry_weight_date:'') : '—'}</td>
