@@ -1951,9 +1951,10 @@ async function openShowDetail(showId) {
     db.from('weight_records').select('*').order('date', {ascending:false}),
   ]);
   if (!show) { renderShows(); return; }
-  // Get most recent weight per animal from weight_records
+  // Get most recent weight per animal — exclude show-linked records (those are entry weights, not log weights)
   const lastWeightByLamb = {};
   (allWeightRecs||[]).forEach(wr => {
+    if (wr.show_id) return; // skip — this is a show entry weight, not a general log
     if (!lastWeightByLamb[wr.lamb_id]) lastWeightByLamb[wr.lamb_id] = wr;
   });
   window._currentShow = show;
@@ -2545,7 +2546,12 @@ async function printShowHealthPapers(showId) {
   }
   if (!show) { toast('Show not found'); return; }
 
-  const animals = entries.map(e => allLambs.find(l => l.id === e.lamb_id)).filter(Boolean);
+  const seen = new Set();
+  const animals = entries.map(e => allLambs.find(l => l.id === e.lamb_id)).filter(l => {
+    if (!l || seen.has(l.id)) return false;
+    seen.add(l.id);
+    return true;
+  });
   if (animals.length === 0) { toast('No animals in this show'); return; }
 
   const p = getFarmProfile();
