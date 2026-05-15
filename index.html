@@ -2055,13 +2055,38 @@ async function saveShowField(field, value) {
 function openAddShowEntry(showId, preSelectedLambId) {
   const entries = window._currentShowEntries || [];
   const available = allLambs.filter(l => l.status === 'Active');
-  const lambOpts = available.map(l => `<option value="${l.id}" ${l.id===preSelectedLambId?'selected':''}>${l.name}${l.ear_tag?' #'+l.ear_tag:''} ${l.flock_type?'· '+l.flock_type:''}</option>`).join('');
+  window._seAvailable = available;
   const showDate = window._currentShow?.show_date || new Date().toISOString().slice(0,10);
+
+  const lambOptsFn = (filterQ, filterFlock, filterSex) => {
+    return available.filter(l => {
+      const ft = l.flock_type || '';
+      if (filterQ && !l.name.toLowerCase().includes(filterQ) && !(l.ear_tag||'').toLowerCase().includes(filterQ)) return false;
+      if (filterFlock === 'Show' && !(ft==='Show'||ft==='Both')) return false;
+      if (filterFlock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) return false;
+      if (filterSex && l.sex !== filterSex) return false;
+      return true;
+    }).map(l => `<option value="${l.id}" ${l.id===preSelectedLambId?'selected':''}>${l.name}${l.ear_tag?' #'+l.ear_tag:''} ${l.flock_type?'· '+l.flock_type:''}</option>`).join('');
+  };
 
   showModal(`
     <div class="modal-header"><div class="modal-title">+ Add Animal to Show</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     ${available.length === 0 ? '<div style="padding:1rem;color:var(--text3)">No active animals in your flock.</div>' : `
-    <div class="field"><label>Animal *</label><select id="se-lamb"><option value="">— Select —</option>${lambOpts}</select></div>
+    <div class="field">
+      <label>Animal *</label>
+      <div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;flex-wrap:wrap">
+        <input id="se-filter-q" placeholder="Search name, tag..." oninput="seFilterAnimals()" style="flex:1;min-width:100px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <select id="se-filter-flock" onchange="seFilterAnimals()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Flocks</option><option value="Show">Show</option><option value="Breeding">Breeding</option><option value="Both">Both</option>
+        </select>
+        <select id="se-filter-sex" onchange="seFilterAnimals()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Sexes</option><option value="Ewe">Ewes</option><option value="Wether">Wethers</option><option value="Ram">Rams</option>
+        </select>
+      </div>
+      <select id="se-lamb" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
+        <option value="">— Select —</option>${lambOptsFn('','','')}
+      </select>
+    </div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Classes / Divisions</div>
     <div id="se-class-rows">
       <div class="se-class-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center">
@@ -2085,6 +2110,27 @@ function openAddShowEntry(showId, preSelectedLambId) {
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       ${available.length > 0 ? `<button class="btn btn-primary" onclick="saveShowEntry('${showId}')">Add to Show</button>` : ''}
     </div>`, true);
+}
+
+function seFilterAnimals() {
+  const q = document.getElementById('se-filter-q')?.value?.toLowerCase() || '';
+  const flock = document.getElementById('se-filter-flock')?.value || '';
+  const sex = document.getElementById('se-filter-sex')?.value || '';
+  const sel = document.getElementById('se-lamb');
+  if (!sel) return;
+  const current = sel.value;
+  const filtered = (window._seAvailable || []).filter(l => {
+    const ft = l.flock_type || '';
+    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q)) return false;
+    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) return false;
+    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) return false;
+    if (flock === 'Both' && ft !== 'Both') return false;
+    if (sex && l.sex !== sex) return false;
+    return true;
+  });
+  sel.innerHTML = '<option value="">— Select —</option>' + filtered.map(l =>
+    `<option value="${l.id}" ${l.id===current?'selected':''}>${l.name}${l.ear_tag?' #'+l.ear_tag:''} ${l.flock_type?'· '+l.flock_type:''}</option>`
+  ).join('');
 }
 
 function seAddClassRow() {
