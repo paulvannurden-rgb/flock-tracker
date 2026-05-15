@@ -153,7 +153,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* SECTION HEADER */
-  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
   .section-title { font-size: 0.85rem; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 
   /* PROFILE HEADER */
@@ -275,11 +275,12 @@
 
   <!-- MOBILE HEADER -->
   <div id="mobile-header" style="display:none;position:fixed;top:0;left:0;right:0;background:var(--surface);border-bottom:1px solid var(--border);padding:0.75rem 1rem;z-index:60;align-items:center;justify-content:space-between">
+    <button onclick="toggleMobileMenu()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:1.1rem;cursor:pointer">☰</button>
     <div style="display:flex;align-items:center;gap:0.6rem">
       <div style="width:28px;height:28px;background:var(--accent-glow);border:1px solid var(--border2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.9rem">🐑</div>
       <div style="font-size:0.88rem;font-weight:700;color:var(--text)">Flock Ledger</div>
     </div>
-    <button onclick="toggleMobileMenu()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:1.1rem;cursor:pointer">☰</button>
+    <div style="width:38px"></div>
   </div>
 
   <!-- MOBILE OVERLAY -->
@@ -309,6 +310,7 @@ let customProducts = { vaccine: [], medication: [], cost: [] };
 let flockFilter = 'Active';
 let flockTypeFilter = 'All';
 let flockRoleFilter = 'All Roles';
+let flockSexFilter = 'All';
 let flockSearch = '';
 let confirmingDelete = null;
 
@@ -528,31 +530,50 @@ function showLamb(id) {
 }
 
 // ── FLOCK PAGE ────────────────────────────────────────
+let flockViewMode = localStorage.getItem('flock_view_mode') || 'card';
+
 function renderFlock() {
   const statuses = ['Active','Sold','Deceased','All'];
   const flockTypes = ['All','Show','Breeding','Both'];
   const roles = ['All Roles','Embryo Donor','Embryo Recipient','Standard'];
+  const sexes = ['All','Ewe','Wether','Ram'];
   const filtered = allLambs.filter(l => {
     const flockType = l.flock_type || (l.sex === 'Wether' ? 'Show' : 'Breeding');
     const matchStatus = flockFilter === 'All' || l.status === flockFilter;
     const matchType = flockTypeFilter === 'All' || flockType === flockTypeFilter || flockType === 'Both';
     const matchRole = flockRoleFilter === 'All Roles' || l.role === flockRoleFilter || (flockRoleFilter === 'Embryo Donor' && l.role === 'Both') || (flockRoleFilter === 'Embryo Recipient' && l.role === 'Both');
+    const matchSex = flockSexFilter === 'All' || l.sex === flockSexFilter;
     const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.alt_id||'').toLowerCase().includes(flockSearch.toLowerCase());
-    return matchStatus && matchType && matchRole && matchSearch;
+    return matchStatus && matchType && matchRole && matchSex && matchSearch;
   });
+
+  const viewToggle = `
+    <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
+      <button onclick="flockViewMode='card';localStorage.setItem('flock_view_mode','card');renderFlock()" title="Card view" style="padding:0.35rem 0.6rem;background:${flockViewMode==='card'?'var(--accent)':'var(--surface2)'};color:${flockViewMode==='card'?'#fff':'var(--text3)'};border:none;cursor:pointer;font-size:0.85rem">⊞</button>
+      <button onclick="flockViewMode='table';localStorage.setItem('flock_view_mode','table');renderFlock()" title="Table view" style="padding:0.35rem 0.6rem;background:${flockViewMode==='table'?'var(--accent)':'var(--surface2)'};color:${flockViewMode==='table'?'#fff':'var(--text3)'};border:none;border-left:1px solid var(--border);cursor:pointer;font-size:0.85rem">☰</button>
+    </div>`;
 
   let html = `
     <div class="search-bar">
-      <input placeholder="Search name, tag, scrapie ID…" value="${flockSearch}" oninput="flockSearch=this.value;renderFlock()">
-      <div style="display:flex;gap:0.3rem;flex-wrap:wrap">
-        ${statuses.map(s=>`<button class="filter-btn ${flockFilter===s?'active':''}" onclick="flockFilter='${s}';renderFlock()">${s}</button>`).join('')}
-        <div style="width:1px;background:var(--border);margin:0 0.2rem"></div>
-        ${flockTypes.map(t=>`<button class="filter-btn ${flockTypeFilter===t?'active':''}" onclick="flockTypeFilter='${t}';renderFlock()">${t==='All'?'All Flocks':t+' Flock'}</button>`).join('')}
-        <div style="width:1px;background:var(--border);margin:0 0.2rem"></div>
-        ${roles.map(r=>`<button class="filter-btn ${flockRoleFilter===r?'active':''}" onclick="flockRoleFilter='${r}';renderFlock()">${r==='All Roles'?'All Roles':r==='Embryo Donor'?'Donors':r==='Embryo Recipient'?'Recipients':'Standard'}</button>`).join('')}
+      <input placeholder="Search name, tag, scrapie ID…" value="${flockSearch}" oninput="flockSearch=this.value;renderFlock()" style="flex:1;min-width:160px">
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+        <select onchange="flockFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+          ${statuses.map(s=>`<option value="${s}" ${flockFilter===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <select onchange="flockTypeFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+          ${flockTypes.map(t=>`<option value="${t}" ${flockTypeFilter===t?'selected':''}>${t==='All'?'All Flocks':t+' Flock'}</option>`).join('')}
+        </select>
+        <select onchange="flockRoleFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+          ${roles.map(r=>`<option value="${r}" ${flockRoleFilter===r?'selected':''}>${r==='All Roles'?'All Roles':r==='Embryo Donor'?'Donors':r==='Embryo Recipient'?'Recipients':'Standard'}</option>`).join('')}
+        </select>
+        <select onchange="flockSexFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+          ${sexes.map(s=>`<option value="${s}" ${flockSexFilter===s?'selected':''}>${s==='All'?'All Sexes':s+'s'}</option>`).join('')}
+        </select>
+        ${viewToggle}
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="openAddLamb()">+ Add Animal</button>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.9rem;display:flex;align-items:center;gap:0.5rem">
         <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">${filtered.length}</span>
         <span style="font-size:0.75rem;color:var(--text3);font-weight:500">${filtered.length === 1 ? 'animal' : 'animals'}</span>
@@ -564,6 +585,41 @@ function renderFlock() {
 
   if (filtered.length === 0) {
     html += `<div class="empty"><div class="empty-icon">🐑</div><h3>No lambs found</h3><p>Try a different filter or add your first lamb</p></div>`;
+  } else if (flockViewMode === 'table') {
+    const rows = filtered.map(lamb => {
+      const flockType = lamb.flock_type || (lamb.sex === 'Wether' ? 'Show' : 'Breeding');
+      const statusBadge = lamb.status === 'Active' ? 'badge-green' : lamb.status === 'Sold' ? 'badge-blue' : 'badge-red';
+      const flockBadge = flockType === 'Show' ? 'badge-purple' : flockType === 'Breeding' ? 'badge-blue' : 'badge-gray';
+      return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showLamb('${lamb.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:0.55rem 0.85rem;font-weight:600;color:var(--text)">${lamb.name}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.ear_tag?'#'+lamb.ear_tag:'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.alt_id||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.scrapie_id||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.sex||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.breed||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.dob||'—'}</td>
+        <td style="padding:0.55rem 0.75rem"><span class="badge ${flockBadge}" style="font-size:0.65rem">${flockType}</span></td>
+        <td style="padding:0.55rem 0.75rem"><span class="badge ${statusBadge}">${lamb.status||'Active'}</span></td>
+        ${lamb.role&&lamb.role!=='Standard'?`<td style="padding:0.55rem 0.75rem"><span class="badge badge-yellow" style="font-size:0.65rem">${lamb.role==='Embryo Donor'?'Donor':lamb.role==='Embryo Recipient'?'Recip':'Both'}</span></td>`:`<td style="padding:0.55rem 0.75rem;color:var(--text3);font-size:0.75rem">—</td>`}
+      </tr>`;
+    }).join('');
+    html += `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.55rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Name</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Ear Tag</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Alt ID</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Scrapie ID</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Sex</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Breed</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">DOB</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Flock</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Status</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Role</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
   } else {
     html += `<div class="flock-grid">`;
     filtered.forEach(lamb => {
@@ -699,10 +755,8 @@ async function renderHealthTab(el) {
   const { data: records } = await db.from('health_records').select('*').eq('lamb_id', currentLambId).order('date', {ascending:false});
   const recs = records || [];
   let html = `
-    <div class="section-header">
-      <div class="section-title">Health Records</div>
-      <button class="btn btn-primary btn-sm" onclick="openAddRecord()">+ Log Record</button>
-    </div>`;
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddRecord()">+ Log Record</button>
+      <div class="section-title">Health Records</div></div>`;
   if (recs.length === 0) {
     html += `<div class="empty"><div class="empty-icon">💉</div><h3>No records yet</h3><p>Log a vaccine or medication</p></div>`;
   } else {
@@ -751,10 +805,8 @@ async function renderWeightTab(el) {
   const { data } = await db.from('weight_records').select('*').eq('lamb_id', currentLambId).order('date', {ascending:true});
   const recs = data || [];
   let html = `
-    <div class="section-header">
-      <div class="section-title">Weight Records</div>
-      <button class="btn btn-primary btn-sm" onclick="openAddWeight()">+ Log Weight</button>
-    </div>`;
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddWeight()">+ Log Weight</button>
+      <div class="section-title">Weight Records</div></div>`;
   if (recs.length >= 2) {
     html += `<div class="weight-chart"><canvas id="weight-canvas" height="180"></canvas></div>`;
   }
@@ -828,10 +880,8 @@ async function renderBreedingTab(el) {
   const { data } = await db.from('breeding_records').select('*, breeding_results(*, breeding_result_lambs(*))').eq('lamb_id', currentLambId).order('breeding_date', {ascending:false});
   const recs = data || [];
   let html = `
-    <div class="section-header">
-      <div class="section-title">Breeding Records</div>
-      <button class="btn btn-primary btn-sm" onclick="openAddBreeding()">+ Log Breeding</button>
-    </div>`;
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddBreeding()">+ Log Breeding</button>
+      <div class="section-title">Breeding Records</div></div>`;
   if (recs.length === 0) {
     html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No breeding records</h3></div>`;
   } else {
@@ -1042,10 +1092,8 @@ async function renderEmbryoTab(el) {
   if (lamb.role === 'Embryo Donor' || lamb.role === 'Both') {
     const { data: flushes } = await db.from('embryo_flushes').select('*, embryo_transfers(*)').eq('donor_id', currentLambId).order('flush_date', {ascending:false});
     html += `
-      <div class="section-header">
-        <div class="section-title">🔬 Flush Records (Donor)</div>
-        <button class="btn btn-primary btn-sm" onclick="openAddFlush()">+ Log Flush</button>
-      </div>`;
+      <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddFlush()">+ Log Flush</button>
+      <div class="section-title">🔬 Flush Records (Donor)</div></div>`;
     if (!flushes || flushes.length === 0) {
       html += `<div class="empty" style="padding:1.5rem"><div class="empty-icon">🔬</div><h3>No flush records</h3></div>`;
     } else {
@@ -1124,10 +1172,8 @@ async function renderNotesTab(el) {
   const { data } = await db.from('lamb_notes').select('*').eq('lamb_id', currentLambId).order('date', {ascending:false});
   const notes = data || [];
   let html = `
-    <div class="section-header">
-      <div class="section-title">Ongoing Notes</div>
-      <button class="btn btn-primary btn-sm" onclick="openAddNote()">+ Add Note</button>
-    </div>`;
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddNote()">+ Add Note</button>
+      <div class="section-title">Ongoing Notes</div></div>`;
   if (notes.length === 0) {
     html += `<div class="empty"><div class="empty-icon">📝</div><h3>No notes yet</h3></div>`;
   } else {
@@ -1227,18 +1273,67 @@ function getSireDisplay(sire_id, ai_sire_id, sire_text) {
   return sire_text || '—';
 }
 
+let aiRamsViewMode = localStorage.getItem('airams_view_mode') || 'card';
+
 function renderAiRams() {
-  let html = `
-    <div class="section-header">
-      <div class="section-title" style="font-size:1.15rem">AI Rams</div>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" onclick="openSemenInventory()">🧪 Inventory</button>
-        <button class="btn btn-secondary btn-sm" onclick="openAddInventoryPicker()">+ Add Inventory</button>
-        <button class="btn btn-primary btn-sm" onclick="openAddAiRam()">+ Add AI Ram</button>
-      </div>
+  const viewToggle = `
+    <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
+      <button onclick="aiRamsViewMode='card';localStorage.setItem('airams_view_mode','card');renderAiRams()" title="Card view" style="padding:0.35rem 0.6rem;background:${aiRamsViewMode==='card'?'var(--accent)':'var(--surface2)'};color:${aiRamsViewMode==='card'?'#fff':'var(--text3)'};border:none;cursor:pointer;font-size:0.85rem">⊞</button>
+      <button onclick="aiRamsViewMode='table';localStorage.setItem('airams_view_mode','table');renderAiRams()" title="Table view" style="padding:0.35rem 0.6rem;background:${aiRamsViewMode==='table'?'var(--accent)':'var(--surface2)'};color:${aiRamsViewMode==='table'?'#fff':'var(--text3)'};border:none;border-left:1px solid var(--border);cursor:pointer;font-size:0.85rem">☰</button>
     </div>`;
+
+  let html = `
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddAiRam()">+ Add AI Ram</button>
+      <div class="section-title" style="font-size:1.15rem">AI Rams</div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+        ${viewToggle}
+        <button class="btn btn-secondary btn-sm" onclick="openSemenInventory()">🧪 Inventory</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddInventoryPicker()">+ Add Inventory</button></div>
+    </div>`;
+
   if (allAiRams.length === 0) {
     html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No AI rams yet</h3><p>Add AI rams to use them in breeding and embryo records</p></div>`;
+  } else if (aiRamsViewMode === 'table') {
+    const rows = allAiRams.map(ram => {
+      const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
+      const totalStraws = inv.reduce((s,i) => s+(i.straws||0), 0);
+      const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null;
+      const sireName = sire ? sire.name : ram.sire_name||'—';
+      const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null;
+      const damName = dam ? dam.name : ram.dam_name||'—';
+      const strawBadge = totalStraws > 0
+        ? `<span class="badge badge-green">🧪 ${totalStraws}</span>`
+        : `<span class="badge badge-gray">0</span>`;
+      return `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:0.55rem 0.85rem;font-weight:600;color:var(--text)">${ram.name}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${ram.registration_no||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${ram.breed||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${ram.genetic_code||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${sireName}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${damName}</td>
+        <td style="padding:0.55rem 0.75rem">${strawBadge}</td>
+        <td style="padding:0.55rem 0.75rem;white-space:nowrap;text-align:center">
+          <button class="btn-icon btn-sm" onclick="openManageInventory('${ram.id}')">🧪</button>
+          <button class="btn-icon btn-sm" onclick="openEditAiRam('${ram.id}')">✏️</button>
+          <button class="btn-icon btn-sm" style="color:var(--danger)" id="airam-del-${ram.id}" onclick="confirmDeleteAiRam('${ram.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+    html += `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.55rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Name</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Reg #</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Breed</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Genetic</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Sire</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Dam</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Straws</th>
+          <th style="padding:0.55rem 0.75rem"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
   } else {
     html += `<div class="flock-grid">`;
     allAiRams.forEach(ram => {
@@ -1741,8 +1836,8 @@ function renderBreedingTable(allRecs, filters) {
 
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Breeding Records</div>
       <button class="btn btn-primary btn-sm" onclick="openAddBreedingGlobal()">+ Add Breeding Record</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Breeding Records</div>
     </div>
 
     <!-- FILTERS -->
@@ -2022,8 +2117,8 @@ function renderFlushTable(allRecs, allTransfers, filters) {
 
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Embryo Flushes</div>
       <button class="btn btn-primary btn-sm" onclick="openAddFlushGlobal()">+ Add Flush Record</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">Embryo Flushes</div>
     </div>
 
     <!-- FILTERS -->
@@ -2737,11 +2832,11 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
 
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">💰 Breeding & Flush Costs</div>
       <div style="display:flex;gap:0.5rem">
-        <button class="btn btn-secondary btn-sm" onclick="openAddCost('flush')">+ Flush Cost</button>
         <button class="btn btn-primary btn-sm" onclick="openAddCost('breeding')">+ Breeding Cost</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddCost('flush')">+ Flush Cost</button>
       </div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">💰 Breeding & Flush Costs</div>
     </div>
 
     <!-- FILTERS -->
@@ -2929,7 +3024,11 @@ async function deleteCost(id, type) {
 
 // ── SUPPLIES PAGE ──────────────────────────────────────
 const SUPPLY_CATEGORIES = ['Feed', 'Hay', 'Bedding', 'Supplement', 'Other'];
-const SUPPLY_UNITS = ['bags', 'bales', 'lbs', 'tons', 'gallons', 'units'];
+const SUPPLY_UNITS = ['bags', 'bales', 'lbs', 'tons', 'gallons', 'tubs', 'pails', 'units'];
+function getSupplyUnits() {
+  const custom = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
+  return [...SUPPLY_UNITS, ...custom.filter(u => !SUPPLY_UNITS.includes(u))];
+}
 
 async function renderSupplies() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
@@ -2937,8 +3036,8 @@ async function renderSupplies() {
   const logs = data || [];
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🌾 Feed & Supplies</div>
       <button class="btn btn-primary btn-sm" onclick="openAddSupply()">+ Log Purchase</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🌾 Feed & Supplies</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;align-items:center">
       <input id="sup-filter-item" placeholder="Search item..." oninput="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:150px">
@@ -3104,12 +3203,26 @@ function _supplyModalHtml(title, saveFunc, vals) {
       </div>
     </div>
     <div class="row">
-      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="updateSupplyCostPerUnit()"></div>
-      <div class="field"><label>Unit</label><select id="sup-unit" onchange="updateSupplyCostPerUnit()">${SUPPLY_UNITS.map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="supCostChanged('qty')"></div>
+      <div class="field"><label>Unit</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <select id="sup-unit" onchange="updateSupplyCostPerUnit()" style="flex:1">${getSupplyUnits().map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('')}<option value="__custom__">+ Add unit...</option></select>
+        </div>
+        <input id="sup-unit-custom" placeholder="Custom unit name" style="display:none;margin-top:0.3rem;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">
+      </div>
     </div>
     <div class="row">
-      <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" value="${v('cost')||''}" placeholder="0.00" oninput="updateSupplyCostPerUnit()"></div>
-      <div class="field"><label>Cost per Unit</label>
+      <div class="field"><label>Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional, for cost/lb calc)</span></label><input type="number" id="sup-lbs-per-unit" step="0.01" min="0" value="${v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit()"></div>
+      <div class="field"><label>Cost per Lb</label>
+        <div id="sup-cost-per-lb" style="padding:0.55rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:#1d4ed8;min-height:38px">—</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" value="${v('cost')||''}" placeholder="0.00" oninput="supCostChanged('total')"></div>
+      <div class="field"><label>Cost per Unit ($)</label><input type="number" id="sup-cpu" step="0.01" min="0" value="${v('cost')&&v('quantity')?(parseFloat(v('cost'))/parseFloat(v('quantity'))).toFixed(2):''}" placeholder="0.00" oninput="supCostChanged('unit')"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Cost / Unit <span style="font-size:0.72rem;color:var(--text3)">(calculated)</span></label>
         <div id="sup-cost-per-unit" style="padding:0.55rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:var(--accent);min-height:38px">—</div>
       </div>
     </div>
@@ -3120,12 +3233,68 @@ function _supplyModalHtml(title, saveFunc, vals) {
     </div>`;
 }
 
+function supCostChanged(source) {
+  const qty = parseFloat(document.getElementById('sup-qty')?.value) || 0;
+  const totalEl = document.getElementById('sup-cost');
+  const cpuEl = document.getElementById('sup-cpu');
+  const cpu = parseFloat(cpuEl?.value) || 0;
+  const total = parseFloat(totalEl?.value) || 0;
+
+  if (source === 'unit') {
+    // Entered cost per unit — calc total if qty known
+    if (totalEl && qty > 0 && cpu > 0) totalEl.value = (cpu * qty).toFixed(2);
+  } else if (source === 'total') {
+    // Entered total cost — calc cpu if qty known
+    if (cpuEl && qty > 0 && total > 0 && !cpuEl.matches(':focus')) cpuEl.value = (total / qty).toFixed(2);
+  } else if (source === 'qty') {
+    // Qty changed — prefer cpu to recalc total, else recalc cpu from total
+    if (cpu > 0 && totalEl && qty > 0) totalEl.value = (cpu * qty).toFixed(2);
+    else if (total > 0 && cpuEl && qty > 0 && !cpuEl.matches(':focus')) cpuEl.value = (total / qty).toFixed(2);
+  }
+  updateSupplyCostPerUnit();
+}
+
 function updateSupplyCostPerUnit() {
   const cost = parseFloat(document.getElementById('sup-cost')?.value) || 0;
   const qty = parseFloat(document.getElementById('sup-qty')?.value) || 0;
-  const unit = document.getElementById('sup-unit')?.value || 'unit';
-  const el = document.getElementById('sup-cost-per-unit');
-  if (el) el.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
+  const unitSel = document.getElementById('sup-unit');
+  const unit = unitSel?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value || 'unit') : (unitSel?.value || 'unit');
+  const lbsPerUnit = parseFloat(document.getElementById('sup-lbs-per-unit')?.value) || 0;
+  const cpuEl = document.getElementById('sup-cost-per-unit');
+  const cplEl = document.getElementById('sup-cost-per-lb');
+  if (cpuEl) cpuEl.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
+  if (cplEl) {
+    const totalLbs = qty * lbsPerUnit;
+    cplEl.textContent = cost > 0 && totalLbs > 0 ? `$${(cost/totalLbs).toFixed(3)} / lb` : '—';
+  }
+  // Also sync cpu input if qty changes
+  const cpuInput = document.getElementById('sup-cpu');
+  if (cpuInput && cost > 0 && qty > 0 && !cpuInput.matches(':focus')) {
+    cpuInput.value = (cost/qty).toFixed(2);
+  }
+  // Show/hide custom unit input
+  const customInput = document.getElementById('sup-unit-custom');
+  if (customInput) customInput.style.display = unitSel?.value === '__custom__' ? '' : 'none';
+}
+
+function saveCustomSupplyUnit() {
+  const val = document.getElementById('sup-unit-custom')?.value?.trim();
+  if (!val) return;
+  const existing = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
+  if (!existing.includes(val)) {
+    existing.push(val);
+    localStorage.setItem('flock_supply_units', JSON.stringify(existing));
+  }
+  // Switch select to new value
+  const sel = document.getElementById('sup-unit');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val; opt.selected = true;
+    sel.insertBefore(opt, sel.lastChild);
+    sel.value = val;
+  }
+  document.getElementById('sup-unit-custom').style.display = 'none';
+  toast(`"${val}" added as unit`);
 }
 
 async function saveSupplyItem() {
@@ -3170,10 +3339,15 @@ async function saveSupply() {
   const date = document.getElementById('sup-date')?.value;
   if (!item) { toast('Item required'); return; }
   if (!date) { toast('Date required'); return; }
+  // Resolve custom unit
+  const supUnitSel = document.getElementById('sup-unit');
+  const supUnit = supUnitSel?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value?.trim() || null) : (supUnitSel?.value || null);
+  if (supUnitSel?.value === '__custom__' && supUnit) saveCustomSupplyUnit();
   await db.from('supply_log').insert({
     item, category: document.getElementById('sup-cat')?.value||null,
     date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
-    unit: document.getElementById('sup-unit')?.value||null,
+    unit: supUnit,
+    lbs_per_unit: document.getElementById('sup-lbs-per-unit')?.value ? parseFloat(document.getElementById('sup-lbs-per-unit').value) : null,
     cost: document.getElementById('sup-cost')?.value ? parseFloat(document.getElementById('sup-cost').value) : null,
     supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
     notes: document.getElementById('sup-notes')?.value?.trim()||null,
@@ -3199,6 +3373,9 @@ async function saveEditSupply(id) {
   const date = document.getElementById('sup-date')?.value;
   if (!item) { toast('Item required'); return; }
   if (!date) { toast('Date required'); return; }
+  const supUnitSel2 = document.getElementById('sup-unit');
+  const supUnit = supUnitSel2?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value?.trim() || null) : (supUnitSel2?.value || null);
+  if (supUnitSel2?.value === '__custom__' && supUnit) saveCustomSupplyUnit();
   await db.from('supply_log').update({
     item, category: document.getElementById('sup-cat')?.value||null,
     date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
@@ -3244,8 +3421,8 @@ async function renderInvoices() {
 
   document.getElementById('main-content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🧾 Invoices</div>
       <button class="btn btn-primary btn-sm" onclick="openNewInvoice()">+ New Invoice</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🧾 Invoices</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.5rem">
       <div class="card" style="padding:0.85rem;text-align:center">
@@ -3795,13 +3972,13 @@ function openPrintWindow(html, title) {
 
 function renderExport() {
   document.getElementById('main-content').innerHTML = `
-    <div class="section-header"><div class="section-title" style="font-size:1.15rem">Export Data</div></div>
+    <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openFlockExport()">Download Spreadsheet</button>
+      <div class="section-title" style="font-size:1.15rem">Export Data</div>
+      </div>
     <div style="display:flex;flex-direction:column;gap:0.75rem;max-width:400px">
       <div class="card">
         <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">🐑 Flock Export</div>
-        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All lambs with profile data, status, sire/dam info</div>
-        <button class="btn btn-primary btn-sm" onclick="openFlockExport()">Download Spreadsheet</button>
-      </div>
+        <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All lambs with profile data, status, sire/dam info</div></div>
       <div class="card">
         <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">💉 Health Records Export</div>
         <div style="font-size:0.85rem;color:var(--text3);margin-bottom:0.75rem">All vaccine and medication records across flock</div>
@@ -5053,13 +5230,18 @@ function openFlockTreatment() {
   const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
   const meds = [...BASE_MEDS, ...customProducts.medication];
   window._ftType = 'vaccine';
+  window._ftAllLambs = activelambs;
 
-  const lambCheckboxes = activelambs.map(l => `
-    <label style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.5rem;border-radius:0.4rem;cursor:pointer;border:1px solid var(--border);margin-bottom:0.35rem;background:var(--bg)">
-      <input type="checkbox" class="ft-lamb-check" value="${l.id}" checked style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
-      <span style="font-size:0.88rem;color:var(--text)">${l.name}</span>
-      ${l.ear_tag ? `<span style="font-size:0.75rem;color:var(--text3)">#${l.ear_tag}</span>` : ''}
-    </label>`).join('');
+  // Build planning group options — only groups with members in active flock
+  const groups = window._planGroups || [];
+  const members = window._planMembers || [];
+  const activeIds = new Set(activelambs.map(l => l.id));
+  const groupOpts = groups
+    .filter(g => g.status !== 'Cancelled')
+    .map(g => {
+      const groupMemberIds = members.filter(m => m.group_id === g.id && m.lamb_id && activeIds.has(m.lamb_id)).map(m => m.lamb_id);
+      return groupMemberIds.length > 0 ? `<option value="${g.id}" data-ids="${groupMemberIds.join(',')}">${g.name} (${groupMemberIds.length})</option>` : '';
+    }).filter(Boolean).join('');
 
   showModal(`
     <div class="modal-header">
@@ -5087,27 +5269,106 @@ function openFlockTreatment() {
         <span style="font-size:0.82rem;color:var(--text2)">Save to my product list</span>
       </label>
     </div>
+    <div class="field"><label>Start Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
     <div class="row">
-      <div class="field"><label>Start Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="ft-end-date"></div>
       <div class="field"><label>Dose</label><input id="ft-dose" placeholder="e.g. 2ml"></div>
     </div>
     <div class="field"><label>Route</label><select id="ft-route">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select></div>
     <div class="field"><label>Notes</label><input id="ft-notes" placeholder="Lot number, instructions…"></div>
     <div class="field">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-        <label style="margin:0">Select Lambs *</label>
-        <div style="display:flex;gap:0.4rem">
-          <button class="btn-icon" onclick="document.querySelectorAll('.ft-lamb-check').forEach(c=>c.checked=true)">All</button>
-          <button class="btn-icon" onclick="document.querySelectorAll('.ft-lamb-check').forEach(c=>c.checked=false)">None</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
+        <label style="margin:0">Select Animals *</label>
+        <div style="display:flex;gap:0.3rem">
+          <button class="btn-icon btn-sm" onclick="ftCheckVisible(true)">✓ All</button>
+          <button class="btn-icon btn-sm" onclick="ftCheckVisible(false)">✕ None</button>
         </div>
       </div>
-      <div style="max-height:200px;overflow-y:auto;padding-right:0.25rem">${lambCheckboxes}</div>
+      <div style="display:flex;gap:0.35rem;margin-bottom:0.4rem;flex-wrap:wrap">
+        <input id="ft-search" placeholder="Search..." oninput="ftFilterList()" style="padding:0.3rem 0.55rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
+        <select id="ft-flock-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Flocks</option>
+          <option value="Show">Show</option>
+          <option value="Breeding">Breeding</option>
+          <option value="Both">Both</option>
+        </select>
+        <select id="ft-sex-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Sexes</option>
+          <option value="Ewe">Ewes</option>
+          <option value="Wether">Wethers</option>
+          <option value="Ram">Rams</option>
+        </select>
+        <select id="ft-role-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Roles</option>
+          <option value="Embryo Donor">Donors</option>
+          <option value="Embryo Recipient">Recipients</option>
+          <option value="Both">Both</option>
+          <option value="Standard">Standard</option>
+        </select>
+        ${groupOpts ? `<select id="ft-group-filter" onchange="ftGroupSelected()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Groups</option>${groupOpts}
+        </select>` : ''}
+      </div>
+      <div id="ft-lamb-list" style="height:200px;overflow-y:scroll;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem">
+        ${activelambs.map(l => `
+          <label id="ft-row-${l.id}" data-flock="${l.flock_type||''}" data-sex="${l.sex||''}" data-name="${l.name.toLowerCase()}" data-tag="${(l.ear_tag||'').toLowerCase()}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;width:100%;box-sizing:border-box">
+            <input type="checkbox" class="ft-lamb-check" value="${l.id}" checked style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap">${l.name}</span>
+            <span style="font-size:0.75rem;color:var(--text3);white-space:nowrap">${l.ear_tag?'#'+l.ear_tag:''} ${l.sex?'· '+l.sex:''} ${l.flock_type?'· '+l.flock_type:''}</span>
+          </label>`).join('')}
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlockTreatment()">Save Treatment</button>
-    </div>`);
+    </div>`, true);
+}
+
+function ftGroupSelected() {
+  const sel = document.getElementById('ft-group-filter');
+  if (!sel?.value) { ftFilterList(); return; }
+  const opt = sel.options[sel.selectedIndex];
+  const ids = new Set((opt.getAttribute('data-ids') || '').split(',').filter(Boolean));
+  // Show only group members, hide others
+  (window._ftAllLambs || []).forEach(l => {
+    const row = document.getElementById(`ft-row-${l.id}`);
+    if (!row) return;
+    row.style.display = ids.has(l.id) ? 'flex' : 'none';
+  });
+  // Clear other filters visually
+  ['ft-flock-filter','ft-sex-filter','ft-role-filter'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('ft-search').value = '';
+}
+
+function ftFilterList() {
+  const groupSel = document.getElementById('ft-group-filter');
+  if (groupSel) groupSel.value = '';
+  const q = document.getElementById('ft-search')?.value?.toLowerCase() || '';
+  const flock = document.getElementById('ft-flock-filter')?.value || '';
+  const sex = document.getElementById('ft-sex-filter')?.value || '';
+  const role = document.getElementById('ft-role-filter')?.value || '';
+  (window._ftAllLambs || []).forEach(l => {
+    const row = document.getElementById(`ft-row-${l.id}`);
+    if (!row) return;
+    const ft = l.flock_type || '';
+    let show = true;
+    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q) && !(l.alt_id||'').toLowerCase().includes(q)) show = false;
+    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) show = false;
+    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) show = false;
+    if (flock === 'Both' && ft !== 'Both') show = false;
+    if (sex && l.sex !== sex) show = false;
+    if (role && l.role !== role) show = false;
+    row.style.display = show ? 'flex' : 'none';
+  });
+}
+
+function ftCheckVisible(checked) {
+  document.querySelectorAll('.ft-lamb-check').forEach(cb => {
+    const label = cb.closest('label');
+    if (label && label.style.display !== 'none') cb.checked = checked;
+  });
 }
 
 function switchFTType(type) {
@@ -5162,34 +5423,65 @@ async function saveFlockTreatment() {
 let bulkBreedIncludeRecips = false;
 function openBulkBreeding() {
   const defaultDate = new Date().toISOString().slice(0,10);
-  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both')));
+  const allEwes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe');
+  window._bbAllEwes = allEwes;
   const sireOpts = sireOptions('');
+
+  // Build group options
+  const groups = window._planGroups || [];
+  const members = window._planMembers || [];
+  const eweIds = new Set(allEwes.map(l => l.id));
+  const groupOpts = groups
+    .filter(g => g.status !== 'Cancelled')
+    .map(g => {
+      const ids = members.filter(m => m.group_id === g.id && m.lamb_id && eweIds.has(m.lamb_id)).map(m => m.lamb_id);
+      if (!ids.length) return '';
+      return '<option value="' + g.id + '" data-ids="' + ids.join(',') + '">' + g.name + ' (' + ids.length + ')</option>';
+    }).filter(Boolean).join('');
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🐏 Bulk Breeding</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-      <div style="font-size:0.8rem;color:var(--text3)">Log a breeding record for multiple ewes at once.</div>
-      <button class="btn-icon" onclick="bulkBreedIncludeRecips=!bulkBreedIncludeRecips;openBulkBreeding()" style="font-size:0.72rem;white-space:nowrap">${bulkBreedIncludeRecips ? '✅ Recips included' : 'Include Recips'}</button>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center">
+      <input id="bb-search" placeholder="Search name, tag..." oninput="bbFilterList()" style="padding:0.3rem 0.55rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
+      <select id="bb-flock-filter" onchange="bbFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Flocks</option>
+        <option value="Breeding">Breeding</option>
+        <option value="Show">Show</option>
+        <option value="Both">Both</option>
+      </select>
+      <select id="bb-role-filter" onchange="bbFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Roles</option>
+        <option value="Standard">Standard</option>
+        <option value="Embryo Donor">Donors</option>
+        <option value="Embryo Recipient">Recipients</option>
+      </select>
+      ${groupOpts ? '<select id="bb-group-filter" onchange="bbGroupSelected()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All Groups</option>' + groupOpts + '</select>' : ''}
     </div>
-    <div style="max-height:420px;overflow-y:auto" id="bulk-breed-rows">
-      ${ewes.map((ewe,i) => `
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:0.5rem">
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
-            <input type="checkbox" id="bb-check-${ewe.id}" style="accent-color:var(--accent);width:14px;height:14px">
-            <label for="bb-check-${ewe.id}" style="font-weight:600;font-size:0.88rem;cursor:pointer">${ewe.name}${ewe.ear_tag?' #'+ewe.ear_tag:''}</label>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:140px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Set all sires to</label>
+        <select id="bb-global-sire" onchange="bbApplyGlobal()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">${sireOpts}</select>
+      </div>
+      <div style="flex:1;min-width:130px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Set all dates to</label>
+        <input type="date" id="bb-global-date" value="${defaultDate}" oninput="bbApplyGlobal()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem">
+      </div>
+      <div style="display:flex;gap:0.3rem;flex-shrink:0">
+        <button class="btn-icon btn-sm" onclick="bbCheckVisible(true)">✓ All</button>
+        <button class="btn-icon btn-sm" onclick="bbCheckVisible(false)">✕ None</button>
+      </div>
+    </div>
+    <div style="height:320px;overflow-y:scroll" id="bulk-breed-rows">
+      ${allEwes.map(ewe => `
+        <div id="bb-row-${ewe.id}" data-flock="${ewe.flock_type||''}" data-role="${ewe.role||'Standard'}" data-name="${ewe.name.toLowerCase()}" data-tag="${(ewe.ear_tag||'').toLowerCase()}" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem">
+            <input type="checkbox" id="bb-check-${ewe.id}" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+            <span style="font-weight:600;font-size:0.88rem;color:var(--text)">${ewe.name}</span>
+            <span style="font-size:0.75rem;color:var(--text3)">${ewe.ear_tag?'#'+ewe.ear_tag:''} ${ewe.flock_type?'· '+ewe.flock_type:''}</span>
           </div>
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-            <div style="flex:2;min-width:140px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Sire</label>
-              <select id="bb-sire-${ewe.id}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem;font-family:'Inter',sans-serif">${sireOpts}</select></div>
-            <div style="flex:1;min-width:110px"><label style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Date</label>
-              <input type="date" id="bb-date-${ewe.id}" value="${defaultDate}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.82rem"></div>
+          <div style="display:flex;gap:0.4rem;padding-left:22px;flex-wrap:wrap">
+            <select id="bb-sire-${ewe.id}" style="flex:2;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem">${sireOpts}</select>
+            <input type="date" id="bb-date-${ewe.id}" value="${defaultDate}" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem">
           </div>
         </div>`).join('')}
-    </div>
-    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);align-items:center">
-      <span style="font-size:0.78rem;color:var(--text3)">Set all dates to:</span>
-      <input type="date" id="bb-global-date" value="${defaultDate}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem;width:150px">
-      <button class="btn-icon" onclick="applyGlobalBreedDate()">Apply to all</button>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -5197,17 +5489,58 @@ function openBulkBreeding() {
     </div>`, true);
 }
 
-function applyGlobalBreedDate() {
+function bbFilterList() {
+  const q = document.getElementById('bb-search')?.value?.toLowerCase() || '';
+  const flock = document.getElementById('bb-flock-filter')?.value || '';
+  const role = document.getElementById('bb-role-filter')?.value || '';
+  const groupSel = document.getElementById('bb-group-filter');
+  if (groupSel) groupSel.value = '';
+  (window._bbAllEwes || []).forEach(l => {
+    const row = document.getElementById(`bb-row-${l.id}`);
+    if (!row) return;
+    const ft = l.flock_type || '';
+    let show = true;
+    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q)) show = false;
+    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) show = false;
+    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) show = false;
+    if (flock === 'Both' && ft !== 'Both') show = false;
+    if (role && (l.role||'Standard') !== role) show = false;
+    row.style.display = show ? 'flex' : 'none';
+  });
+}
+
+function bbGroupSelected() {
+  const sel = document.getElementById('bb-group-filter');
+  if (!sel?.value) { bbFilterList(); return; }
+  const ids = new Set((sel.options[sel.selectedIndex]?.getAttribute('data-ids')||'').split(',').filter(Boolean));
+  ['bb-search','bb-flock-filter','bb-role-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  (window._bbAllEwes || []).forEach(l => {
+    const row = document.getElementById(`bb-row-${l.id}`);
+    if (row) row.style.display = ids.has(l.id) ? 'flex' : 'none';
+  });
+}
+
+function bbCheckVisible(checked) {
+  document.querySelectorAll('[id^="bb-check-"]').forEach(cb => {
+    const id = cb.id.replace('bb-check-','');
+    const row = document.getElementById(`bb-row-${id}`);
+    if (row && row.style.display !== 'none') cb.checked = checked;
+  });
+}
+
+function bbApplyGlobal() {
+  const sire = document.getElementById('bb-global-sire')?.value;
   const date = document.getElementById('bb-global-date')?.value;
-  if (!date) return;
-  allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both'))).forEach(ewe => {
-    const el = document.getElementById(`bb-date-${ewe.id}`);
-    if (el) el.value = date;
+  (window._bbAllEwes || []).forEach(l => {
+    const row = document.getElementById(`bb-row-${l.id}`);
+    if (!row || row.style.display === 'none') return;
+    if (sire) { const s = document.getElementById(`bb-sire-${l.id}`); if (s) s.value = sire; }
+    if (date) { const d = document.getElementById(`bb-date-${l.id}`); if (d) d.value = date; }
   });
 }
 
 async function saveBulkBreeding() {
-  const ewes = allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe' && (bulkBreedIncludeRecips || (l.role !== 'Embryo Recipient' && l.role !== 'Both')));
+  const ewes = window._bbAllEwes || allLambs.filter(l => l.status === 'Active' && l.sex === 'Ewe');
   const records = [];
   const missingSire = [];
   for (const ewe of ewes) {
@@ -5264,16 +5597,36 @@ async function openBulkPregCheck() {
   const outcomes = ['Confirmed Pregnant', 'Not Pregnant', 'Pending'];
   const transferOutcomes = ['Confirmed Pregnant', 'Not Pregnant', 'Lamb Born', 'Failed', 'Pending'];
 
+  // Build group filter options from pending animals
+  const pendingLambIds = new Set([
+    ...pendingBreedings.map(r => r.lamb_id),
+    ...pendingTransfers.map(t => t.recipient_id).filter(Boolean)
+  ]);
+  const groups = window._planGroups || [];
+  const members = window._planMembers || [];
+  const groupOpts = groups
+    .filter(g => g.status !== 'Cancelled')
+    .map(g => {
+      const ids = members.filter(m => m.group_id === g.id && m.lamb_id && pendingLambIds.has(m.lamb_id)).map(m => m.lamb_id);
+      if (!ids.length) return '';
+      return '<option value="' + g.id + '" data-ids="' + ids.join(',') + '">' + g.name + ' (' + ids.length + ')</option>';
+    }).filter(Boolean).join('');
+
   showModal(`
     <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">${pendingBreedings.length} breeding + ${pendingTransfers.length} transfer records pending.</div>
-    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)">
-      <span style="font-size:0.78rem;color:var(--text3)">Set all to:</span>
-      <select id="pc-global-outcome" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap">
+      <span style="font-size:0.78rem;color:var(--text3);white-space:nowrap">Set all to:</span>
+      <select id="pc-global-outcome" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem;flex:1">
         ${outcomes.map(o=>`<option>${o}</option>`).join('')}
       </select>
-      <button class="btn-icon" onclick="applyGlobalPregOutcome()">Apply to all</button>
+      <button class="btn btn-secondary btn-sm" onclick="applyGlobalPregOutcome()">Apply to all</button>
     </div>
+    ${groupOpts ? `<div style="margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)">
+      <select id="pc-group-filter" onchange="pcFilterByGroup()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+        <option value="">— All records —</option>${groupOpts}
+      </select>
+    </div>` : '<div style="border-bottom:1px solid var(--border);margin-bottom:0.75rem"></div>'}
     <div style="max-height:450px;overflow-y:auto" id="pc-rows">
       ${pendingBreedings.length > 0 ? `
         <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;padding:0.4rem 0;margin-bottom:0.25rem">🐏 Breeding Records</div>
@@ -5281,18 +5634,17 @@ async function openBulkPregCheck() {
           const lamb = allLambs.find(l => l.id === r.lamb_id);
           const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
           const sireName = sire ? sire.name+' 🧬' : (r.sire_text||'—');
-          return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
-            <input type="checkbox" id="pc-check-${r.id}" data-type="breeding" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}${lamb?.ear_tag?` <span style="color:var(--text3);font-weight:400">#${lamb.ear_tag}</span>`:''}</div>
-              <div style="font-size:0.72rem;color:var(--text3)">Bred: ${r.breeding_date} · ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
+          return `<div class="pc-record-row" data-lamb-id="${r.lamb_id||''}" style="display:grid;grid-template-columns:16px 1fr auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
+            <input type="checkbox" id="pc-check-${r.id}" data-type="breeding" style="accent-color:var(--accent);width:14px;height:14px">
+            <div style="min-width:0">
+              <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'} <span style="font-weight:400;color:var(--text3)">${lamb?.ear_tag?'#'+lamb.ear_tag:''}</span></div>
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bred: ${r.breeding_date||'—'} · ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
             </div>
-            <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
+            <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:160px">
               ${outcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
             </select>
           </div>`;
         }).join('')}` : ''}
-
       ${pendingTransfers.length > 0 ? `
         <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;padding:0.5rem 0 0.25rem;margin-top:0.5rem">🔬 Embryo Transfers</div>
         ${pendingTransfers.map(t => {
@@ -5300,13 +5652,13 @@ async function openBulkPregCheck() {
           const recipName = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recipient_text||'Unknown');
           const flush = (flushes||[]).find(f=>f.id===t.flush_id);
           const donor = flush ? allLambs.find(l=>l.id===flush.donor_id) : null;
-          return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
-            <input type="checkbox" id="pc-check-${t.id}" data-type="transfer" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-            <div style="flex:1;min-width:0">
+          return `<div class="pc-record-row" data-lamb-id="${t.recipient_id||''}" style="display:grid;grid-template-columns:16px 1fr auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
+            <input type="checkbox" id="pc-check-${t.id}" data-type="transfer" style="accent-color:var(--accent);width:14px;height:14px">
+            <div style="min-width:0">
               <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${recipName}</div>
-              <div style="font-size:0.72rem;color:var(--text3)">Implant: ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</div>
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Implant: ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</div>
             </div>
-            <select id="pc-outcome-${t.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.78rem">
+            <select id="pc-outcome-${t.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:160px">
               ${transferOutcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
             </select>
           </div>`;
@@ -5320,10 +5672,25 @@ async function openBulkPregCheck() {
   renderFlock();
 }
 
+function pcFilterByGroup() {
+  const sel = document.getElementById('pc-group-filter');
+  const val = sel?.value || '';
+  const ids = val ? new Set((sel.options[sel.selectedIndex]?.getAttribute('data-ids')||'').split(',').filter(Boolean)) : null;
+  document.querySelectorAll('#pc-rows > div[id^="pc-rec-"], #pc-rows .pc-record-row').forEach(row => {
+    if (!ids) { row.style.display = ''; return; }
+    row.style.display = ids.has(row.dataset.lambId) ? '' : 'none';
+  });
+}
+
 function applyGlobalPregOutcome() {
   const outcome = document.getElementById('pc-global-outcome')?.value;
-  document.querySelectorAll('[id^="pc-outcome-"]').forEach(sel => sel.value = outcome);
-  document.querySelectorAll('[id^="pc-check-"]').forEach(cb => cb.checked = true);
+  document.querySelectorAll('.pc-record-row').forEach(row => {
+    if (row.style.display === 'none') return;
+    const outcomeId = row.querySelector('[id^="pc-outcome-"]')?.id;
+    const checkId = row.querySelector('[id^="pc-check-"]')?.id;
+    if (outcomeId) document.getElementById(outcomeId).value = outcome;
+    if (checkId) document.getElementById(checkId).checked = true;
+  });
 }
 
 async function saveBulkPregCheck() {
@@ -5842,8 +6209,8 @@ async function renderEmbryoInventory() {
 
   document.getElementById('main-content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
-      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">❄️ Frozen Embryo Inventory</div>
       <button class="btn btn-primary btn-sm" onclick="openAddInventoryItem()">+ Add Entry</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">❄️ Frozen Embryo Inventory</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.5rem">
       <div class="card" style="padding:0.85rem;text-align:center">
