@@ -241,7 +241,9 @@
         <button class="sidebar-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span>AI Rams</button>
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
+        <button class="sidebar-btn" onclick="showPage('weights')" data-page="weights"><span>⚖️</span>Weights</button>
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
+        <button class="sidebar-btn" onclick="showPage('shows')" data-page="shows"><span>🏆</span>Shows</button>
         <button class="sidebar-btn" onclick="showPage('planning')" data-page="planning"><span>📋</span>Planning</button>
         <button class="sidebar-btn" onclick="showPage('costs')" data-page="costs"><span>💰</span>Costs</button>
         <button class="sidebar-btn" onclick="showPage('supplies')" data-page="supplies"><span>🌾</span>Supplies</button>
@@ -475,7 +477,9 @@ function showPage(page) {
   else if (page === 'airams') renderAiRams();
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
+  else if (page === 'weights') renderWeightsPage();
   else if (page === 'analytics') renderAnalytics();
+  else if (page === 'shows') renderShows();
   else if (page === 'planning') renderPlanning();
   else if (page === 'embryo_inventory') renderEmbryoInventory();
   else if (page === 'costs') renderCosts();
@@ -716,6 +720,7 @@ async function renderLambDetail() {
       ${(lamb.flock_type==='Breeding'||lamb.flock_type==='Both'||(!lamb.flock_type&&lamb.sex!=='Wether'))?`<button class="tab ${currentLambTab==='breeding'?'active':''}" onclick="switchLambTab('breeding')">🐏 Breeding</button>`:''}
       ${(lamb.flock_type==='Breeding'||lamb.flock_type==='Both'||(!lamb.flock_type&&lamb.sex!=='Wether'))?`<button class="tab ${currentLambTab==='embryo'?'active':''}" onclick="switchLambTab('embryo')">🔬 Embryo</button>`:''}
       <button class="tab ${currentLambTab==='notes'?'active':''}" onclick="switchLambTab('notes')">📝 Notes</button>
+      <button class="tab ${currentLambTab==='shows'?'active':''}" onclick="switchLambTab('shows')">🏆 Shows</button>
       <button class="tab ${currentLambTab==='pedigree'?'active':''}" onclick="switchLambTab('pedigree')">🌳 Pedigree</button>
     </div>
     <div id="lamb-tab-content"><div class="loading"><span class="spinner"></span>Loading…</div></div>
@@ -747,6 +752,7 @@ async function loadLambTab() {
   else if (currentLambTab === 'breeding') await renderBreedingTab(el);
   else if (currentLambTab === 'embryo') await renderEmbryoTab(el);
   else if (currentLambTab === 'notes') await renderNotesTab(el);
+  else if (currentLambTab === 'shows') await renderShowsTab(el);
   else if (currentLambTab === 'pedigree') renderPedigreeTab(el);
 }
 
@@ -1199,6 +1205,67 @@ function confirmDeleteNote(id) {
 async function deleteNote(id) {
   await db.from('lamb_notes').delete().eq('id', id);
   toast('Note deleted'); loadLambTab();
+}
+
+// ── SHOWS TAB ─────────────────────────────────────────
+async function renderShowsTab(el) {
+  const { data: entries } = await db.from('show_entries').select('*').eq('lamb_id', currentLambId);
+  if (!entries || entries.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🏆</div><h3>No show results yet</h3><p>Add this animal to a show from the Shows page</p></div>`;
+    return;
+  }
+
+  const showIds = [...new Set(entries.map(e => e.show_id))];
+  // Get show details — use allShows cache instead of .in() query
+  const showMap = {};
+  (allShows||[]).forEach(s => { showMap[s.id] = s; });
+  // Also load any shows not yet in cache
+  const cachedIds = new Set(Object.keys(showMap));
+  const missingIds = showIds.filter(id => !cachedIds.has(id));
+  if (missingIds.length > 0) {
+    const { data: extraShows } = await db.from('shows').select('*');
+    (extraShows||[]).forEach(s => { showMap[s.id] = s; });
+  }
+
+  // Sort by show date desc
+  const sorted = [...entries].sort((a, b) => {
+    const sd = showMap[b.show_id]?.show_date || '';
+    const sa = showMap[a.show_id]?.show_date || '';
+    return sd.localeCompare(sa);
+  });
+
+  const rows = sorted.map(e => {
+    const show = showMap[e.show_id] || {};
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showPage('shows');setTimeout(()=>openShowDetail('${show.id}'),300)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      <td style="padding:0.6rem 0.85rem;font-weight:600;color:var(--text)">${show.name||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${show.show_date||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${show.location||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.class||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs' : '—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+      <div style="font-size:0.78rem;color:var(--text3)">${sorted.length} show${sorted.length!==1?'s':''}</div>
+      <button class="btn btn-secondary btn-sm" onclick="printAnimalShowHistory('${currentLambId}')">📄 Export History</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.6rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Show</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Date</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Location</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Class</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Place</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Entry Wt</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
 }
 
 // ── PEDIGREE TAB ──────────────────────────────────────
@@ -1791,6 +1858,947 @@ document.addEventListener('click', function(e) {
   const wrap = document.getElementById('filter-dropdown-wrap');
   if (wrap && !wrap.contains(e.target)) closeBreedFilterMenu();
 });
+
+// ── SHOWS ──────────────────────────────────────────────
+
+let allShows = [];
+async function loadShows() {
+  const { data } = await db.from('shows').select('*').order('show_date', {ascending:false});
+  allShows = data || [];
+}
+
+let showsShowArchived = false;
+async function renderShows() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  await loadShows();
+  const today = new Date().toISOString().slice(0,10);
+  const visible = allShows.filter(s => showsShowArchived ? s.archived : !s.archived);
+  const upcoming = visible.filter(s => (s.show_date||'9999') >= today);
+  const past = visible.filter(s => (s.show_date||'9999') < today);
+  const archivedCount = allShows.filter(s => s.archived).length;
+
+  const showCard = s => `
+    <div class="card card-hover" onclick="openShowDetail('${s.id}')" style="margin-bottom:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:0.5rem"><span style="font-size:1rem;font-weight:700;color:var(--text)">${s.name}</span>${s.archived?'<span style="font-size:0.68rem;padding:0.1rem 0.45rem;border-radius:20px;background:var(--surface2);color:var(--text3);border:1px solid var(--border)">Archived</span>':''}</div>
+          <div style="font-size:0.8rem;color:var(--text3);margin-top:0.2rem">
+            ${s.show_date ? s.show_date + (s.end_date && s.end_date !== s.show_date ? ' – '+s.end_date : '') : ''}
+            ${s.location ? ' · '+s.location : ''}
+          </div>
+          ${s.address ? `<div style="font-size:0.75rem;color:var(--text3)">${s.address}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:0.3rem;flex-shrink:0" onclick="event.stopPropagation()">
+          <button class="btn-icon btn-sm" onclick="openShowDetail('${s.id}')" title="View/Edit">✏️</button>
+          <button class="btn-icon btn-sm" onclick="printShowHealthPapers('${s.id}')" title="Health Papers">📋</button>
+          <button class="btn-icon btn-sm" onclick="toggleArchiveShow('${s.id}', ${!!s.archived})" title="${s.archived?'Unarchive':'Archive'}">📦</button>
+          <button class="btn-icon btn-sm" onclick="deleteShow('${s.id}')" style="color:var(--danger)" title="Delete">🗑</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <button class="btn btn-primary btn-sm" onclick="openAddShow()">+ Add Show</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🏆 Shows</div>
+      <button class="btn btn-secondary btn-sm" onclick="showsShowArchived=!showsShowArchived;renderShows()">${showsShowArchived ? "Hide Archived" : "📦 Archived" + (archivedCount > 0 ? " ("+archivedCount+")" : "")}</button>
+    </div>
+    ${allShows.length === 0 ? `<div class="empty"><div class="empty-icon">🏆</div><h3>No shows yet</h3><p>Add a show to track animals, weights, and placings</p></div>` : `
+    ${upcoming.length > 0 ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Upcoming</div>
+    ${upcoming.map(showCard).join('')}` : ''}
+    ${past.length > 0 ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:1rem 0 0.6rem">Past</div>
+    ${past.map(showCard).join('')}` : ''}`}`;
+}
+
+function openAddShow() {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🏆 Add Show</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Show Name *</label><input id="sh-name" placeholder="e.g. Minnesota State Fair"></div>
+    <div class="row">
+      <div class="field"><label>Start Date</label><input type="date" id="sh-date"></div>
+      <div class="field"><label>End Date</label><input type="date" id="sh-end-date"></div>
+    </div>
+    <div class="field"><label>Location / Venue</label><input id="sh-location" placeholder="e.g. Falcon Heights, MN"></div>
+    <div class="field"><label>Address</label><input id="sh-address" placeholder="e.g. 1265 Snelling Ave N, St. Paul, MN"></div>
+    <div class="field"><label>Notes</label><textarea id="sh-notes" rows="2" placeholder="Optional notes"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewShow()">Create Show</button>
+    </div>`);
+}
+
+async function saveNewShow() {
+  const name = document.getElementById('sh-name')?.value?.trim();
+  if (!name) { toast('Show name required'); return; }
+  const { data: show } = await db.from('shows').insert({
+    name,
+    show_date: document.getElementById('sh-date')?.value||null,
+    end_date: document.getElementById('sh-end-date')?.value||null,
+    location: document.getElementById('sh-location')?.value?.trim()||null,
+    address: document.getElementById('sh-address')?.value?.trim()||null,
+    notes: document.getElementById('sh-notes')?.value?.trim()||null,
+  }).select().single();
+  closeModal();
+  if (show?.id) openShowDetail(show.id);
+  else { await loadShows(); renderShows(); }
+}
+
+async function openShowDetail(showId) {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const [{ data: show }, { data: entries }, { data: allWeightRecs }] = await Promise.all([
+    db.from('shows').select('*').eq('id', showId).single(),
+    db.from('show_entries').select('*').eq('show_id', showId),
+    db.from('weight_records').select('*').order('date', {ascending:false}),
+  ]);
+  if (!show) { renderShows(); return; }
+  // Get most recent weight per animal from weight_records
+  const lastWeightByLamb = {};
+  (allWeightRecs||[]).forEach(wr => {
+    if (!lastWeightByLamb[wr.lamb_id]) lastWeightByLamb[wr.lamb_id] = wr;
+  });
+  window._currentShow = show;
+  window._currentShowEntries = entries || [];
+  window._lastWeightByLamb = lastWeightByLamb;
+  renderShowDetail();
+}
+
+function renderShowDetail() {
+  const show = window._currentShow;
+  const entries = window._currentShowEntries || [];
+
+  const lambOpts = allLambs.filter(l => l.status === 'Active').map(l =>
+    `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+
+
+  // Group entries by lamb_id, keeping insertion order of first appearance
+  const lambOrder = [];
+  const byLamb = {};
+  entries.forEach(e => {
+    if (!byLamb[e.lamb_id]) { byLamb[e.lamb_id] = []; lambOrder.push(e.lamb_id); }
+    byLamb[e.lamb_id].push(e);
+  });
+
+  let entryRows = '';
+  lambOrder.forEach(lambId => {
+    const lamb = allLambs.find(l => l.id === lambId);
+    const lw = (window._lastWeightByLamb||{})[lambId];
+    const lambEntries = byLamb[lambId];
+    lambEntries.forEach((e, ei) => {
+      const isFirst = ei === 0;
+      entryRows += `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:${isFirst?'0.6rem 0.85rem 0.3rem':'0.2rem 0.85rem 0.3rem'};font-weight:${isFirst?'600':'400'};color:${isFirst?'var(--text)':'var(--text3)'}">
+          ${isFirst ? (lamb?.name||'Unknown') : ''}
+          ${isFirst && lamb?.ear_tag ? '<span style="font-size:0.75rem;font-weight:400;color:var(--text3)"> #'+lamb.ear_tag+'</span>' : ''}
+        </td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.class||'—'}</td>
+        <td style="padding:0.3rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs'+(e.entry_weight_date?' · '+e.entry_weight_date:'') : '—'}</td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${isFirst ? (lw ? lw.weight_lbs+' lbs · '+lw.date : '—') : ''}</td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
+        <td style="padding:0.3rem 0.75rem;text-align:center;white-space:nowrap">
+          <button class="btn-icon btn-sm" onclick="openAddShowEntry('${e.show_id}','${e.lamb_id}')" title="Add another class">+</button>
+          <button class="btn-icon btn-sm" onclick="openEditShowEntry('${e.id}')">✏️</button>
+          <button class="btn-icon btn-sm" onclick="deleteShowEntry('${e.id}')" style="color:var(--danger)">🗑</button>
+        </td>
+      </tr>`;
+    });
+  });
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="renderShows()">← Back</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text);flex:1">${show.name}</div>
+      <button class="btn btn-secondary btn-sm" onclick="printShowHealthPapers('${show.id}')">📋 Health Papers</button>
+      <button class="btn btn-secondary btn-sm" onclick="printShowReport('${show.id}')">📄 Show Report</button>
+      <button class="btn btn-secondary btn-sm" onclick="toggleArchiveShow('${show.id}', ${!!show.archived})">${show.archived ? '📦 Unarchive' : '📦 Archive'}</button>
+      <button class="btn btn-secondary btn-sm" onclick="openBulkShowWeight('${show.id}')">⚖️ Log Weights</button>
+      <button class="btn btn-secondary btn-sm" onclick="openBulkShowResults('${show.id}')">🏅 Bulk Results</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddShowEntry('${show.id}')">+ Add Animal</button>
+    </div>
+
+    <div class="card" style="padding:1rem;margin-bottom:1rem">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem">
+        <div class="field" style="margin:0"><label>Show Name</label><input id="sh-edit-name" value="${show.name||''}" onchange="saveShowField('name',this.value)"></div>
+        <div class="field" style="margin:0"><label>Start Date</label><input type="date" id="sh-edit-date" value="${show.show_date||''}" onchange="saveShowField('show_date',this.value)"></div>
+        <div class="field" style="margin:0"><label>End Date</label><input type="date" id="sh-edit-end" value="${show.end_date||''}" onchange="saveShowField('end_date',this.value)"></div>
+        <div class="field" style="margin:0"><label>Location</label><input id="sh-edit-loc" value="${show.location||''}" placeholder="City, State" onchange="saveShowField('location',this.value)"></div>
+        <div class="field" style="margin:0"><label>Address</label><input id="sh-edit-addr" value="${show.address||''}" placeholder="Street address" onchange="saveShowField('address',this.value)"></div>
+        <div class="field" style="margin:0"><label>Notes</label><input id="sh-edit-notes" value="${show.notes||''}" onchange="saveShowField('notes',this.value)"></div>
+      </div>
+    </div>
+
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Animals Entered (${entries.length})</div>
+    ${entries.length === 0 ? `<div class="empty" style="padding:2rem"><div class="empty-icon">🐑</div><h3>No animals entered yet</h3><p>Add animals to this show</p></div>` : `
+    <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+          <th style="padding:0.6rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Name</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Ear Tag</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Class</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Place</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Entry Wt</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Last Wt (log)</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${entryRows}</tbody>
+      </table>
+    </div></div>`}`;
+}
+
+async function saveShowField(field, value) {
+  if (!window._currentShow) return;
+  await db.from('shows').update({ [field]: value||null }).eq('id', window._currentShow.id);
+  window._currentShow[field] = value;
+}
+
+function openAddShowEntry(showId, preSelectedLambId) {
+  const entries = window._currentShowEntries || [];
+  const available = allLambs.filter(l => l.status === 'Active');
+  const lambOpts = available.map(l => `<option value="${l.id}" ${l.id===preSelectedLambId?'selected':''}>${l.name}${l.ear_tag?' #'+l.ear_tag:''} ${l.flock_type?'· '+l.flock_type:''}</option>`).join('');
+  const showDate = window._currentShow?.show_date || new Date().toISOString().slice(0,10);
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">+ Add Animal to Show</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    ${available.length === 0 ? '<div style="padding:1rem;color:var(--text3)">No active animals in your flock.</div>' : `
+    <div class="field"><label>Animal *</label><select id="se-lamb"><option value="">— Select —</option>${lambOpts}</select></div>
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Classes / Divisions</div>
+    <div id="se-class-rows">
+      <div class="se-class-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center">
+        <input placeholder="Class (e.g. Market Lamb)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
+        <input placeholder="Place (e.g. 1st)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
+        <button class="btn-icon" onclick="this.closest('.se-class-row').remove()" title="Remove">✕</button>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="seAddClassRow()" style="margin-bottom:0.75rem">+ Add Another Class</button>
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.5rem 0 0.4rem">Show Weight (optional — shared across all classes)</div>
+    <div class="row">
+      <div class="field"><label>Weight (lbs)</label><input type="number" step="0.1" id="se-weight" placeholder="e.g. 125.5"></div>
+      <div class="field"><label>Date</label><input type="date" id="se-wt-date" value="${showDate}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Time</label><input type="text" id="se-time" placeholder="HH:MM" onblur="fmtTimeInput(this)"></div>
+      <div class="field"><label>AM / PM</label><select id="se-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem;width:100%"><option>AM</option><option>PM</option></select></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="se-notes" placeholder="Optional"></div>`}
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      ${available.length > 0 ? `<button class="btn btn-primary" onclick="saveShowEntry('${showId}')">Add to Show</button>` : ''}
+    </div>`, true);
+}
+
+function seAddClassRow() {
+  const container = document.getElementById('se-class-rows');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'se-class-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center';
+  row.innerHTML = '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<input placeholder="Place (e.g. 2nd)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<button class="btn-icon" onclick="this.closest(\'.se-class-row\').remove()" title="Remove">✕</button>';
+  container.appendChild(row);
+}
+
+async function saveShowEntry(showId) {
+  const lambId = document.getElementById('se-lamb')?.value;
+  if (!lambId) { toast('Select an animal'); return; }
+
+  const classRows = document.querySelectorAll('.se-class-row');
+  const classes = [...classRows].map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { class: inputs[0]?.value?.trim()||null, place: inputs[1]?.value?.trim()||null };
+  }).filter(r => r.class || r.place);
+  if (classes.length === 0) classes.push({ class: null, place: null });
+
+  const wt = parseFloat(document.getElementById('se-weight')?.value);
+  const wtDate = document.getElementById('se-wt-date')?.value;
+  const seTime = combineTimeAmPm('se-time','se-ampm');
+  const notes = document.getElementById('se-notes')?.value?.trim()||null;
+  const entryWeight = (wt && !isNaN(wt)) ? wt : null;
+  const entryWeightDate = wtDate||null;
+
+  for (const cls of classes) {
+    const { data: entry } = await db.from('show_entries').insert({
+      show_id: showId, lamb_id: lambId,
+      class: cls.class, place: cls.place, notes,
+      entry_weight: entryWeight,
+      entry_weight_date: entryWeightDate,
+    }).select().single();
+    if (entry) window._currentShowEntries = [...(window._currentShowEntries||[]), entry];
+  }
+
+  toast(classes.length > 1 ? `${classes.length} entries added` : 'Animal added to show');
+  closeModal();
+  renderShowDetail();
+}
+
+function openEditShowEntry(entryId) {
+  const entry = (window._currentShowEntries||[]).find(e => e.id === entryId);
+  if (!entry) return;
+  const lamb = allLambs.find(l => l.id === entry.lamb_id);
+  const lastWt = (window._lastWeightByLamb||{})[entry.lamb_id];
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit Entry — ${lamb?.name||'Animal'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Class / Division</label><input id="ee-class" value="${entry.class||''}" placeholder="e.g. Market Lamb"></div>
+      <div class="field"><label>Place / Result</label><input id="ee-place" value="${entry.place||''}" placeholder="e.g. 1st, Grand Champion"></div>
+    </div>
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Entry Weight</div>
+    <div class="row">
+      <div class="field"><label>Weight (lbs)</label><input type="number" step="0.1" id="ee-weight" value="${entry.entry_weight||''}" placeholder="e.g. 125.5"></div>
+      <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${entry.entry_weight_date||window._currentShow?.show_date||''}"></div>
+    </div>
+    ${lastWt ? `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Last weight log: <strong>${lastWt.weight_lbs} lbs</strong> on ${lastWt.date}</div>` : ''}
+    <div class="field"><label>Notes</label><input id="ee-notes" value="${entry.notes||''}" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditShowEntry('${entryId}')">Save</button>
+    </div>`);
+}
+
+async function saveEditShowEntry(entryId) {
+  const entry = (window._currentShowEntries||[]).find(e => e.id === entryId);
+  if (!entry) return;
+  const cls = document.getElementById('ee-class')?.value?.trim()||null;
+  const place = document.getElementById('ee-place')?.value?.trim()||null;
+  const wt = parseFloat(document.getElementById('ee-weight')?.value);
+  const wtDate = document.getElementById('ee-wt-date')?.value;
+  const notes = document.getElementById('ee-notes')?.value?.trim()||null;
+
+  await db.from('show_entries').update({
+    class: cls, place, notes,
+    entry_weight: (wt && !isNaN(wt)) ? wt : null,
+    entry_weight_date: wtDate||null,
+  }).eq('id', entryId);
+  toast('Entry updated');
+  closeModal();
+  await openShowDetail(window._currentShow.id);
+}
+
+async function deleteShowEntry(entryId) {
+  const entry = (window._currentShowEntries||[]).find(e => e.id === entryId);
+  await db.from('show_entries').delete().eq('id', entryId);
+  window._currentShowEntries = (window._currentShowEntries||[]).filter(e => e.id !== entryId);
+  toast('Removed from show');
+  renderShowDetail();
+}
+
+async function toggleArchiveShow(showId, isArchived) {
+  await db.from('shows').update({ archived: !isArchived }).eq('id', showId);
+  toast(isArchived ? 'Show unarchived' : 'Show archived');
+  renderShows();
+}
+
+async function deleteShow(showId) {
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🗑 Delete Show</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 1rem;color:var(--text)">Delete this show and all its entries? Show weights logged to animals will be kept.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="confirmDeleteShow('${showId}')">Delete</button>
+    </div>`);
+}
+
+async function confirmDeleteShow(showId) {
+  await db.from('show_entries').delete().eq('show_id', showId);
+  await db.from('shows').delete().eq('id', showId);
+  toast('Show deleted');
+  closeModal();
+  renderShows();
+}
+
+function openBulkShowResults(showId) {
+  const show = window._currentShow;
+  const entries = window._currentShowEntries || [];
+  if (entries.length === 0) { toast('No animals in this show yet'); return; }
+
+  const showName = show?.name || '';
+  const showDate = show?.show_date || '';
+
+  const rows = entries.map(e => {
+    const lamb = allLambs.find(l => l.id === e.lamb_id);
+    const lambName = lamb?.name || '?';
+    const lambTag = lamb?.ear_tag ? '#'+lamb.ear_tag : '';
+    const entryWtDate = e.entry_weight_date || showDate;
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:0.5rem 0.75rem;font-weight:600;color:var(--text);white-space:nowrap">'+lambName+' <span style="font-size:0.75rem;color:var(--text3)">'+lambTag+'</span></td>'
+      + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-class-'+e.id+'" value="'+(e.class||'')+'" placeholder="e.g. Market Lamb" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+      + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-place-'+e.id+'" value="'+(e.place||'')+'" placeholder="e.g. 1st" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+      + '<td style="padding:0.5rem 0.5rem"><input type="number" step="0.1" id="bsr-wt-'+e.id+'" value="'+(e.entry_weight||'')+'" placeholder="lbs" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+      + '<td style="padding:0.5rem 0.5rem"><input type="date" id="bsr-wtdate-'+e.id+'" value="'+entryWtDate+'" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+      + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-notes-'+e.id+'" value="'+(e.notes||'')+'" placeholder="Optional" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+      + '</tr>';
+  }).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🏅 Bulk Results — ${showName}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">Enter class, placing, and weight for all animals at once.</div>
+    <div style="overflow-x:auto;height:380px;overflow-y:scroll">
+      <table style="width:100%;border-collapse:collapse;font-size:0.83rem;min-width:560px">
+        <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:1">
+          <th style="padding:0.5rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:100px">Animal</th>
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:130px">Class</th>
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:90px">Place</th>
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:80px">Entry Wt</th>
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:120px">Wt Date</th>
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:110px">Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkShowResults('${showId}')">Save Results</button>
+    </div>`, true);
+}
+
+async function saveBulkShowResults(showId) {
+  const entries = window._currentShowEntries || [];
+  let saved = 0;
+  for (const e of entries) {
+    const cls = document.getElementById(`bsr-class-${e.id}`)?.value?.trim()||null;
+    const place = document.getElementById(`bsr-place-${e.id}`)?.value?.trim()||null;
+    const wt = parseFloat(document.getElementById(`bsr-wt-${e.id}`)?.value);
+    const wtDate = document.getElementById(`bsr-wtdate-${e.id}`)?.value||null;
+    const notes = document.getElementById(`bsr-notes-${e.id}`)?.value?.trim()||null;
+    await db.from('show_entries').update({
+      class: cls, place, notes,
+      entry_weight: (!isNaN(wt) && wt) ? wt : null,
+      entry_weight_date: wtDate||null,
+    }).eq('id', e.id);
+    saved++;
+  }
+  toast(`${saved} result${saved!==1?'s':''} saved`);
+  closeModal();
+  await openShowDetail(showId);
+}
+
+function openBulkShowWeight(showId) {
+  const show = window._currentShow;
+  const entries = window._currentShowEntries || [];
+  const defaultDate = show?.show_date || new Date().toISOString().slice(0,10);
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">⚖️ Log Show Weights</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Enter weights for animals entered in this show.</div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:0.4rem;margin-bottom:0.75rem;align-items:center">
+      <input type="date" id="bsw-date" value="${defaultDate}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+      <input type="text" id="bsw-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+      <select id="bsw-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem"><option>AM</option><option>PM</option></select>
+    </div>
+    <div style="height:300px;overflow-y:scroll">
+      ${entries.length === 0 ? '<div style="text-align:center;color:var(--text3);padding:2rem">No animals in this show yet</div>' :
+        entries.map(e => {
+          const lamb = allLambs.find(l => l.id === e.lamb_id);
+          const wr = e.weight_records;
+          return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:0.85rem;font-weight:600;color:var(--text)">${lamb?.name||'?'} <span style="font-size:0.75rem;color:var(--text3)">${lamb?.ear_tag?'#'+lamb.ear_tag:''}</span></div>
+            <input type="number" step="0.1" id="bsw-wt-${e.id}" value="${wr?.weight_lbs||''}" placeholder="lbs" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+          </div>`;
+        }).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkShowWeight('${showId}')">Save Weights</button>
+    </div>`, true);
+}
+
+async function saveBulkShowWeight(showId) {
+  const entries = window._currentShowEntries || [];
+  const date = document.getElementById('bsw-date')?.value;
+  const weigh_time = combineTimeAmPm('bsw-time','bsw-ampm');
+  const updates = [];
+
+  for (const e of entries) {
+    const wt = parseFloat(document.getElementById(`bsw-wt-${e.id}`)?.value);
+    if (isNaN(wt)) continue;
+    if (e.weight_record_id) {
+      await db.from('weight_records').update({ weight_lbs: wt, date, weigh_time: weigh_time||null }).eq('id', e.weight_record_id);
+    } else {
+      const { data: wr } = await db.from('weight_records').insert({
+        lamb_id: e.lamb_id, weight_lbs: wt, date, weigh_time: weigh_time||null, show_id: showId
+      }).select().single();
+      if (wr) {
+        await db.from('show_entries').update({ weight_record_id: wr.id }).eq('id', e.id);
+      }
+    }
+    updates.push(e.id);
+  }
+
+  toast(`${updates.length} weight${updates.length!==1?'s':''} saved`);
+  closeModal();
+  await openShowDetail(showId);
+}
+
+async function printShowReport(showId) {
+  let show = window._currentShow?.id === showId ? window._currentShow : null;
+  let entries = window._currentShow?.id === showId ? (window._currentShowEntries||[]) : null;
+  if (!show) {
+    const [{ data: s }, { data: e }] = await Promise.all([
+      db.from('shows').select('*').eq('id', showId).single(),
+      db.from('show_entries').select('*').eq('show_id', showId),
+    ]);
+    show = s; entries = e||[];
+  }
+  if (!show) { toast('Show not found'); return; }
+
+  const p = getFarmProfile();
+  const farmName = p.type==='business' ? (p.bizname||p.name||'') : (p.name||'');
+  const printDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  // Group by lamb
+  const lambOrder = [];
+  const byLamb = {};
+  entries.forEach(e => {
+    if (!byLamb[e.lamb_id]) { byLamb[e.lamb_id] = []; lambOrder.push(e.lamb_id); }
+    byLamb[e.lamb_id].push(e);
+  });
+
+  let tableRows = '';
+  let grandTotal = 0;
+  lambOrder.forEach(lambId => {
+    const lamb = allLambs.find(l => l.id === lambId);
+    const lambEntries = byLamb[lambId];
+    lambEntries.forEach((e, ei) => {
+      grandTotal++;
+      tableRows += `<tr style="border-bottom:1px solid #e5e7eb;${ei>0?'background:#fafafa':''}">
+        <td style="padding:7px 10px;font-weight:${ei===0?'600':'400'};font-size:11px">${ei===0?(lamb?.name||'?'):''}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#555">${ei===0&&lamb?.ear_tag?'#'+lamb.ear_tag:''}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#555">${ei===0?(lamb?.sex||'—'):''}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#555">${ei===0?(lamb?.breed||'—'):''}</td>
+        <td style="padding:7px 8px;font-size:11px">${e.class||'—'}</td>
+        <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#15803d">${e.place||'—'}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#555">${e.entry_weight?e.entry_weight+' lbs':'—'}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#888">${e.notes||''}</td>
+      </tr>`;
+    });
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Show Report — ${show.name}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+  .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+  .header-left h1{font-size:20px;font-weight:700}
+  .header-left p{font-size:11px;color:#555;margin-top:3px}
+  .header-right{text-align:right;font-size:11px;color:#555}
+  .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 20px;background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:18px}
+  .meta-item label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;display:block}
+  .meta-item span{font-size:12px;font-weight:600;color:#111}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#1a1a1a;color:#fff}
+  thead th{padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em}
+  tbody tr:hover{background:#f0fdf4}
+  .footer{text-align:center;font-size:9px;color:#aaa;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px}
+  @media print{body{padding:12px}}</style></head><body>
+  <div class="header">
+    <div class="header-left">
+      <h1>🏆 ${show.name}</h1>
+      <p>Show Results Report</p>
+    </div>
+    <div class="header-right">${farmName}<br>${printDate}</div>
+  </div>
+  <div class="meta">
+    <div class="meta-item"><label>Show Date</label><span>${show.show_date||'—'}${show.end_date&&show.end_date!==show.show_date?' – '+show.end_date:''}</span></div>
+    <div class="meta-item"><label>Location</label><span>${show.location||'—'}</span></div>
+    <div class="meta-item"><label>Address</label><span>${show.address||'—'}</span></div>
+    <div class="meta-item"><label>Animals</label><span>${lambOrder.length}</span></div>
+    <div class="meta-item"><label>Total Entries</label><span>${grandTotal}</span></div>
+    <div class="meta-item"><label>Notes</label><span>${show.notes||'—'}</span></div>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Ear Tag</th><th>Sex</th><th>Breed</th><th>Class / Division</th><th>Place</th><th>Entry Wt</th><th>Notes</th></tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
+  </body></html>`;
+
+  openPrintWindow(html, 'Show Report');
+}
+
+async function printAnimalShowHistory(lambId) {
+  const lamb = allLambs.find(l => l.id === lambId);
+  if (!lamb) return;
+
+  const { data: entries } = await db.from('show_entries').select('*').eq('lamb_id', lambId);
+  if (!entries || entries.length === 0) { toast('No show history for this animal'); return; }
+
+  const showMap = {};
+  (allShows||[]).forEach(s => { showMap[s.id] = s; });
+  const { data: extraShows } = await db.from('shows').select('*');
+  (extraShows||[]).forEach(s => { showMap[s.id] = s; });
+
+  const sorted = [...entries].sort((a,b) => {
+    const sa = showMap[a.show_id]?.show_date||'';
+    const sb = showMap[b.show_id]?.show_date||'';
+    return sb.localeCompare(sa);
+  });
+
+  const p = getFarmProfile();
+  const farmName = p.type==='business'?(p.bizname||p.name||''):(p.name||'');
+  const printDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const rows = sorted.map(e => {
+    const show = showMap[e.show_id]||{};
+    return `<tr style="border-bottom:1px solid #e5e7eb">
+      <td style="padding:7px 10px;font-weight:600;font-size:11px">${show.name||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#555">${show.show_date||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#555">${show.location||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px">${e.class||'—'}</td>
+      <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#15803d">${e.place||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#555">${e.entry_weight?e.entry_weight+' lbs':'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#888">${e.notes||''}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Show History — ${lamb.name}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+  .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+  .header-left h1{font-size:20px;font-weight:700}
+  .header-left p{font-size:11px;color:#555;margin-top:3px}
+  .animal-card{background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .ac-item label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;display:block}
+  .ac-item span{font-size:12px;font-weight:600;color:#111}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#1a1a1a;color:#fff}
+  thead th{padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em}
+  tbody tr:nth-child(even){background:#f9f9f9}
+  .footer{text-align:center;font-size:9px;color:#aaa;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px}
+  @media print{body{padding:12px}}</style></head><body>
+  <div class="header">
+    <div class="header-left">
+      <h1>${lamb.name}${lamb.ear_tag?' — #'+lamb.ear_tag:''}</h1>
+      <p>Show History Report</p>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#555">${farmName}<br>${printDate}</div>
+  </div>
+  <div class="animal-card">
+    <div class="ac-item"><label>Sex</label><span>${lamb.sex||'—'}</span></div>
+    <div class="ac-item"><label>Breed</label><span>${lamb.breed||'—'}</span></div>
+    <div class="ac-item"><label>DOB</label><span>${lamb.dob||'—'}</span></div>
+    <div class="ac-item"><label>Scrapie ID</label><span>${lamb.scrapie_id||'—'}</span></div>
+  </div>
+  <table>
+    <thead><tr><th>Show</th><th>Date</th><th>Location</th><th>Class</th><th>Place</th><th>Entry Wt</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
+  </body></html>`;
+
+  openPrintWindow(html, 'Show History');
+}
+
+async function printShowHealthPapers(showId) {
+  let show = window._currentShow?.id === showId ? window._currentShow : null;
+  let entries = window._currentShow?.id === showId ? (window._currentShowEntries||[]) : null;
+  if (!show) {
+    const [{ data: s }, { data: e }] = await Promise.all([
+      db.from('shows').select('*').eq('id', showId).single(),
+      db.from('show_entries').select('*').eq('show_id', showId),
+    ]);
+    show = s; entries = e || [];
+  }
+  if (!show) { toast('Show not found'); return; }
+
+  const animals = entries.map(e => allLambs.find(l => l.id === e.lamb_id)).filter(Boolean);
+  if (animals.length === 0) { toast('No animals in this show'); return; }
+
+  const p = getFarmProfile();
+  const fromName = p.type==='business' ? (p.bizname||p.name||'') : (p.name||'');
+  const fromAddr = [p.street, [p.city,p.state,p.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const printDate = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+  const travelRange = show.show_date ? (show.show_date + (show.end_date && show.end_date!==show.show_date ? ' — '+show.end_date : '')) : '—';
+
+  function calcAge(dob) {
+    if (!dob) return '—';
+    const months = Math.floor((new Date()-new Date(dob))/(1000*60*60*24*30.44));
+    return months < 24 ? months+' mo' : Math.floor(months/12)+'yr '+months%12+'mo';
+  }
+
+  const animalRows = animals.map((l,i) => `
+    <tr style="border-bottom:1px solid #ddd">
+      <td style="padding:6px 8px;font-size:11px;text-align:center">${i+1}</td>
+      <td style="padding:6px 8px;font-size:11px;font-weight:600">${l.name}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.scrapie_id||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.ear_tag?'#'+l.ear_tag:'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.alt_id||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.sex||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.breed||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${l.dob||'—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${calcAge(l.dob)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Health Papers — ${show.name}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+  .header{text-align:center;border-bottom:3px double #333;padding-bottom:12px;margin-bottom:16px}
+  .header h1{font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+  .header h2{font-size:14px;font-weight:400;margin-top:4px;color:#444}
+  .section{margin-bottom:14px}.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:8px}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px}
+  .info-row{display:flex;gap:6px}.info-label{font-weight:700;min-width:110px;font-size:11px}.info-val{font-size:11px;color:#222}
+  table{width:100%;border-collapse:collapse;margin-top:4px}thead tr{background:#222;color:#fff}
+  thead th{padding:6px 8px;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:.05em}
+  tbody tr:nth-child(even){background:#f5f5f5}
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px}
+  .sig-block{border-top:1px solid #333;padding-top:4px}.sig-label{font-size:10px;color:#555}
+  .footer{text-align:center;font-size:9px;color:#888;margin-top:20px;border-top:1px solid #ddd;padding-top:8px}
+  @media print{body{padding:12px}}</style></head><body>
+  <div class="header"><h1>Certificate of Veterinary Inspection</h1><h2>Health Papers — Ovine (Sheep)</h2></div>
+  <div class="section"><div class="section-title">Event Information</div><div class="info-grid">
+    <div class="info-row"><span class="info-label">Show / Event:</span><span class="info-val">${show.name}</span></div>
+    <div class="info-row"><span class="info-label">Destination:</span><span class="info-val">${show.location||'—'}</span></div>
+    <div class="info-row"><span class="info-label">Show Address:</span><span class="info-val">${show.address||'—'}</span></div>
+    <div class="info-row"><span class="info-label">Travel Dates:</span><span class="info-val">${travelRange}</span></div>
+  </div></div>
+  <div class="section"><div class="section-title">Owner / Origin</div><div class="info-grid">
+    <div class="info-row"><span class="info-label">Owner / Farm:</span><span class="info-val">${fromName||'—'}</span></div>
+    <div class="info-row"><span class="info-label">Address:</span><span class="info-val">${fromAddr||'—'}</span></div>
+  </div></div>
+  <div class="section"><div class="section-title">Animals — ${animals.length} Head of Sheep</div>
+  <table><thead><tr><th>#</th><th>Name</th><th>Scrapie ID</th><th>Ear Tag</th><th>Alt ID</th><th>Sex</th><th>Breed</th><th>DOB</th><th>Age</th></tr></thead>
+  <tbody>${animalRows}</tbody></table></div>
+  <div class="section"><div class="section-title">Certification</div>
+  <p style="font-size:11px;line-height:1.6;color:#333">I hereby certify that I have this day examined the above-described animals and find them free from symptoms of infectious or communicable disease, and to the best of my knowledge have not been exposed to such disease within 30 days prior to this certificate.</p></div>
+  <div class="sig-grid">
+    <div class="sig-block"><div style="height:40px"></div><div class="sig-label">Veterinarian Signature</div></div>
+    <div class="sig-block"><div style="height:40px"></div><div class="sig-label">License No. / Date</div></div>
+    <div class="sig-block"><div style="height:40px"></div><div class="sig-label">Owner Signature</div><div style="font-size:11px;margin-top:2px">${fromName}</div></div>
+  </div>
+  <div class="footer">${fromName||'Flock Health Ledger'} · Generated ${printDate}</div>
+  </body></html>`;
+
+  openPrintWindow(html, 'Health Papers');
+}
+
+// ── WEIGHTS PAGE ──────────────────────────────────────
+
+async function renderWeightsPage() {
+  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const { data } = await db.from('weight_records').select('*').order('date', {ascending: false});
+  const records = (data || []).map(r => ({
+    ...r,
+    lambs: allLambs.find(l => l.id === r.lamb_id) || null
+  }));
+  window._weightRecords = records;
+
+  const sexes = [...new Set(allLambs.map(l => l.sex).filter(Boolean))].sort();
+  const breeds = [...new Set(allLambs.map(l => l.breed).filter(Boolean))].sort();
+  const flockTypes = ['Show', 'Breeding', 'Both'];
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="openAddWeightGlobal()">+ Log Weight</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkWeight()">⚖️ Bulk Log</button>
+      </div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">⚖️ Weight Records</div>
+    </div>
+
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem">
+      <input id="wt-search" placeholder="Search animal..." oninput="renderWeightsTable()" style="padding:0.35rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);min-width:150px;flex:1">
+      <select id="wt-flock" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+        <option value="">All Flocks</option>
+        ${flockTypes.map(t => `<option>${t}</option>`).join('')}
+      </select>
+      <select id="wt-sex" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+        <option value="">All Sexes</option>
+        ${sexes.map(s => `<option>${s}</option>`).join('')}
+      </select>
+      <select id="wt-breed" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+        <option value="">All Breeds</option>
+        ${breeds.map(b => `<option>${b}</option>`).join('')}
+      </select>
+      <input type="date" id="wt-from" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <input type="date" id="wt-to" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <select id="wt-show" onchange="renderWeightsTable()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
+        <option value="">All Shows</option>
+        ${allShows.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="clearWeightFilters()">Clear</button>
+    </div>
+
+    <div id="wt-summary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem"></div>
+    <div id="wt-chart-wrap" style="margin-bottom:1rem"></div>
+    <div id="wt-table-wrap"></div>`;
+
+  renderWeightsTable();
+}
+
+function clearWeightFilters() {
+  ['wt-search','wt-flock','wt-sex','wt-breed','wt-from','wt-to','wt-show'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  renderWeightsTable();
+}
+
+function renderWeightsTable() {
+  const q = document.getElementById('wt-search')?.value?.toLowerCase() || '';
+  const flock = document.getElementById('wt-flock')?.value || '';
+  const sex = document.getElementById('wt-sex')?.value || '';
+  const breed = document.getElementById('wt-breed')?.value || '';
+  const from = document.getElementById('wt-from')?.value || '';
+  const to = document.getElementById('wt-to')?.value || '';
+  const showFilter = document.getElementById('wt-show')?.value || '';
+
+  const records = (window._weightRecords || []).filter(r => {
+    const lamb = r.lambs;
+    if (q && !((lamb?.name||'').toLowerCase().includes(q) || (lamb?.ear_tag||'').toLowerCase().includes(q) || (lamb?.alt_id||'').toLowerCase().includes(q))) return false;
+    const ft = lamb?.flock_type || '';
+    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) return false;
+    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) return false;
+    if (flock === 'Both' && ft !== 'Both') return false;
+    if (sex && lamb?.sex !== sex) return false;
+    if (breed && lamb?.breed !== breed) return false;
+    if (from && r.date < from) return false;
+    if (to && r.date > to) return false;
+    if (showFilter && r.show_id !== showFilter) return false;
+    return true;
+  });
+
+  // Summary stats
+  const weights = records.map(r => r.weight_lbs).filter(Boolean);
+  const avg = weights.length ? (weights.reduce((s,w) => s+w, 0) / weights.length).toFixed(1) : '—';
+  const max = weights.length ? Math.max(...weights).toFixed(1) : '—';
+  const min = weights.length ? Math.min(...weights).toFixed(1) : '—';
+
+  const summaryEl = document.getElementById('wt-summary');
+  if (summaryEl) summaryEl.innerHTML = `
+    <div class="card" style="padding:0.65rem 1rem;flex:1;min-width:100px;text-align:center">
+      <div style="font-size:1.4rem;font-weight:700;color:var(--accent)">${records.length}</div>
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase">Records</div>
+    </div>
+    <div class="card" style="padding:0.65rem 1rem;flex:1;min-width:100px;text-align:center">
+      <div style="font-size:1.4rem;font-weight:700;color:var(--text)">${avg}</div>
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase">Avg (lbs)</div>
+    </div>
+    <div class="card" style="padding:0.65rem 1rem;flex:1;min-width:100px;text-align:center">
+      <div style="font-size:1.4rem;font-weight:700;color:#15803d">${max}</div>
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase">Max (lbs)</div>
+    </div>
+    <div class="card" style="padding:0.65rem 1rem;flex:1;min-width:100px;text-align:center">
+      <div style="font-size:1.4rem;font-weight:700;color:#1d4ed8">${min}</div>
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase">Min (lbs)</div>
+    </div>`;
+
+  // Check if filtered to single animal
+  const uniqueAnimals = [...new Set(records.map(r => r.lamb_id))];
+  const isSingle = uniqueAnimals.length === 1;
+  const chartEl = document.getElementById('wt-chart-wrap');
+
+  if (chartEl) {
+    if (isSingle && records.length > 1) {
+      const sorted = [...records].sort((a,b) => a.date > b.date ? 1 : -1);
+      const lamb = sorted[0].lambs;
+      const maxW = Math.max(...sorted.map(r => r.weight_lbs));
+      const minW = Math.min(...sorted.map(r => r.weight_lbs));
+      const padded_max = maxW + (maxW - minW) * 0.15 || maxW + 10;
+      const padded_min = Math.max(0, minW - (maxW - minW) * 0.15);
+      const chartW = 600; const chartH = 180; const padL = 48; const padR = 16; const padT = 12; const padB = 32;
+      const innerW = chartW - padL - padR;
+      const innerH = chartH - padT - padB;
+      const pts = sorted.map((r, i) => {
+        const x = padL + (sorted.length === 1 ? innerW/2 : (i / (sorted.length-1)) * innerW);
+        const y = padT + innerH - ((r.weight_lbs - padded_min) / (padded_max - padded_min)) * innerH;
+        return { x, y, r };
+      });
+      const polyline = pts.map(p => `${p.x},${p.y}`).join(' ');
+      const area = `${padL},${padT+innerH} ` + polyline + ` ${pts[pts.length-1].x},${padT+innerH}`;
+      const dots = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--accent)" stroke="#fff" stroke-width="1.5">
+        <title>${p.r.weight_lbs} lbs — ${p.r.date}</title></circle>`).join('');
+      const labels = pts.filter((_, i) => i === 0 || i === pts.length-1 || sorted.length <= 8 || i % Math.ceil(sorted.length/6) === 0)
+        .map(p => `<text x="${p.x}" y="${padT+innerH+14}" text-anchor="middle" font-size="9" fill="var(--text3)">${p.r.date?.slice(5)}</text>`).join('');
+      // Y axis ticks
+      const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => {
+        const val = (padded_min + t*(padded_max-padded_min)).toFixed(0);
+        const y = padT + innerH - t*innerH;
+        return `<text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="9" fill="var(--text3)">${val}</text>
+                <line x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+      }).join('');
+
+      chartEl.innerHTML = `<div class="card" style="padding:1rem;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">${lamb?.name||''} — Weight Over Time</div>
+        <svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;max-height:200px;overflow:visible">
+          ${yTicks}
+          <polyline points="${area}" fill="var(--accent)" fill-opacity="0.1" stroke="none"/>
+          <polyline points="${polyline}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+          ${dots}
+          ${labels}
+        </svg>
+      </div>`;
+    } else {
+      chartEl.innerHTML = '';
+    }
+  }
+  const tableEl = document.getElementById('wt-table-wrap');
+  if (!tableEl) return;
+
+  if (records.length === 0) {
+    tableEl.innerHTML = `<div class="empty"><div class="empty-icon">⚖️</div><h3>No records found</h3><p>Try adjusting the filters</p></div>`;
+    return;
+  }
+
+  const rows = records.map(r => {
+    const lamb = r.lambs;
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="${lamb ? `showLamb('${r.lamb_id}')` : ''}" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      <td style="padding:0.6rem 0.85rem;font-weight:600;color:var(--text)">${lamb?.name||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${lamb?.ear_tag?'#'+lamb.ear_tag:'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${lamb?.sex||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${lamb?.breed||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${lamb?.flock_type||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;text-align:right;font-weight:700;color:var(--accent)">${r.weight_lbs ? r.weight_lbs+' lbs' : '—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${r.date||'—'}${r.weigh_time?'<br><span style="font-size:0.72rem;color:var(--text3)">'+fmtStepTime(r.weigh_time)+'</span>':''}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text3);font-size:0.8rem">${r.notes||''}</td>
+    </tr>`;
+  }).join('');
+
+  tableEl.innerHTML = `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+      <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+        <th style="padding:0.6rem 0.85rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Name</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Ear Tag</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Sex</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Breed</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Flock</th>
+        <th style="padding:0.6rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Weight</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Date</th>
+        <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Notes</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div></div>`;
+}
+
+function openAddWeightGlobal() {
+  const lambOpts = allLambs.filter(l => l.status === 'Active').map(l =>
+    `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">⚖️ Log Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Animal *</label><select id="wg-lamb"><option value="">— Select —</option>${lambOpts}</select></div>
+    <div class="row">
+      <div class="field"><label>Weight (lbs) *</label><input type="number" id="wg-weight" step="0.1" min="0" placeholder="e.g. 125.5"></div>
+      <div class="field"><label>Date *</label><input type="date" id="wg-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Time <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><div style="display:flex;gap:0.35rem"><input type="text" id="wg-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="flex:1"><select id="wg-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem"><option>AM</option><option>PM</option></select></div></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="wg-notes" placeholder="Optional notes"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWeightGlobal()">Save</button>
+    </div>`);
+}
+
+async function saveWeightGlobal() {
+  const lambId = document.getElementById('wg-lamb')?.value;
+  const weight = parseFloat(document.getElementById('wg-weight')?.value);
+  const date = document.getElementById('wg-date')?.value;
+  const notes = document.getElementById('wg-notes')?.value?.trim() || null;
+  if (!lambId) { toast('Select an animal'); return; }
+  if (!weight || isNaN(weight)) { toast('Enter a weight'); return; }
+  if (!date) { toast('Enter a date'); return; }
+  const wgTime = combineTimeAmPm('wg-time','wg-ampm');
+  await db.from('weight_records').insert({ lamb_id: lambId, weight_lbs: weight, date, weigh_time: wgTime||null, notes });
+  toast('Weight logged!');
+  closeModal();
+  renderWeightsPage();
+}
 
 async function renderBreeding() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
@@ -4872,7 +5880,8 @@ function openAddWeight() {
 async function saveWeight() {
   const lbs = v('wt-lbs');
   if (!lbs) { toast('Enter a weight'); return; }
-  await db.from('weight_records').insert({ lamb_id: currentLambId, weight_lbs: parseFloat(lbs), date: v('wt-date'), notes: v('wt-notes') });
+  const wtTime = combineTimeAmPm('wt-time','wt-ampm');
+  await db.from('weight_records').insert({ lamb_id: currentLambId, weight_lbs: parseFloat(lbs), date: v('wt-date'), weigh_time: wtTime||null, notes: v('wt-notes') });
   toast('Weight saved'); closeModal(); loadLambTab();
 }
 
@@ -5721,22 +6730,67 @@ async function saveBulkPregCheck() {
   toast(`${total} record${total!==1?'s':''} updated`);
   closeModal();
 }
-function openBulkWeight() {
+async function openBulkWeight() {
   const defaultDate = new Date().toISOString().slice(0,10);
-  const active = allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both'));
+  const active = allLambs.filter(l => l.status === 'Active');
+  window._bwAllLambs = active;
+  const showOpts = allShows.map(s => '<option value="' + s.id + '">' + s.name + '</option>').join('');
+  const { data: allShowEntries } = await db.from('show_entries').select('show_id, lamb_id');
+  const showLambMap = {};
+  (allShowEntries||[]).forEach(e => {
+    if (!showLambMap[e.show_id]) showLambMap[e.show_id] = new Set();
+    showLambMap[e.show_id].add(e.lamb_id);
+  });
+  window._bwShowLambMap = showLambMap;
+  const sireOpts = sireOptions('');
+  const groups = window._planGroups || [];
+  const members = window._planMembers || [];
+  const activeIds = new Set(active.map(l => l.id));
+  const groupOpts = groups
+    .filter(g => g.status !== 'Cancelled')
+    .map(g => {
+      const ids = members.filter(m => m.group_id === g.id && m.lamb_id && activeIds.has(m.lamb_id)).map(m => m.lamb_id);
+      if (!ids.length) return '';
+      return '<option value="' + g.id + '" data-ids="' + ids.join(',') + '">' + g.name + ' (' + ids.length + ')</option>';
+    }).filter(Boolean).join('');
 
   showModal(`
     <div class="modal-header"><div class="modal-title">⚖️ Bulk Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">Enter weights for multiple animals. Leave blank to skip.</div>
-    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;align-items:center">
-      <span style="font-size:0.78rem;color:var(--text3)">Date for all:</span>
-      <input type="date" id="bw-global-date" value="${defaultDate}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem;width:150px">
-      <button class="btn-icon" onclick="applyGlobalWeightDate()">Apply to all</button>
+    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Enter weights for multiple animals. Leave blank to skip.</div>
+    <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0.4rem;margin-bottom:0.5rem;align-items:center">
+      <input type="date" id="bw-global-date" value="${defaultDate}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+      <input type="text" id="bw-global-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+      <select id="bw-global-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem">
+        <option>AM</option><option>PM</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="applyGlobalWeightDate()" title="Copy this date to all individual rows below">Apply date to all</button>
     </div>
-    <div style="max-height:420px;overflow-y:auto" id="bulk-weight-rows">
+    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.5rem;align-items:center">
+      <input id="bw-search" placeholder="Search..." oninput="bwFilterList()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
+      <select id="bw-flock-filter" onchange="bwFilterList()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Flocks</option>
+        <option value="Show">Show</option>
+        <option value="Breeding">Breeding</option>
+        <option value="Both">Both</option>
+      </select>
+      <select id="bw-sex-filter" onchange="bwFilterList()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Sexes</option>
+        <option value="Ewe">Ewes</option>
+        <option value="Wether">Wethers</option>
+        <option value="Ram">Rams</option>
+      </select>
+      ${groupOpts ? '<select id="bw-group-filter" onchange="bwGroupSelected()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All Groups</option>' + groupOpts + '</select>' : ''}
+      ${showOpts ? '<select id="bw-show-filter" onchange="bwShowSelected()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All Shows</option>' + showOpts + '</select>' : ''}
+      <button class="btn-icon btn-sm" onclick="bwCheckVisible(true)">✓ All</button>
+    </div>
+    <div style="height:340px;overflow-y:scroll" id="bulk-weight-rows">
       ${active.map(lamb => `
-        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-          <div style="flex:1;font-size:0.85rem;font-weight:500;color:var(--text)">${lamb.name}${lamb.ear_tag?' <span style="color:var(--text3);font-size:0.75rem">#'+lamb.ear_tag+'</span>':''}</div>
+        <div id="bw-row-${lamb.id}" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+          <input type="checkbox" id="bw-cb-${lamb.id}" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${lamb.name}</span>
+            <span style="font-size:0.75rem;color:var(--text3)">${lamb.ear_tag?' #'+lamb.ear_tag:''} ${lamb.flock_type?'· '+lamb.flock_type:''}</span>
+          </div>
           <input type="number" step="0.1" id="bw-wt-${lamb.id}" placeholder="lbs" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
           <input type="date" id="bw-date-${lamb.id}" value="${defaultDate}" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
         </div>`).join('')}
@@ -5747,28 +6801,90 @@ function openBulkWeight() {
     </div>`, true);
 }
 
+function bwShowSelected() {
+  const sel = document.getElementById('bw-show-filter');
+  if (!sel?.value) { bwFilterList(); return; }
+  const showId = sel.value;
+  const ids = window._bwShowLambMap?.[showId] || new Set();
+  ['bw-search','bw-flock-filter','bw-sex-filter','bw-group-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  (window._bwAllLambs || []).forEach(l => {
+    const row = document.getElementById(`bw-row-${l.id}`);
+    if (row) row.style.display = ids.has(l.id) ? 'flex' : 'none';
+  });
+}
+
+function bwFilterList() {
+  const showSel = document.getElementById('bw-show-filter');
+  if (showSel) showSel.value = '';
+  const q = document.getElementById('bw-search')?.value?.toLowerCase() || '';
+  const flock = document.getElementById('bw-flock-filter')?.value || '';
+  const sex = document.getElementById('bw-sex-filter')?.value || '';
+  const groupSel = document.getElementById('bw-group-filter');
+  if (groupSel) groupSel.value = '';
+  (window._bwAllLambs || []).forEach(l => {
+    const row = document.getElementById(`bw-row-${l.id}`);
+    if (!row) return;
+    const ft = l.flock_type || '';
+    let show = true;
+    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q)) show = false;
+    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) show = false;
+    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) show = false;
+    if (flock === 'Both' && ft !== 'Both') show = false;
+    if (sex && l.sex !== sex) show = false;
+    row.style.display = show ? 'flex' : 'none';
+  });
+}
+
+function bwGroupSelected() {
+  const sel = document.getElementById('bw-group-filter');
+  if (!sel?.value) { bwFilterList(); return; }
+  const ids = new Set((sel.options[sel.selectedIndex]?.getAttribute('data-ids')||'').split(',').filter(Boolean));
+  ['bw-search','bw-flock-filter','bw-sex-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  (window._bwAllLambs || []).forEach(l => {
+    const row = document.getElementById(`bw-row-${l.id}`);
+    if (row) row.style.display = ids.has(l.id) ? 'flex' : 'none';
+  });
+}
+
+function bwCheckVisible(checked) {
+  document.querySelectorAll('[id^="bw-cb-"]').forEach(cb => {
+    const id = cb.id.replace('bw-cb-','');
+    const row = document.getElementById(`bw-row-${id}`);
+    if (row && row.style.display !== 'none') cb.checked = checked;
+  });
+}
+
 function applyGlobalWeightDate() {
   const date = document.getElementById('bw-global-date')?.value;
   if (!date) return;
-  allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both')).forEach(lamb => {
+  (window._bwAllLambs || []).forEach(lamb => {
+    const row = document.getElementById(`bw-row-${lamb.id}`);
     const el = document.getElementById(`bw-date-${lamb.id}`);
-    if (el) el.value = date;
+    if (el && row && row.style.display !== 'none') el.value = date;
   });
 }
 
 async function saveBulkWeight() {
-  const active = allLambs.filter(l => l.status === 'Active' && (l.flock_type === 'Show' || l.flock_type === 'Both'));
+  const active = window._bwAllLambs || allLambs.filter(l => l.status === 'Active');
   const records = [];
   for (const lamb of active) {
-    const wt = document.getElementById(`bw-wt-${lamb.id}`)?.value;
-    const date = document.getElementById(`bw-date-${lamb.id}`)?.value;
-    if (!wt || !date) continue;
-    records.push({ lamb_id: lamb.id, weight_lbs: parseFloat(wt), date });
+    const cb = document.getElementById(`bw-cb-${lamb.id}`);
+    if (!cb?.checked) continue;
+    const wtEl = document.getElementById(`bw-wt-${lamb.id}`);
+    const dateEl = document.getElementById(`bw-date-${lamb.id}`);
+    const wt = wtEl?.value?.trim();
+    const date = dateEl?.value;
+    if (!wt || isNaN(parseFloat(wt))) continue;
+    if (!date) continue;
+    const bwTime = combineTimeAmPm('bw-global-time','bw-global-ampm');
+    records.push({ lamb_id: lamb.id, weight_lbs: parseFloat(wt), date, weigh_time: bwTime||null });
   }
-  if (records.length === 0) { toast('No weights entered'); return; }
-  await db.from('weight_records').insert(records);
-  toast(`${records.length} weight records saved`);
+  if (records.length === 0) { toast('No weights entered — fill in at least one weight field'); return; }
+  const { error } = await db.from('weight_records').insert(records);
+  if (error) { console.error('Save error:', error); toast('Error saving: ' + (error.message||'unknown')); return; }
+  toast(`${records.length} weight record${records.length!==1?'s':''} saved`);
   closeModal();
+  if (currentPage === 'weights') renderWeightsPage();
 }
 let pedNodes = {};
 let pedCanvas = null;
@@ -6427,6 +7543,19 @@ function fmtTimeInput(el) {
   m = Math.min(59, Math.max(0, m));
   el.value = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
   el.style.borderColor = '';
+}
+
+function combineTimeAmPm(timeId, ampmId) {
+  const t = document.getElementById(timeId)?.value?.trim();
+  const ap = document.getElementById(ampmId)?.value || 'AM';
+  if (!t) return null;
+  try {
+    const [h, m] = t.split(':').map(Number);
+    let h24 = h;
+    if (ap === 'PM' && h < 12) h24 = h + 12;
+    if (ap === 'AM' && h === 12) h24 = 0;
+    return String(h24).padStart(2,'0') + ':' + String(m||0).padStart(2,'0');
+  } catch(e) { return t; }
 }
 
 function fmtStepTime(t) {
