@@ -1261,6 +1261,7 @@ async function renderShowsTab(el) {
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Class</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Place</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Entry Wt</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Showman</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -1937,10 +1938,12 @@ async function saveNewShow() {
     location: document.getElementById('sh-location')?.value?.trim()||null,
     address: document.getElementById('sh-address')?.value?.trim()||null,
     notes: document.getElementById('sh-notes')?.value?.trim()||null,
+    archived: false,
   }).select().single();
+  await loadShows();
   closeModal();
   if (show?.id) openShowDetail(show.id);
-  else { await loadShows(); renderShows(); }
+  else renderShows();
 }
 
 async function openShowDetail(showId) {
@@ -1995,6 +1998,7 @@ function renderShowDetail() {
         <td style="padding:0.3rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs'+(e.entry_weight_date?' · '+e.entry_weight_date:'') : '—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${isFirst ? (lw ? lw.weight_lbs+' lbs · '+lw.date : '—') : ''}</td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.showman||''}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
         <td style="padding:0.3rem 0.75rem;text-align:center;white-space:nowrap">
           <button class="btn-icon btn-sm" onclick="openAddShowEntry('${e.show_id}','${e.lamb_id}')" title="Add another class">+</button>
@@ -2039,6 +2043,7 @@ function renderShowDetail() {
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Place</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Entry Wt</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Last Wt (log)</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Showman</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
           <th></th>
         </tr></thead>
@@ -2106,6 +2111,7 @@ function openAddShowEntry(showId, preSelectedLambId) {
       <div class="field"><label>Time</label><input type="text" id="se-time" placeholder="HH:MM" onblur="fmtTimeInput(this)"></div>
       <div class="field"><label>AM / PM</label><select id="se-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem;width:100%"><option>AM</option><option>PM</option></select></div>
     </div>
+    <div class="field"><label>Showman</label><input id="se-showman" placeholder="e.g. Emma Smith"></div>
     <div class="field"><label>Notes</label><input id="se-notes" placeholder="Optional"></div>`}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -2161,14 +2167,15 @@ async function saveShowEntry(showId) {
   const wtDate = document.getElementById('se-wt-date')?.value;
   const seTime = combineTimeAmPm('se-time','se-ampm');
   const notes = document.getElementById('se-notes')?.value?.trim()||null;
+  const showman = document.getElementById('se-showman')?.value?.trim()||null;
   const entryWeight = (wt && !isNaN(wt)) ? wt : null;
   const entryWeightDate = wtDate||null;
 
   for (const cls of classes) {
     const { data: entry } = await db.from('show_entries').insert({
       show_id: showId, lamb_id: lambId,
-      class: cls.class, place: cls.place, notes,
-      entry_weight: entryWeight,
+      'class': cls.class, place: cls.place, notes,
+      showman, entry_weight: entryWeight,
       entry_weight_date: entryWeightDate,
     }).select().single();
     if (entry) window._currentShowEntries = [...(window._currentShowEntries||[]), entry];
@@ -2197,6 +2204,7 @@ function openEditShowEntry(entryId) {
       <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${entry.entry_weight_date||window._currentShow?.show_date||''}"></div>
     </div>
     ${lastWt ? `<div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Last weight log: <strong>${lastWt.weight_lbs} lbs</strong> on ${lastWt.date}</div>` : ''}
+    <div class="field"><label>Showman</label><input id="ee-showman" value="${entry.showman||''}" placeholder="e.g. Emma Smith"></div>
     <div class="field"><label>Notes</label><input id="ee-notes" value="${entry.notes||''}" placeholder="Optional"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -2214,7 +2222,7 @@ async function saveEditShowEntry(entryId) {
   const notes = document.getElementById('ee-notes')?.value?.trim()||null;
 
   await db.from('show_entries').update({
-    class: cls, place, notes,
+    'class': cls, place, notes,
     entry_weight: (wt && !isNaN(wt)) ? wt : null,
     entry_weight_date: wtDate||null,
   }).eq('id', entryId);
@@ -2272,8 +2280,8 @@ function openBulkShowResults(showId) {
       + '<td style="padding:0.5rem 0.75rem;font-weight:600;color:var(--text);white-space:nowrap">'+lambName+' <span style="font-size:0.75rem;color:var(--text3)">'+lambTag+'</span></td>'
       + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-class-'+e.id+'" value="'+(e.class||'')+'" placeholder="e.g. Market Lamb" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
       + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-place-'+e.id+'" value="'+(e.place||'')+'" placeholder="e.g. 1st" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
-      + '<td style="padding:0.5rem 0.5rem"><input type="number" step="0.1" id="bsr-wt-'+e.id+'" value="'+(e.entry_weight||'')+'" placeholder="lbs" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
-      + '<td style="padding:0.5rem 0.5rem"><input type="date" id="bsr-wtdate-'+e.id+'" value="'+entryWtDate+'" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
+
+      + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-showman-'+e.id+'" value="'+(e.showman||'')+'" placeholder="e.g. Emma" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
       + '<td style="padding:0.5rem 0.5rem"><input type="text" id="bsr-notes-'+e.id+'" value="'+(e.notes||'')+'" placeholder="Optional" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.82rem"></td>'
       + '</tr>';
   }).join('');
@@ -2287,8 +2295,8 @@ function openBulkShowResults(showId) {
           <th style="padding:0.5rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:100px">Animal</th>
           <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:130px">Class</th>
           <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:90px">Place</th>
-          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:80px">Entry Wt</th>
-          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:120px">Wt Date</th>
+
+          <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:110px">Showman</th>
           <th style="padding:0.5rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3);min-width:110px">Notes</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -2306,14 +2314,9 @@ async function saveBulkShowResults(showId) {
   for (const e of entries) {
     const cls = document.getElementById(`bsr-class-${e.id}`)?.value?.trim()||null;
     const place = document.getElementById(`bsr-place-${e.id}`)?.value?.trim()||null;
-    const wt = parseFloat(document.getElementById(`bsr-wt-${e.id}`)?.value);
-    const wtDate = document.getElementById(`bsr-wtdate-${e.id}`)?.value||null;
+    const showman = document.getElementById(`bsr-showman-${e.id}`)?.value?.trim()||null;
     const notes = document.getElementById(`bsr-notes-${e.id}`)?.value?.trim()||null;
-    await db.from('show_entries').update({
-      class: cls, place, notes,
-      entry_weight: (!isNaN(wt) && wt) ? wt : null,
-      entry_weight_date: wtDate||null,
-    }).eq('id', e.id);
+    await db.from('show_entries').update({ 'class': cls, place, notes, showman }).eq('id', e.id);
     saved++;
   }
   toast(`${saved} result${saved!==1?'s':''} saved`);
@@ -2417,6 +2420,7 @@ async function printShowReport(showId) {
         <td style="padding:7px 8px;font-size:11px">${e.class||'—'}</td>
         <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#15803d">${e.place||'—'}</td>
         <td style="padding:7px 8px;font-size:11px;color:#555">${e.entry_weight?e.entry_weight+' lbs':'—'}</td>
+        <td style="padding:7px 8px;font-size:11px;color:#555">${e.showman||'—'}</td>
         <td style="padding:7px 8px;font-size:11px;color:#888">${e.notes||''}</td>
       </tr>`;
     });
@@ -2453,7 +2457,7 @@ async function printShowReport(showId) {
     <div class="meta-item"><label>Notes</label><span>${show.notes||'—'}</span></div>
   </div>
   <table>
-    <thead><tr><th>Name</th><th>Ear Tag</th><th>Sex</th><th>Breed</th><th>Class / Division</th><th>Place</th><th>Entry Wt</th><th>Notes</th></tr></thead>
+    <thead><tr><th>Name</th><th>Ear Tag</th><th>Sex</th><th>Breed</th><th>Class / Division</th><th>Place</th><th>Entry Wt</th><th>Showman</th><th>Notes</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
   <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
@@ -2493,6 +2497,7 @@ async function printAnimalShowHistory(lambId) {
       <td style="padding:7px 8px;font-size:11px">${e.class||'—'}</td>
       <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#15803d">${e.place||'—'}</td>
       <td style="padding:7px 8px;font-size:11px;color:#555">${e.entry_weight?e.entry_weight+' lbs':'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#555">${e.showman||'—'}</td>
       <td style="padding:7px 8px;font-size:11px;color:#888">${e.notes||''}</td>
     </tr>`;
   }).join('');
@@ -2525,7 +2530,7 @@ async function printAnimalShowHistory(lambId) {
     <div class="ac-item"><label>Scrapie ID</label><span>${lamb.scrapie_id||'—'}</span></div>
   </div>
   <table>
-    <thead><tr><th>Show</th><th>Date</th><th>Location</th><th>Class</th><th>Place</th><th>Entry Wt</th><th>Notes</th></tr></thead>
+    <thead><tr><th>Show</th><th>Date</th><th>Location</th><th>Class</th><th>Place</th><th>Entry Wt</th><th>Showman</th><th>Notes</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
