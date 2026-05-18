@@ -7689,6 +7689,19 @@ function combineTimeAmPm(timeId, ampmId) {
   } catch(e) { return t; }
 }
 
+function stepTimeTo24hr(timeStr, period) {
+  if (!timeStr || timeStr === 'null') return null;
+  if (period === 'Both') return timeStr; // keep as-is
+  try {
+    const parts = timeStr.split(':');
+    let h = parseInt(parts[0]);
+    const m = parseInt(parts[1]) || 0;
+    if (period === 'PM' && h < 12) h += 12;
+    if (period === 'AM' && h === 12) h = 0;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  } catch(e) { return timeStr; }
+}
+
 function fmtStepTime(t) {
   if (!t) return '';
   try {
@@ -7823,7 +7836,7 @@ function renderPlanningHTML() {
           </div>
           ${protSteps.length > 0 ? protSteps.map(s => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--border)">
-              <div style="font-size:0.82rem;color:var(--text)">${s.step_name} <span style="font-size:0.72rem;color:var(--text3)">${s.time_of_day||'AM'}</span></div>
+              <div style="font-size:0.82rem;color:var(--text)">${s.step_name} <span style="font-size:0.72rem;color:var(--text3)">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
               <div style="font-size:0.78rem;color:var(--text3)">${s.day_offset===0?'<span style="color:var(--accent);font-weight:600">Target Day</span>':s.day_offset+' days before'}</div>
             </div>`).join('') : `<div style="font-size:0.78rem;color:var(--text3)">No steps yet</div>`}
           ${p.notes?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.4rem;font-style:italic">${p.notes}</div>`:''}
@@ -8767,7 +8780,8 @@ async function saveNewProtocol() {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
-    const stepTime = row.querySelector('.ps-step-time')?.value || null;
+    const rawStepTime = row.querySelector('.ps-step-time')?.value?.trim() || null;
+    const stepTime = stepTimeTo24hr(rawStepTime, timeOfDay);
     if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, step_time: stepTime||null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
@@ -8981,8 +8995,9 @@ async function saveEditProtocol(id) {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay2 = row.querySelector('.ps-time')?.value || 'AM';
-    const stepTime2 = row.querySelector('.ps-step-time')?.value?.trim() || null;
-    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: (stepTime2 && stepTime2 !== 'null') ? stepTime2 : null, sort_order: i });
+    const rawStepTime2 = row.querySelector('.ps-step-time')?.value?.trim() || null;
+    const stepTime2 = stepTimeTo24hr(rawStepTime2, timeOfDay2);
+    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   // Update local cache
