@@ -7637,6 +7637,166 @@ async function confirmUseInventory(id, available, flushId, donorId) {
 }
 
 // ── PLANNING PAGE ─────────────────────────────────────
+function printSemenReport() {
+  const allActiveGroups = (window._planGroups||[]).filter(g => g.status !== 'Cancelled' && g.status !== 'Complete');
+  if (allActiveGroups.length === 0) { toast('No active groups to report on'); return; }
+
+  const groupCheckboxes = allActiveGroups.map(g =>
+    `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" class="sr-group-cb" value="${g.id}" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+      <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${g.name}</span>
+      <span style="font-size:0.75rem;color:var(--text3)">${g.type?.toUpperCase()||''} ${g.target_date?'· '+g.target_date:''}</span>
+    </label>`
+  ).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">📊 Semen Report — Select Groups</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+      <span style="font-size:0.8rem;color:var(--text3)">${allActiveGroups.length} active groups</span>
+      <div style="display:flex;gap:0.3rem">
+        <button class="btn-icon btn-sm" onclick="document.querySelectorAll('.sr-group-cb').forEach(c=>c.checked=true)">✓ All</button>
+        <button class="btn-icon btn-sm" onclick="document.querySelectorAll('.sr-group-cb').forEach(c=>c.checked=false)">✕ None</button>
+      </div>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.25rem 0.5rem;margin-bottom:0.75rem">
+      ${groupCheckboxes}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateSemenReport()">Generate Report</button>
+    </div>`);
+}
+
+function generateSemenReport() {
+  const selected = [...document.querySelectorAll('.sr-group-cb:checked')].map(c => c.value);
+  if (selected.length === 0) { toast('Select at least one group'); return; }
+  closeModal();
+
+  const selectedSet = new Set(selected);
+  const groups = (window._planGroups||[]).filter(g => selectedSet.has(g.id));
+  const members = window._planMembers || [];
+  const printDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const p = getFarmProfile();
+  const farmName = p.type==='business'?(p.bizname||p.name||''):(p.name||'');
+
+  // Doses per animal by type
+  const DOSES = { flush: 2, breeding: 1, ivf: 0.5 };
+
+  // Build needed: { ai_ram_id|sire_text: { name, needed, groups: [] } }
+  const needed = {};
+
+  groups.forEach(g => {
+    const groupDonors = members.filter(m => m.group_id === g.id && (m.role||'donor') === 'donor');
+    const dosesEach = DOSES[g.type] || 1;
+
+    groupDonors.forEach(m => {
+      const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+      const key = m.ai_sire_id || ('text:' + (m.sire_text||'Unknown'));
+      const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || 'Unknown / Not Set');
+      const donorLamb = allLambs.find(l => l.id === m.lamb_id);
+
+      if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, needed: 0, entries: [] };
+      needed[key].needed += dosesEach;
+      needed[key].entries.push({
+        groupName: g.name,
+        groupType: g.type,
+        targetDate: g.target_date,
+        donorName: donorLamb?.name || '?',
+        doses: dosesEach,
+      });
+    });
+  });
+
+  // Build inventory summary
+  const inventory = {};
+  allAiRams.forEach(ram => {
+    const straws = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
+    const total = straws.reduce((s,i) => s+(i.straws||0), 0);
+    inventory[ram.id] = { total, detail: straws };
+  });
+
+  // Build table rows
+  let tableRows = '';
+  let grandNeeded = 0;
+  let grandAvailable = 0;
+
+  Object.entries(needed).forEach(([key, s]) => {
+    const avail = s.ai_sire_id ? (inventory[s.ai_sire_id]?.total || 0) : '—';
+    const availNum = typeof avail === 'number' ? avail : 0;
+    const diff = typeof avail === 'number' ? avail - s.needed : null;
+    const diffColor = diff === null ? '#888' : diff >= 0 ? '#15803d' : '#dc2626';
+    const diffText = diff === null ? '—' : diff >= 0 ? '+'+diff : ''+diff;
+    grandNeeded += s.needed;
+    if (typeof avail === 'number') grandAvailable += avail;
+
+    // Group detail sub-rows
+    const subRows = s.entries.map(e =>
+      `<tr style="background:#fafafa">
+        <td style="padding:4px 10px 4px 24px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupName}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.donorName}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.targetDate||'—'}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupType?.toUpperCase()||'—'} · ${e.doses} dose${e.doses!==1?'s':''}</td>
+        <td colspan="3" style="border-bottom:1px solid #f0f0f0"></td>
+      </tr>`
+    ).join('');
+
+    const invDetail = s.ai_sire_id && inventory[s.ai_sire_id]?.detail?.length
+      ? inventory[s.ai_sire_id].detail.map(i => `${i.location}: ${i.straws}`).join(', ')
+      : '';
+
+    tableRows += `<tr style="border-bottom:2px solid #e5e7eb">
+      <td style="padding:8px 10px;font-weight:700;font-size:11px" colspan="2">${s.name}</td>
+      <td style="padding:8px;font-size:11px">${s.entries[0]?.targetDate||'—'}</td>
+      <td style="padding:8px;font-size:11px">${s.needed} doses</td>
+      <td style="padding:8px;font-size:11px;font-weight:600">${avail}${invDetail?' <span style="font-size:9px;color:#888">('+invDetail+')</span>':''}</td>
+      <td style="padding:8px;font-size:12px;font-weight:700;color:${diffColor}">${diffText}</td>
+      <td style="padding:8px;font-size:10px;color:#888">${diff!==null&&diff<0?'⚠️ Short '+(Math.abs(diff))+' doses':diff===0?'✓ Exact':diff>0?'✓ OK':''}</td>
+    </tr>${subRows}`;
+  });
+
+  const grandDiff = grandAvailable - grandNeeded;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Semen Report</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+  .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+  .header h1{font-size:18px;font-weight:700}.header p{font-size:11px;color:#555;margin-top:3px}
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+  .sum-card{background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center}
+  .sum-card .val{font-size:20px;font-weight:700}.sum-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-top:2px}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#1a1a1a;color:#fff}
+  thead th{padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em}
+  .legend{margin-top:16px;font-size:10px;color:#666;border-top:1px solid #e5e7eb;padding-top:8px}
+  .footer{text-align:center;font-size:9px;color:#aaa;margin-top:16px}
+  @media print{body{padding:12px}}</style></head><body>
+  <div class="header">
+    <div><h1>📊 Semen Requirement Report</h1><p>Planned Groups — Doses Needed vs. Inventory</p></div>
+    <div style="text-align:right;font-size:11px;color:#555">${farmName}<br>${printDate}</div>
+  </div>
+  <div class="summary">
+    <div class="sum-card"><div class="val">${groups.length}</div><div class="lbl">Active Groups</div></div>
+    <div class="sum-card"><div class="val">${grandNeeded}</div><div class="lbl">Total Doses Needed</div></div>
+    <div class="sum-card"><div class="val">${grandAvailable}</div><div class="lbl">Total In Inventory</div></div>
+    <div class="sum-card" style="background:${grandDiff<0?'#fef2f2':'#f0fdf4'};border-color:${grandDiff<0?'#fca5a5':'#86efac'}">
+      <div class="val" style="color:${grandDiff<0?'#dc2626':'#15803d'}">${grandDiff>=0?'+':''}${grandDiff}</div>
+      <div class="lbl">Net Balance</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th colspan="2">Sire</th><th>Target Date</th><th>Doses Needed</th><th>In Inventory</th><th>Balance</th><th>Status</th>
+    </tr></thead>
+    <tbody>${tableRows || '<tr><td colspan="7" style="padding:16px;text-align:center;color:#888">No active groups with assigned sires</td></tr>'}</tbody>
+  </table>
+  <div class="legend">
+    Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = 0.5 doses/animal
+  </div>
+  <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
+  </body></html>`;
+
+  openPrintWindow(html, 'Semen Report');
+}
+
 async function renderPlanning() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const [{ data: groups }, { data: protocols }, { data: steps }, { data: members }] = await Promise.all([
@@ -7751,7 +7911,10 @@ function renderPlanningHTML() {
         </label>
         ${hiddenCount>0&&hideComplete?`<span style="font-size:0.75rem;color:var(--text3)">(${hiddenCount} hidden)</span>`:''}
       </div>
-      <button class="btn btn-primary btn-sm" onclick="openNewGroupInline()">+ New Group</button>
+      <div style="display:flex;gap:0.4rem">
+        <button class="btn btn-secondary btn-sm" onclick="printSemenReport()">📊 Semen Report</button>
+        <button class="btn btn-primary btn-sm" onclick="openNewGroupInline()">+ New Group</button>
+      </div>
     </div>
     <div id="plan-new-group-form" style="display:none"></div>
     ${groups.length === 0 ? `<div class="empty"><div class="empty-icon">📋</div><h3>${allGroups.length>0?'All groups complete':'No groups yet'}</h3><p>${allGroups.length>0?'Uncheck "Hide Complete" to view them':'Create a group to start planning'}</p></div>` :
@@ -7872,7 +8035,7 @@ async function printPlan(groupId) {
   const recipProt = g.recip_protocol_id ? protocols.find(p => p.id === g.recip_protocol_id) : null;
   const donorSteps = prot ? steps.filter(s => s.protocol_id === prot.id).sort((a,b) => b.day_offset - a.day_offset) : [];
   const recipSteps = recipProt ? steps.filter(s => s.protocol_id === recipProt.id).sort((a,b) => b.day_offset - a.day_offset) : [];
-  const isFlush = g.type === 'flush';
+  const isFlush = g.type === 'flush' || g.type === 'ivf';
 
   function stepDate(dayOffset) {
     if (!g.target_date) return '—';
@@ -8023,7 +8186,7 @@ async function openCompletePlan(groupId) {
   const groupMembers = (window._planMembers||[]).filter(m => m.group_id === groupId);
   if (!g) return;
 
-  const isFlush = g.type === 'flush';
+  const isFlush = g.type === 'flush' || g.type === 'ivf';
   const donors = groupMembers.filter(m => (m.role||'donor') === 'donor');
   const recips = isFlush ? groupMembers.filter(m => m.role === 'recip') : [];
 
@@ -8461,18 +8624,37 @@ async function confirmCompletePlanDom(groupId) {
 }
 
 function openNewGroupInline() {
-  const protOpts = `<option value="">— None —</option>` + (window._planProtocols||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const allProts = window._planProtocols || [];
+  const flushProts = allProts.filter(p => p.type === 'flush' || !p.type);
+  const recipProts = allProts.filter(p => p.type === 'flush' || !p.type);
+  const breedProts = allProts.filter(p => p.type === 'breeding' || !p.type);
+
+  const flushOpts = `<option value="">— None —</option>` + flushProts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const recipOpts = `<option value="">— None —</option>` + recipProts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const breedOpts = `<option value="">— None —</option>` + breedProts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const allOpts = `<option value="">— None —</option>` + allProts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+
   document.getElementById('plan-new-group-form').style.display = '';
   document.getElementById('plan-new-group-form').innerHTML = `
     <div class="card" style="padding:1rem;margin-bottom:1rem;border:2px solid var(--accent)">
       <div style="font-size:0.78rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">New Group</div>
       <div class="row">
         <div class="field"><label>Name *</label><input id="ng-name" placeholder="e.g. Fall 2026 Flush"></div>
-        <div class="field"><label>Type</label><select id="ng-type"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+        <div class="field"><label>Type</label>
+          <select id="ng-type" onchange="ngToggleRecipField()">
+            <option value="flush">🔬 Flush</option>
+            <option value="ivf">🧬 IVF</option>
+            <option value="breeding">🐏 Breeding</option>
+          </select>
+        </div>
       </div>
       <div class="row">
         <div class="field"><label>Target Date (Flush/AI Day)</label><input type="date" id="ng-date" onchange="previewGroupSchedule()"></div>
-        <div class="field"><label>Protocol</label><select id="ng-protocol" onchange="previewGroupSchedule()">${protOpts}</select></div>
+        <div class="field"><label>Donor Protocol</label><select id="ng-protocol" onchange="previewGroupSchedule()">${allOpts}</select></div>
+      </div>
+      <div class="field" id="ng-recip-row">
+        <label>Recip Protocol</label>
+        <select id="ng-recip-protocol">${allOpts}</select>
       </div>
       <div id="ng-schedule-preview"></div>
       <div class="field"><label>Notes</label><input id="ng-notes" placeholder="Optional notes"></div>
@@ -8481,6 +8663,19 @@ function openNewGroupInline() {
         <button class="btn btn-primary btn-sm" onclick="saveNewGroupPage()">Save Group</button>
       </div>
     </div>`;
+}
+
+function ngToggleRecipField() {
+  const type = document.getElementById('ng-type')?.value;
+  const row = document.getElementById('ng-recip-row');
+  const donorLabel = document.querySelector('label[for="ng-protocol"], #ng-protocol')?.previousElementSibling;
+  if (row) row.style.display = (type === 'flush' || type === 'ivf') ? '' : 'none';
+  // Update donor protocol label
+  const protField = document.getElementById('ng-protocol');
+  if (protField) {
+    const lbl = protField.closest('.field')?.querySelector('label');
+    if (lbl) lbl.textContent = (type === 'flush' || type === 'ivf') ? 'Donor Protocol' : 'Protocol';
+  }
 }
 
 async function saveNewGroupPage() {
@@ -8544,7 +8739,7 @@ function openNewProtocolInline() {
       <div style="font-size:0.78rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">New Protocol</div>
       <div class="row">
         <div class="field"><label>Name *</label><input id="np-name" placeholder="e.g. Standard MOET"></div>
-        <div class="field"><label>Type</label><select id="np-type"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+        <div class="field"><label>Type</label><select id="np-type"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
       </div>
       <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps <span style="font-weight:400;color:var(--text3)">(Days Before = days before target/flush day)</span></div>
       <div id="np-steps"></div>
@@ -8609,7 +8804,7 @@ async function openEditGroupPage(id) {
     <div class="modal-header"><div class="modal-title">✏️ Edit: ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="row">
       <div class="field"><label>Name</label><input id="eg-name" value="${g.name}"></div>
-      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="ivf" ${g.type==='ivf'?'selected':''}>🧬 IVF</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
     </div>
     <div class="row">
       <div class="field"><label>Target Date</label><input type="date" id="eg-date" value="${g.target_date||''}" onchange="previewEditGroupSchedule()"></div>
@@ -8711,7 +8906,7 @@ async function openPlanningManager() {
         <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Group</div>
         <div class="row">
           <div class="field" style="margin:0"><input id="ng-name" placeholder="Group name *" style="font-size:0.85rem"></div>
-          <div class="field" style="margin:0"><select id="ng-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+          <div class="field" style="margin:0"><select id="ng-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
         </div>
         <div class="row" style="margin-top:0.5rem">
           <div class="field" style="margin:0"><label style="font-size:0.75rem">Target Date (Flush/AI Day)</label><input type="date" id="ng-date" style="font-size:0.85rem" onchange="previewGroupSchedule()"></div>
@@ -8734,7 +8929,7 @@ async function openPlanningManager() {
         <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Protocol</div>
         <div class="row">
           <div class="field" style="margin:0"><input id="np-name" placeholder="Protocol name *" style="font-size:0.85rem"></div>
-          <div class="field" style="margin:0"><select id="np-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="breeding">🐏 Breeding</option></select></div>
+          <div class="field" style="margin:0"><select id="np-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
         </div>
         <div id="np-steps" style="margin-top:0.5rem"></div>
         <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.35rem" onclick="addProtocolStepRow()">+ Add Step</button>
@@ -9047,7 +9242,7 @@ async function openEditGroup(id) {
     <div class="modal-header"><div class="modal-title">✏️ Edit Group: ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="row">
       <div class="field"><label>Name</label><input id="eg-name" value="${g.name}"></div>
-      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="ivf" ${g.type==='ivf'?'selected':''}>🧬 IVF</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
     </div>
     <div class="row">
       <div class="field"><label>Target Date (Flush/AI Day)</label><input type="date" id="eg-date" value="${g.target_date||''}" onchange="previewEditGroupSchedule()"></div>
@@ -9093,7 +9288,8 @@ async function openManageGroupMembers(groupId, activeTab) {
     db.from('breeding_group_members').select('*').eq('group_id', groupId),
   ]);
   if (!g) return;
-  const isFlush = g.type === 'flush';
+  window._currentGroupMembers = members || [];
+  const isFlush = g.type === 'flush' || g.type === 'ivf';
   const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
   const sireOpts = sireOptions('');
   const donors = (members||[]).filter(m => (m.role||'donor') === 'donor');
@@ -9104,8 +9300,11 @@ async function openManageGroupMembers(groupId, activeTab) {
     const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
     const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || '—');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:0.85rem"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span></div>
-      <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
+      <div style="font-size:0.85rem;flex:1;min-width:0"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span></div>
+      <div style="display:flex;gap:0.25rem;flex-shrink:0">
+        <button class="btn-icon btn-sm" onclick="openEditMemberSire('${m.id}','${groupId}')" title="Edit sire">✏️</button>
+        <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
+      </div>
     </div>`;
   }).join('') || `<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No donors yet</div>`;
 
@@ -9186,6 +9385,47 @@ async function addGroupMember(groupId, role) {
   }
   if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, role==='recip'?'recips':'donors'); }
   else openManageGroupMembers(groupId, role==='recip'?'recips':'donors');
+}
+
+function openEditMemberSire(memberId, groupId) {
+  const members = window._currentGroupMembers || window._planMembers || [];
+  const m = members.find(x => x.id === memberId);
+  const lamb = m ? allLambs.find(l => l.id === m.lamb_id) : null;
+  // Build selectedId in the format sireOptions expects
+  const currentSireId = m?.ai_sire_id ? 'ai:' + m.ai_sire_id : (m?.sire_id ? 'lamb:' + m.sire_id : '');
+  const sireOpts = sireOptions(currentSireId);
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">✏️ Edit Sire — ${lamb?.name||'Animal'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Sire (from AI Rams)</label><select id="ems-sire">${sireOpts}</select></div>
+    <div class="field"><label>Sire (if not in system)</label><input id="ems-sire-text" value="${m?.sire_text||''}" placeholder="Sire name"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal();openManageGroupMembers('${groupId}','donors')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditMemberSire('${memberId}','${groupId}')">Save</button>
+    </div>`);
+}
+
+async function saveEditMemberSire(memberId, groupId) {
+  const sireVal = document.getElementById('ems-sire')?.value || '';
+  const sireText = document.getElementById('ems-sire-text')?.value?.trim() || null;
+
+  let aiSireId = null, sireId = null;
+  if (sireVal.startsWith('ai:')) aiSireId = sireVal.replace('ai:', '');
+  else if (sireVal.startsWith('lamb:')) sireId = sireVal.replace('lamb:', '');
+
+  await db.from('breeding_group_members').update({
+    ai_sire_id: aiSireId || null,
+    sire_id: sireId || null,
+    sire_text: (aiSireId || sireId) ? null : sireText,
+  }).eq('id', memberId);
+
+  const updateFn = m => m.id === memberId ? { ...m, ai_sire_id: aiSireId||null, sire_id: sireId||null, sire_text: (aiSireId||sireId)?null:sireText } : m;
+  if (window._planMembers) window._planMembers = window._planMembers.map(updateFn);
+  if (window._currentGroupMembers) window._currentGroupMembers = window._currentGroupMembers.map(updateFn);
+
+  toast('Sire updated');
+  closeModal();
+  openManageGroupMembers(groupId, 'donors');
 }
 
 async function removeGroupMember(memberId, groupId, activeTab) {
