@@ -9305,8 +9305,9 @@ async function loadCalendarEvents() {
         const stepDate = new Date(new Date(g.target_date + 'T12:00:00').getTime() - step.day_offset*24*60*60*1000).toISOString().slice(0,10);
         const roleLabel = step._isRecip ? 'Recip' : 'Donor';
         const memberList = step._isRecip ? (recipNames||donorNames) : donorNames;
-        const timeLabel = step.time_of_day && step.time_of_day !== 'AM' ? ' ' + step.time_of_day : '';
-        calEvents.push({ date: stepDate, type: 'planned', label: `📋 ${roleLabel}: ${step.step_name}${timeLabel}`, group_id: g.id, group_name: g.name, extra: memberList, group_type: g.type, isRecip: step._isRecip });
+        const timeLabel = step.step_time ? ' ' + fmtStepTime(step.step_time) : (step.time_of_day && step.time_of_day !== 'AM' ? ' ' + step.time_of_day : '');
+        const rolePrefix = step._isRecip ? '🐑 ' : '🔬 ';
+        calEvents.push({ date: stepDate, type: 'planned', label: `${rolePrefix}${step.step_name}${timeLabel}`, group_id: g.id, group_name: g.name, extra: `${g.name} · ${memberList}`, group_type: g.type, isRecip: step._isRecip });
       });
     } else {
       calEvents.push({ date: g.target_date, type: 'planned', label: `📋 ${g.name}`, group_id: g.id, group_name: g.name, extra: donorNames, group_type: g.type });
@@ -9413,8 +9414,8 @@ function drawCalendar() {
         const lamb = allLambs.find(l => l.id === e.lamb_id);
         const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
         const sireName = sire ? sire.name : (e.sire_text||'');
-        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':e.type==='planned'?(e.isRecip?'#1a2a5a':'#0a3a5a'):'#3a3010';
-        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':e.type==='planned'?(e.isRecip?'#a0c0ff':'#60c8f8'):'#e8c040';
+        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':e.type==='planned'?(e.isRecip?'#0d3060':'#6b4500'):'#3a3010';
+        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':e.type==='planned'?(e.isRecip?'#90c8ff':'#fcd68a'):'#e8c040';
         return `<div onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : `showCalEventDetail('${dateStr}')`}" style="font-size:0.68rem;background:${color};color:${textColor};border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.label}${e.group_name?' — '+e.group_name:''}${e.extra?' ('+e.extra+')':''}">
           ${e.label}${e.group_name?` <span style="opacity:0.8">${e.group_name}</span>`:(lamb?` <span style="opacity:0.8">${lamb.name}</span>`:'')}
         </div>`;
@@ -9445,7 +9446,7 @@ function drawCalendar() {
       const lamb = allLambs.find(l => l.id === e.lamb_id);
       const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
       const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
-      const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?'badge-blue':'badge-yellow';
+      const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?(e.isRecip?'badge-blue':'badge-yellow'):'badge-yellow';
       html += `<div class="record-row" style="cursor:pointer" onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : (lamb?`showLamb('${lamb.id}')`:``)}">
         <div style="display:flex;gap:0.75rem;align-items:center;flex:1">
           <div style="text-align:center;min-width:40px">
@@ -9455,10 +9456,10 @@ function drawCalendar() {
           <div>
             <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
               <span style="font-weight:600;color:var(--text)">${e.label}</span>
-              <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type}</span>
+              <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type==='planned'?(e.isRecip?'Recip':'Donor'):e.type}</span>
             </div>
             <div style="font-size:0.78rem;color:var(--text3);margin-top:0.15rem">
-              ${lamb?lamb.name:''}${sireName?' × '+sireName:''}
+              ${e.group_name ? `<span style="color:var(--accent);font-weight:500">${e.group_name}</span>` : ''}${lamb?lamb.name:''}${sireName?' × '+sireName:''}${e.extra && !e.group_name?' · '+e.extra:''}
             </div>
           </div>
         </div>
@@ -9489,15 +9490,15 @@ function showCalEventDetail(dateStr) {
     const lamb = allLambs.find(l => l.id === e.lamb_id);
     const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
     const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
-    const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':'badge-yellow';
+    const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?(e.isRecip?'badge-blue':'badge-yellow'):'badge-yellow';
     html += `<div class="record-row" style="${lamb?'cursor:pointer':''}" onclick="${lamb?`closeModal();showLamb('${lamb.id}')`:``}">
       <div style="flex:1">
         <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
           <span style="font-weight:600;color:var(--text)">${e.label}</span>
-          <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type}</span>
+          <span class="badge ${typeBadge}" style="font-size:0.65rem">${e.type==='planned'?(e.isRecip?'Recip':'Donor'):e.type}</span>
         </div>
         <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">
-          ${lamb?`<span style="color:var(--text2)">${lamb.name}</span>${lamb.ear_tag?' #'+lamb.ear_tag:''}`:''} ${sireName?'× '+sireName:''} ${e.extra?`<span style="color:var(--text3)">· ${e.extra}</span>`:''}
+          ${e.group_name?`<span style="color:var(--accent);font-weight:500">${e.group_name}</span>`:''}${lamb?`<span style="color:var(--text2)">${lamb.name}</span>${lamb.ear_tag?' #'+lamb.ear_tag:''}`:''} ${sireName?'× '+sireName:''} ${e.extra && !e.group_name?`<span style="color:var(--text3)">· ${e.extra}</span>`:''}
         </div>
       </div>
       ${lamb?`<span style="color:var(--text3)">→</span>`:''}
