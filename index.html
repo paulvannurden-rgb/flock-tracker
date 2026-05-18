@@ -2103,17 +2103,19 @@ function openAddShowEntry(showId, preSelectedLambId) {
     </div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Classes / Divisions</div>
     <div id="se-class-rows">
-      <div class="se-class-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center">
-        <input placeholder="Class (e.g. Market Lamb)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
-        <input placeholder="Place (e.g. 1st)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
-        <button class="btn-icon" onclick="this.closest('.se-class-row').remove()" title="Remove">✕</button>
+      <div class="se-class-row" style="margin-bottom:0.6rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.3rem;align-items:center">
+          <input placeholder="Class (e.g. Market Lamb)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
+          <input placeholder="Place (e.g. 1st)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">
+          <button class="btn-icon" onclick="this.closest('.se-class-row').remove()" title="Remove">✕</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">
+          <input placeholder="Division (e.g. Grand Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">
+          <input placeholder="Overall (e.g. Reserve Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">
+        </div>
       </div>
     </div>
     <button class="btn btn-secondary btn-sm" onclick="seAddClassRow()" style="margin-bottom:0.75rem">+ Add Another Class</button>
-    <div class="row">
-      <div class="field"><label>Division Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="se-division-place" placeholder="e.g. Grand Champion Ewe"></div>
-      <div class="field"><label>Overall Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="se-overall-place" placeholder="e.g. Reserve Champion"></div>
-    </div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.5rem 0 0.4rem">Show Weight (optional — shared across all classes)</div>
     <div class="row">
       <div class="field"><label>Weight (lbs)</label><input type="number" step="0.1" id="se-weight" placeholder="e.g. 125.5"></div>
@@ -2157,10 +2159,16 @@ function seAddClassRow() {
   if (!container) return;
   const row = document.createElement('div');
   row.className = 'se-class-row';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center';
-  row.innerHTML = '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+  row.style.cssText = 'margin-bottom:0.6rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)';
+  row.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.3rem;align-items:center">'
+    + '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
     + '<input placeholder="Place (e.g. 2nd)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
-    + '<button class="btn-icon" onclick="this.closest(\'.se-class-row\').remove()" title="Remove">✕</button>';
+    + '<button class="btn-icon" onclick="this.closest(\'.se-class-row\').remove()" title="Remove">✕</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">'
+    + '<input placeholder="Division (e.g. Grand Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '<input placeholder="Overall (e.g. Reserve Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '</div>';
   container.appendChild(row);
 }
 
@@ -2171,25 +2179,30 @@ async function saveShowEntry(showId) {
   const classRows = document.querySelectorAll('.se-class-row');
   const classes = [...classRows].map(row => {
     const inputs = row.querySelectorAll('input');
-    return { class: inputs[0]?.value?.trim()||null, place: inputs[1]?.value?.trim()||null };
+    return {
+      class: inputs[0]?.value?.trim()||null,
+      place: inputs[1]?.value?.trim()||null,
+      division_place: inputs[2]?.value?.trim()||null,
+      overall_place: inputs[3]?.value?.trim()||null,
+    };
   }).filter(r => r.class || r.place);
-  if (classes.length === 0) classes.push({ class: null, place: null });
+  if (classes.length === 0) classes.push({ class: null, place: null, division_place: null, overall_place: null });
 
   const wt = parseFloat(document.getElementById('se-weight')?.value);
   const wtDate = document.getElementById('se-wt-date')?.value;
   const seTime = combineTimeAmPm('se-time','se-ampm');
   const notes = document.getElementById('se-notes')?.value?.trim()||null;
   const showman = document.getElementById('se-showman')?.value?.trim()||null;
-  const divisionPlace = document.getElementById('se-division-place')?.value?.trim()||null;
-  const overallPlace = document.getElementById('se-overall-place')?.value?.trim()||null;
   const entryWeight = (wt && !isNaN(wt)) ? wt : null;
   const entryWeightDate = wtDate||null;
 
   for (const cls of classes) {
     const { data: entry } = await db.from('show_entries').insert({
       show_id: showId, lamb_id: lambId,
-      'class': cls.class, place: cls.place, notes,
-      showman, division_place: divisionPlace, overall_place: overallPlace,
+      'class': cls.class, place: cls.place,
+      division_place: cls.division_place||null,
+      overall_place: cls.overall_place||null,
+      notes, showman,
       entry_weight: entryWeight,
       entry_weight_date: entryWeightDate,
     }).select().single();
@@ -2217,10 +2230,16 @@ function openEditShowEntry(entryId) {
 
   // Build existing class rows
   const existingRows = lambEntries.map(e =>
-    '<div class="ee-class-row" data-entry-id="' + e.id + '" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center">'
+    '<div class="ee-class-row" data-entry-id="' + e.id + '" style="margin-bottom:0.6rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.3rem;align-items:center">'
     + '<input placeholder="Class (e.g. Market Lamb)" value="' + (e['class']||'') + '" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
-    + '<input placeholder="Place (e.g. 1st)" value="' + (e.place||'') + '" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<input placeholder="Class Place (e.g. 1st)" value="' + (e.place||'') + '" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
     + '<button class="btn-icon" onclick="eeRemoveRow(this,\'' + e.id + '\')" title="Remove">✕</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">'
+    + '<input placeholder="Division (e.g. Grand Champion)" value="' + (e.division_place||'') + '" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '<input placeholder="Overall (e.g. Reserve Champion)" value="' + (e.overall_place||'') + '" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '</div>'
     + '</div>'
   ).join('');
 
@@ -2238,10 +2257,6 @@ function openEditShowEntry(entryId) {
       <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${firstEntry?.entry_weight_date||showDate}"></div>
     </div>
     ${lastWtHtml}
-    <div class="row">
-      <div class="field"><label>Division Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="ee-division-place" value="${firstEntry?.division_place||''}" placeholder="e.g. Grand Champion Ewe"></div>
-      <div class="field"><label>Overall Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="ee-overall-place" value="${firstEntry?.overall_place||''}" placeholder="e.g. Reserve Champion"></div>
-    </div>
     <div class="field"><label>Showman</label><input id="ee-showman" value="${firstEntry?.showman||''}" placeholder="e.g. Emma Smith"></div>
     <div class="field"><label>Notes</label><input id="ee-notes" value="${firstEntry?.notes||''}" placeholder="Optional"></div>
     <div class="modal-actions">
@@ -2255,10 +2270,16 @@ function eeAddClassRow() {
   if (!container) return;
   const row = document.createElement('div');
   row.className = 'ee-class-row';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.4rem;align-items:center';
-  row.innerHTML = '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
-    + '<input placeholder="Place (e.g. 2nd)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
-    + '<button class="btn-icon" onclick="this.closest(\'.ee-class-row\').remove()" title="Remove">✕</button>';
+  row.style.cssText = 'margin-bottom:0.6rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)';
+  row.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.4rem;margin-bottom:0.3rem;align-items:center">'
+    + '<input placeholder="Class (e.g. Breeding Ewe)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<input placeholder="Class Place (e.g. 2nd)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.4rem 0.6rem;font-size:0.85rem">'
+    + '<button class="btn-icon" onclick="this.closest(\'.ee-class-row\').remove()" title="Remove">✕</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">'
+    + '<input placeholder="Division (e.g. Grand Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '<input placeholder="Overall (e.g. Reserve Champion)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">'
+    + '</div>';
   container.appendChild(row);
 }
 
@@ -2277,8 +2298,6 @@ async function saveEditShowEntries(lambId, showId) {
   const wtDate = document.getElementById('ee-wt-date')?.value;
   const notes = document.getElementById('ee-notes')?.value?.trim()||null;
   const showman = document.getElementById('ee-showman')?.value?.trim()||null;
-  const divPlace = document.getElementById('ee-division-place')?.value?.trim()||null;
-  const ovPlace = document.getElementById('ee-overall-place')?.value?.trim()||null;
   const entryWeight = (wt && !isNaN(wt)) ? wt : null;
   const entryWeightDate = wtDate||null;
 
@@ -2288,13 +2307,15 @@ async function saveEditShowEntries(lambId, showId) {
   }
   window._eeDeleteIds = [];
 
-  // Update/insert remaining rows
+  // Update/insert remaining rows — each row has 4 inputs: class, place, division, overall
   const rows = document.querySelectorAll('.ee-class-row');
 
   for (let i = 0; i < rows.length; i++) {
     const inputs = rows[i].querySelectorAll('input');
     const cls = inputs[0]?.value?.trim()||null;
     const place = inputs[1]?.value?.trim()||null;
+    const divPlace = inputs[2]?.value?.trim()||null;
+    const ovPlace = inputs[3]?.value?.trim()||null;
     const existingId = rows[i].getAttribute('data-entry-id');
     const shared = { notes, showman, division_place: divPlace, overall_place: ovPlace, entry_weight: entryWeight, entry_weight_date: entryWeightDate };
 
