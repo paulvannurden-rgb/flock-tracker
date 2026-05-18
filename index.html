@@ -7816,6 +7816,7 @@ function renderPlanningHTML() {
               <span class="badge ${p.type==='flush'?'badge-purple':'badge-green'}" style="margin-top:0.2rem">${p.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
             </div>
             <div style="display:flex;gap:0.35rem">
+              <button class="btn-icon btn-sm" onclick="duplicateProtocol('${p.id}')" title="Duplicate">⧉</button>
               <button class="btn-icon btn-sm" onclick="openEditProtocol('${p.id}')">✏️</button>
               <button class="btn-icon btn-sm" onclick="deleteProtocolPage('${p.id}')" style="color:var(--danger)">🗑</button>
             </div>
@@ -8674,6 +8675,7 @@ async function openPlanningManager() {
     allProts.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
       <div style="font-size:0.85rem;color:var(--text)">${p.type==='flush'?'🔬':'🐏'} ${p.name}</div>
       <div style="display:flex;gap:0.35rem">
+        <button class="btn-icon btn-sm" onclick="duplicateProtocol('${p.id}')" title="Duplicate">⧉</button>
         <button class="btn-icon btn-sm" onclick="openEditProtocol('${p.id}')">✏️</button>
         <button class="btn-icon btn-sm" onclick="deleteProtocol('${p.id}')" style="color:var(--danger)">🗑</button>
       </div>
@@ -8852,6 +8854,62 @@ async function deleteGroup(id) {
   toast('Group deleted');
   openPlanningManager();
   if(currentPage==='calendar') renderCalendar();
+}
+
+async function duplicateProtocol(id) {
+  const prot = (window._planProtocols||[]).find(p => p.id === id);
+  const steps = (window._planSteps||[]).filter(s => s.protocol_id === id).sort((a,b) => a.sort_order - b.sort_order);
+  if (!prot) return;
+
+  // Pre-fill the name with "Copy of ..."
+  const newName = 'Copy of ' + prot.name;
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">⧉ Duplicate Protocol</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>New Protocol Name *</label><input id="dup-name" value="${newName}" style="font-weight:600"></div>
+    <div class="row">
+      <div class="field"><label>Type</label><select id="dup-type"><option value="flush" ${prot.type==='flush'?'selected':''}>🔬 Flush</option><option value="breeding" ${prot.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text3);margin-top:0.5rem">Copies all ${steps.length} step${steps.length!==1?'s':''} from <strong>${prot.name}</strong>. You can edit them after saving.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDuplicateProtocol('${id}')">Save Copy</button>
+    </div>`);
+
+  setTimeout(() => {
+    const inp = document.getElementById('dup-name');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 100);
+}
+
+async function saveDuplicateProtocol(sourceId) {
+  const name = document.getElementById('dup-name')?.value?.trim();
+  const type = document.getElementById('dup-type')?.value;
+  if (!name) { toast('Name required'); return; }
+
+  const steps = (window._planSteps||[]).filter(s => s.protocol_id === sourceId).sort((a,b) => a.sort_order - b.sort_order);
+
+  const { data: newProt } = await db.from('breeding_protocols').insert({ name, type }).select().single();
+  if (!newProt?.id) { toast('Error creating protocol'); return; }
+
+  if (steps.length > 0) {
+    const newSteps = steps.map((s, i) => ({
+      protocol_id: newProt.id,
+      step_name: s.step_name,
+      day_offset: s.day_offset,
+      time_of_day: s.time_of_day,
+      step_time: s.step_time,
+      sort_order: i,
+    }));
+    await db.from('protocol_steps').insert(newSteps);
+    if (window._planSteps) window._planSteps.push(...newSteps);
+  }
+
+  if (window._planProtocols) window._planProtocols.push(newProt);
+  toast(`Protocol "${name}" created`);
+  closeModal();
+  // Open edit so they can immediately adjust
+  await openEditProtocol(newProt.id);
 }
 
 async function deleteProtocol(id) {
