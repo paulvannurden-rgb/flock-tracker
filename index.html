@@ -2002,14 +2002,14 @@ function renderShowDetail() {
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.class||'—'}</td>
         <td style="padding:0.3rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.division_place||'—'}</td>
-        <td style="padding:0.3rem 0.75rem;color:var(--text2)">${isFirst?(e.overall_place||'—'):''}</td>
+        <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.overall_place||'—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs'+(e.entry_weight_date?' · '+e.entry_weight_date:'') : '—'}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${isFirst ? (lw ? lw.weight_lbs+' lbs · '+lw.date : '—') : ''}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.showman||''}</td>
         <td style="padding:0.3rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
         <td style="padding:0.3rem 0.75rem;text-align:center;white-space:nowrap">
-          <button class="btn-icon btn-sm" onclick="openEditShowEntry('${e.id}')">✏️</button>
-          <button class="btn-icon btn-sm" onclick="deleteShowEntry('${e.id}')" style="color:var(--danger)">🗑</button>
+          ${isFirst ? `<button class="btn-icon btn-sm" onclick="openEditShowEntry('${e.id}')">✏️</button>
+          <button class="btn-icon btn-sm" onclick="deleteShowEntry('${e.id}')" style="color:var(--danger)">🗑</button>` : ''}
         </td>
       </tr>`;
     });
