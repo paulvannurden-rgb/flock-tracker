@@ -1242,7 +1242,10 @@ async function renderShowsTab(el) {
       <td style="padding:0.6rem 0.75rem;color:var(--text2)">${show.location||'—'}</td>
       <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.class||'—'}</td>
       <td style="padding:0.6rem 0.75rem;font-weight:700;color:var(--accent)">${e.place||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.division_place||'—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.overall_place||'—'}</td>
       <td style="padding:0.6rem 0.75rem;color:var(--text2)">${e.entry_weight ? e.entry_weight+' lbs' : '—'}</td>
+      <td style="padding:0.6rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.showman||'—'}</td>
       <td style="padding:0.6rem 0.75rem;color:var(--text3);font-size:0.8rem">${e.notes||''}</td>
     </tr>`;
   }).join('');
@@ -2235,6 +2238,10 @@ function openEditShowEntry(entryId) {
       <div class="field"><label>Date</label><input type="date" id="ee-wt-date" value="${firstEntry?.entry_weight_date||showDate}"></div>
     </div>
     ${lastWtHtml}
+    <div class="row">
+      <div class="field"><label>Division Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="ee-division-place" value="${firstEntry?.division_place||''}" placeholder="e.g. Grand Champion Ewe"></div>
+      <div class="field"><label>Overall Placing <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input id="ee-overall-place" value="${firstEntry?.overall_place||''}" placeholder="e.g. Reserve Champion"></div>
+    </div>
     <div class="field"><label>Showman</label><input id="ee-showman" value="${firstEntry?.showman||''}" placeholder="e.g. Emma Smith"></div>
     <div class="field"><label>Notes</label><input id="ee-notes" value="${firstEntry?.notes||''}" placeholder="Optional"></div>
     <div class="modal-actions">
@@ -2270,6 +2277,8 @@ async function saveEditShowEntries(lambId, showId) {
   const wtDate = document.getElementById('ee-wt-date')?.value;
   const notes = document.getElementById('ee-notes')?.value?.trim()||null;
   const showman = document.getElementById('ee-showman')?.value?.trim()||null;
+  const divPlace = document.getElementById('ee-division-place')?.value?.trim()||null;
+  const ovPlace = document.getElementById('ee-overall-place')?.value?.trim()||null;
   const entryWeight = (wt && !isNaN(wt)) ? wt : null;
   const entryWeightDate = wtDate||null;
 
@@ -2281,23 +2290,18 @@ async function saveEditShowEntries(lambId, showId) {
 
   // Update/insert remaining rows
   const rows = document.querySelectorAll('.ee-class-row');
-  const existingEntries = (window._currentShowEntries||[]).filter(e => e.lamb_id === lambId);
 
   for (let i = 0; i < rows.length; i++) {
     const inputs = rows[i].querySelectorAll('input');
     const cls = inputs[0]?.value?.trim()||null;
     const place = inputs[1]?.value?.trim()||null;
     const existingId = rows[i].getAttribute('data-entry-id');
+    const shared = { notes, showman, division_place: divPlace, overall_place: ovPlace, entry_weight: entryWeight, entry_weight_date: entryWeightDate };
 
     if (existingId) {
-      await db.from('show_entries').update({
-        'class': cls, place, notes, showman, entry_weight: entryWeight, entry_weight_date: entryWeightDate
-      }).eq('id', existingId);
+      await db.from('show_entries').update({ 'class': cls, place, ...shared }).eq('id', existingId);
     } else {
-      await db.from('show_entries').insert({
-        show_id: showId, lamb_id: lambId,
-        'class': cls, place, notes, showman, entry_weight: entryWeight, entry_weight_date: entryWeightDate
-      });
+      await db.from('show_entries').insert({ show_id: showId, lamb_id: lambId, 'class': cls, place, ...shared });
     }
   }
 
