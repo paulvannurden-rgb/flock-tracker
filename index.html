@@ -7844,6 +7844,168 @@ function generateSemenReport() {
   openPrintWindow(html, 'Semen Report');
 }
 
+function printMaterialsReport(groupId) {
+  // If groupId passed, single-group report; otherwise pick groups
+  if (groupId) {
+    generateMaterialsReport([groupId]);
+    return;
+  }
+  const allActiveGroups = (window._planGroups||[]).filter(g => g.status !== 'Cancelled' && g.status !== 'Complete');
+  if (allActiveGroups.length === 0) { toast('No active groups to report on'); return; }
+
+  const groupCheckboxes = allActiveGroups.map(g =>
+    `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" class="mr-group-cb" value="${g.id}" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+      <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${g.name}</span>
+      <span style="font-size:0.75rem;color:var(--text3)">${g.type?.toUpperCase()||''} ${g.target_date?'· '+g.target_date:''}</span>
+    </label>`
+  ).join('');
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">📦 Materials Report — Select Groups</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+      <span style="font-size:0.8rem;color:var(--text3)">${allActiveGroups.length} active groups</span>
+      <div style="display:flex;gap:0.3rem">
+        <button class="btn-icon btn-sm" onclick="document.querySelectorAll('.mr-group-cb').forEach(c=>c.checked=true)">✓ All</button>
+        <button class="btn-icon btn-sm" onclick="document.querySelectorAll('.mr-group-cb').forEach(c=>c.checked=false)">✕ None</button>
+      </div>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.25rem 0.5rem;margin-bottom:0.75rem">
+      ${groupCheckboxes}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateMaterialsReportFromModal()">Generate Report</button>
+    </div>`);
+}
+
+function generateMaterialsReportFromModal() {
+  const selected = [...document.querySelectorAll('.mr-group-cb:checked')].map(c => c.value);
+  if (selected.length === 0) { toast('Select at least one group'); return; }
+  closeModal();
+  generateMaterialsReport(selected);
+}
+
+function generateMaterialsReport(groupIds) {
+  const selectedSet = new Set(groupIds);
+  const groups = (window._planGroups||[]).filter(g => selectedSet.has(g.id));
+  const members = window._planMembers || [];
+  const steps = window._planSteps || [];
+  const protocols = window._planProtocols || [];
+  const printDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const p = getFarmProfile();
+  const farmName = p.type==='business'?(p.bizname||p.name||''):(p.name||'');
+
+  // Aggregate by product + unit
+  // totals: { "Product|Unit": { product, unit, qty, breakdown: [ { groupName, role, headCount, qtyPerHead, lineTotal, stepName, targetDate } ] } }
+  const totals = {};
+
+  groups.forEach(g => {
+    const groupMembers = members.filter(m => m.group_id === g.id);
+    const donors = groupMembers.filter(m => (m.role||'donor') === 'donor');
+    const recips = groupMembers.filter(m => m.role === 'recip');
+
+    // Donor protocol
+    if (g.protocol_id) {
+      const protSteps = steps.filter(s => s.protocol_id === g.protocol_id && s.product && s.qty_per_head);
+      const protName = protocols.find(pr => pr.id === g.protocol_id)?.name || 'Protocol';
+      protSteps.forEach(s => {
+        const head = donors.length;
+        if (head === 0) return;
+        const lineTotal = (parseFloat(s.qty_per_head)||0) * head;
+        const key = (s.product||'').trim() + '|' + (s.unit||'');
+        if (!totals[key]) totals[key] = { product: s.product, unit: s.unit||'', qty: 0, breakdown: [] };
+        totals[key].qty += lineTotal;
+        totals[key].breakdown.push({
+          groupName: g.name, role: 'Donor', protocolName: protName,
+          stepName: s.step_name, headCount: head, qtyPerHead: s.qty_per_head, lineTotal, targetDate: g.target_date
+        });
+      });
+    }
+
+    // Recip protocol (flush groups)
+    if (g.recip_protocol_id) {
+      const protSteps = steps.filter(s => s.protocol_id === g.recip_protocol_id && s.product && s.qty_per_head);
+      const protName = protocols.find(pr => pr.id === g.recip_protocol_id)?.name || 'Protocol';
+      protSteps.forEach(s => {
+        const head = recips.length;
+        if (head === 0) return;
+        const lineTotal = (parseFloat(s.qty_per_head)||0) * head;
+        const key = (s.product||'').trim() + '|' + (s.unit||'');
+        if (!totals[key]) totals[key] = { product: s.product, unit: s.unit||'', qty: 0, breakdown: [] };
+        totals[key].qty += lineTotal;
+        totals[key].breakdown.push({
+          groupName: g.name, role: 'Recip', protocolName: protName,
+          stepName: s.step_name, headCount: head, qtyPerHead: s.qty_per_head, lineTotal, targetDate: g.target_date
+        });
+      });
+    }
+  });
+
+  const productEntries = Object.values(totals).sort((a,b) => (a.product||'').localeCompare(b.product||''));
+
+  const fmtQty = (n) => {
+    const r = Math.round(n * 100) / 100;
+    return Number.isInteger(r) ? r.toString() : r.toFixed(2).replace(/\.?0+$/,'');
+  };
+
+  let tableRows = '';
+  productEntries.forEach(p => {
+    const subRows = p.breakdown.map(b =>
+      `<tr style="background:#fafafa">
+        <td style="padding:4px 10px 4px 24px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${b.groupName} <span style="color:#999">· ${b.role}</span></td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${b.stepName}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${b.targetDate||'—'}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0;text-align:right">${b.headCount} head × ${fmtQty(b.qtyPerHead)}${p.unit}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmtQty(b.lineTotal)} ${p.unit}</td>
+      </tr>`
+    ).join('');
+    tableRows += `<tr style="border-bottom:2px solid #e5e7eb;background:#fff">
+      <td style="padding:9px 10px;font-weight:700;font-size:12px" colspan="4">💊 ${p.product}</td>
+      <td style="padding:9px 8px;font-size:14px;font-weight:700;text-align:right;color:#15803d">${fmtQty(p.qty)} ${p.unit}</td>
+    </tr>${subRows}`;
+  });
+
+  const totalProducts = productEntries.length;
+  const totalGroups = groups.length;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Materials Report</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+  .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+  .header h1{font-size:18px;font-weight:700}.header p{font-size:11px;color:#555;margin-top:3px}
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+  .sum-card{background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center}
+  .sum-card .val{font-size:20px;font-weight:700}.sum-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-top:2px}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#1a1a1a;color:#fff}
+  thead th{padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em}
+  .legend{margin-top:16px;font-size:10px;color:#666;border-top:1px solid #e5e7eb;padding-top:8px}
+  .footer{text-align:center;font-size:9px;color:#aaa;margin-top:16px}
+  @media print{body{padding:12px}}</style></head><body>
+  <div class="header">
+    <div><h1>📦 Materials Requirement Report</h1><p>${groups.length===1?'Group: '+groups[0].name:'Selected Groups — Product Totals'}</p></div>
+    <div style="text-align:right;font-size:11px;color:#555">${farmName}<br>${printDate}</div>
+  </div>
+  <div class="summary">
+    <div class="sum-card"><div class="val">${totalGroups}</div><div class="lbl">Groups</div></div>
+    <div class="sum-card"><div class="val">${totalProducts}</div><div class="lbl">Products Needed</div></div>
+    <div class="sum-card"><div class="val">${groups.reduce((s,g)=>s+members.filter(m=>m.group_id===g.id).length,0)}</div><div class="lbl">Total Animals</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Product / Source</th><th>Step</th><th>Target Date</th><th style="text-align:right">Calculation</th><th style="text-align:right">Total</th>
+    </tr></thead>
+    <tbody>${tableRows || '<tr><td colspan="5" style="padding:24px;text-align:center;color:#888">No products with quantities defined in the selected groups\' protocols.<br><span style="font-size:10px">Edit protocol steps and add Product + Qty/Head to populate this report.</span></td></tr>'}</tbody>
+  </table>
+  <div class="legend">
+    Totals = quantity per head × head count (donors for donor protocol, recips for recip protocol). Same product/unit combinations are summed across all groups and steps.
+  </div>
+  <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
+  </body></html>`;
+
+  openPrintWindow(html, 'Materials Report');
+}
+
 async function renderPlanning() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const [{ data: groups }, { data: protocols }, { data: steps }, { data: members }] = await Promise.all([
@@ -7941,9 +8103,12 @@ function renderPlanningHTML() {
     const rowBg = isTarget ? 'var(--accent-glow)' : isRecip ? (isPast?'#e0eeff':'#f0f7ff') : (isPast?'var(--surface2)':'transparent');
     const nameColor = isPast ? 'var(--text3)' : 'var(--text)';
     const dateColor = isTarget ? 'var(--accent)' : isPast ? 'var(--text3)' : (isRecip ? '#1d4ed8' : 'var(--text2)');
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${rowBg}">
-      <div style="font-size:0.78rem;color:${nameColor};font-weight:${isTarget?700:400};text-decoration:${isPast&&!isTarget?'line-through':'none'}"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${isRecip?'#1d4ed8':'var(--accent)'};margin-right:0.3rem">${isRecip?'Recip':'Donor'}</span>${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
+    return `<div style="padding:0.2rem 0.5rem;border-radius:0.25rem;background:${rowBg}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:0.78rem;color:${nameColor};font-weight:${isTarget?700:400};text-decoration:${isPast&&!isTarget?'line-through':'none'}"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${isRecip?'#1d4ed8':'var(--accent)'};margin-right:0.3rem">${isRecip?'Recip':'Donor'}</span>${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span>${s.product?`<span style="font-size:0.7rem;color:var(--accent);margin-left:0.3rem">💊 ${s.product}${s.qty_per_head?` ${s.qty_per_head}${s.unit||''}/hd`:''}</span>`:''}</div>
       <div style="font-size:0.78rem;font-weight:600;color:${dateColor}">${stepDate}</div>
+      </div>
+      ${s.notes?`<div style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-top:0.1rem;padding-left:0.4rem;border-left:2px solid var(--border)">${s.notes}</div>`:''}
     </div>`;
   }
 
@@ -7960,6 +8125,7 @@ function renderPlanningHTML() {
       </div>
       <div style="display:flex;gap:0.4rem">
         <button class="btn btn-secondary btn-sm" onclick="printSemenReport()">📊 Semen Report</button>
+        <button class="btn btn-secondary btn-sm" onclick="printMaterialsReport()">📦 Materials Report</button>
         <button class="btn btn-primary btn-sm" onclick="openNewGroupInline()">+ New Group</button>
       </div>
     </div>
@@ -8011,6 +8177,7 @@ function renderPlanningHTML() {
               <button class="btn btn-secondary btn-sm" onclick="cancelPlan('${g.id}')" style="color:var(--danger);border-color:var(--danger)">✕ Cancel</button>
               <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`:''}
               <button class="btn-icon btn-sm" onclick="printPlan('${g.id}')" title="Print / Export">🖨️</button>
+              <button class="btn-icon btn-sm" onclick="printMaterialsReport('${g.id}')" title="Materials Needed">📦</button>
               <button class="btn-icon btn-sm" onclick="openEditGroupPage('${g.id}')" title="Edit">✏️</button>
               <button class="btn-icon btn-sm" onclick="openManageGroupMembers('${g.id}')" title="Members">👥</button>
               <button class="btn-icon btn-sm" onclick="deleteGroupPage('${g.id}')" style="color:var(--danger)" title="Delete">🗑</button>
@@ -8045,9 +8212,12 @@ function renderPlanningHTML() {
             </div>
           </div>
           ${protSteps.length > 0 ? protSteps.map(s => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--border)">
-              <div style="font-size:0.82rem;color:var(--text)">${s.step_name} <span style="font-size:0.72rem;color:var(--text3)">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
-              <div style="font-size:0.78rem;color:var(--text3)">${s.day_offset===0?'<span style="color:var(--accent);font-weight:600">Target Day</span>':s.day_offset+' days before'}</div>
+            <div style="padding:0.2rem 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="font-size:0.82rem;color:var(--text)">${s.step_name} <span style="font-size:0.72rem;color:var(--text3)">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span>${s.product?`<span style="font-size:0.72rem;color:var(--accent);margin-left:0.4rem">💊 ${s.product}${s.qty_per_head?` (${s.qty_per_head}${s.unit||''}/head)`:''}</span>`:''}</div>
+                <div style="font-size:0.78rem;color:var(--text3)">${s.day_offset===0?'<span style="color:var(--accent);font-weight:600">Target Day</span>':s.day_offset+' days before'}</div>
+              </div>
+              ${s.notes?`<div style="font-size:0.74rem;color:var(--text3);font-style:italic;margin-top:0.15rem;padding-left:0.4rem;border-left:2px solid var(--border)">${s.notes}</div>`:''}
             </div>`).join('') : `<div style="font-size:0.78rem;color:var(--text3)">No steps yet</div>`}
           ${p.notes?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.4rem;font-style:italic">${p.notes}</div>`:''}
         </div>`;
@@ -8118,11 +8288,11 @@ async function printPlan(groupId) {
     const rows = sectionSteps.map(s => `
       <tr style="border-bottom:1px solid #e5e7eb">
         <td style="padding:6px 8px;font-size:11px;font-weight:600">${stepDate(s.day_offset)}</td>
-        <td style="padding:6px 8px;font-size:11px">${s.step_name}</td>
+        <td style="padding:6px 8px;font-size:11px">${s.step_name}${s.product?`<div style="font-size:10px;color:#15803d;margin-top:1px">💊 ${s.product}${s.qty_per_head?` (${s.qty_per_head}${s.unit||''}/head)`:''}</div>`:''}</td>
         <td style="padding:6px 8px;font-size:11px">${s.step_time ? fmtStepTime(s.step_time) : ''}</td>
         <td style="padding:6px 8px;font-size:11px">${s.time_of_day||'AM'}</td>
         <td style="padding:6px 8px;font-size:11px">${s.day_offset===0?'<strong>TARGET DAY</strong>':s.day_offset+' days before'}</td>
-        <td style="padding:6px 8px;font-size:11px"></td>
+        <td style="padding:6px 8px;font-size:11px;color:#555;font-style:${s.notes?'italic':'normal'}">${s.notes||''}</td>
       </tr>`).join('');
     return `
       <div style="margin-bottom:16px">
@@ -8810,7 +8980,11 @@ async function saveNewProtocolPage() {
     const stepName = row.querySelector('.ps-name')?.value?.trim();
     const dayOffset = parseInt(row.querySelector('.ps-day')?.value) || 0;
     const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
-    if (stepName) inserts.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, sort_order: i });
+    const product = row.querySelector('.ps-product')?.value?.trim() || null;
+    const qtyPerHead = parseFloat(row.querySelector('.ps-qty')?.value) || null;
+    const unit = row.querySelector('.ps-unit')?.value || null;
+    const notes = row.querySelector('.ps-notes')?.value?.trim() || null;
+    if (stepName) inserts.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, product, qty_per_head: qtyPerHead, unit, notes, sort_order: i });
   });
   if (inserts.length > 0) await db.from('protocol_steps').insert(inserts);
   toast(`Protocol "${name}" saved`);
@@ -8999,13 +9173,19 @@ function addProtocolStepRow() {
   if (!container) return;
   const idx = container.children.length;
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center';
+  row.style.cssText = 'display:flex;flex-direction:column;gap:0.25rem;margin-bottom:0.5rem;padding:0.4rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)';
   row.innerHTML = `
-    <input placeholder="Step name (e.g. CIDR Insert)" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
+    <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+    <input placeholder="Step name (e.g. CIDR Insert)" style="flex:2;min-width:140px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${idx*3}"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
-    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Product</span><input placeholder="e.g. CIDR" style="width:100px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-product"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Qty/Head</span><input type="number" step="0.01" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-qty"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Unit</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-unit"><option value="">—</option><option value="mL">mL</option><option value="cc">cc</option><option value="doses">doses</option><option value="tablets">tablets</option><option value="grams">grams</option></select></div>
+    <button type="button" onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
+    </div>
+    <textarea placeholder="Notes / instructions (optional)" rows="1" class="ps-notes" style="width:100%;padding:0.3rem 0.5rem;font-size:0.78rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);resize:vertical;font-family:inherit"></textarea>`;
   container.appendChild(row);
 }
 
@@ -9024,7 +9204,11 @@ async function saveNewProtocol() {
     const timeOfDay = row.querySelector('.ps-time')?.value || 'AM';
     const rawStepTime = row.querySelector('.ps-step-time')?.value?.trim() || null;
     const stepTime = stepTimeTo24hr(rawStepTime, timeOfDay);
-    if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, step_time: stepTime||null, sort_order: i });
+    const product = row.querySelector('.ps-product')?.value?.trim() || null;
+    const qtyPerHead = parseFloat(row.querySelector('.ps-qty')?.value) || null;
+    const unit = row.querySelector('.ps-unit')?.value || null;
+    const notes = row.querySelector('.ps-notes')?.value?.trim() || null;
+    if (stepName) steps.push({ protocol_id: prot.id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay, step_time: stepTime||null, product, qty_per_head: qtyPerHead, unit, notes, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   toast(`Protocol "${name}" saved with ${steps.length} steps`);
@@ -9039,9 +9223,12 @@ function buildScheduleRows(steps, targetDate, label, color) {
   const rows = sorted.map(s => {
     const stepDate = new Date(new Date(targetDate + 'T12:00:00').getTime() - s.day_offset*24*60*60*1000).toISOString().slice(0,10);
     const isTarget = s.day_offset === 0;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
-      <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span></div>
+    return `<div style="padding:0.2rem 0.5rem;border-radius:0.25rem;background:${isTarget?'var(--accent-glow)':'transparent'}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:0.78rem;color:var(--text);font-weight:${isTarget?700:400}">${s.step_name} <span style="color:var(--text3);font-size:0.7rem">${s.step_time ? fmtStepTime(s.step_time) : (s.time_of_day||'AM')}</span>${s.product?`<span style="font-size:0.7rem;color:var(--accent);margin-left:0.3rem">💊 ${s.product}${s.qty_per_head?` ${s.qty_per_head}${s.unit||''}/hd`:''}</span>`:''}</div>
       <div style="font-size:0.78rem;font-weight:600;color:${isTarget?'var(--accent)':'var(--text2)'}">${stepDate}</div>
+      </div>
+      ${s.notes?`<div style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-top:0.1rem;padding-left:0.4rem;border-left:2px solid var(--border)">${s.notes}</div>`:''}
     </div>`;
   }).join('');
   return `<div style="background:${color||'var(--surface2)'};border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem;margin-bottom:0.35rem">
@@ -9188,12 +9375,18 @@ async function openEditProtocol(id) {
     </div>
     <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps</div>
     <div id="ep-steps">
-      ${(steps||[]).map((s,idx) => `<div style="display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center">
-        <input value="${s.step_name}" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name" data-id="${s.id}">
+      ${(steps||[]).map((s,idx) => `<div style="display:flex;flex-direction:column;gap:0.25rem;margin-bottom:0.5rem;padding:0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+        <input value="${s.step_name}" style="flex:2;min-width:140px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name" data-id="${s.id}">
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" value="${s.day_offset}" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day"></div>
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" data-time="${(s.step_time&&s.step_time!=='null')?s.step_time:''}" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
         <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option ${(s.time_of_day||'AM')==='AM'?'selected':''}>AM</option><option ${(s.time_of_day||'AM')==='PM'?'selected':''}>PM</option><option ${(s.time_of_day||'AM')==='Both'?'selected':''}>Both</option></select></div>
-        <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Product</span><input value="${s.product||''}" placeholder="e.g. CIDR" style="width:100px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-product"></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Qty/Head</span><input type="number" step="0.01" value="${s.qty_per_head||''}" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-qty"></div>
+        <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Unit</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-unit"><option value="">—</option><option value="mL" ${s.unit==='mL'?'selected':''}>mL</option><option value="cc" ${s.unit==='cc'?'selected':''}>cc</option><option value="doses" ${s.unit==='doses'?'selected':''}>doses</option><option value="tablets" ${s.unit==='tablets'?'selected':''}>tablets</option><option value="grams" ${s.unit==='grams'?'selected':''}>grams</option></select></div>
+        <button type="button" onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
+        </div>
+        <textarea placeholder="Notes / instructions (optional)" rows="1" class="ps-notes" style="width:100%;padding:0.3rem 0.5rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);resize:vertical;font-family:inherit">${s.notes||''}</textarea>
       </div>`).join('')}
     </div>
     <button type="button" class="btn btn-secondary btn-sm" onclick="addEpStepRow()">+ Add Step</button>
@@ -9215,13 +9408,19 @@ function addEpStepRow() {
   const container = document.getElementById('ep-steps');
   if (!container) return;
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:0.35rem;margin-bottom:0.35rem;align-items:center';
+  row.style.cssText = 'display:flex;flex-direction:column;gap:0.25rem;margin-bottom:0.5rem;padding:0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)';
   row.innerHTML = `
-    <input placeholder="Step name" style="flex:2;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
+    <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+    <input placeholder="Step name" style="flex:2;min-width:140px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name">
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="0"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
     <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
-    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>`;
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Product</span><input placeholder="e.g. CIDR" style="width:100px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-product"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Qty/Head</span><input type="number" step="0.01" placeholder="0" style="width:70px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-qty"></div>
+    <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Unit</span><select style="width:65px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-unit"><option value="">—</option><option value="mL">mL</option><option value="cc">cc</option><option value="doses">doses</option><option value="tablets">tablets</option><option value="grams">grams</option></select></div>
+    <button type="button" onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">×</button>
+    </div>
+    <textarea placeholder="Notes / instructions (optional)" rows="1" class="ps-notes" style="width:100%;padding:0.3rem 0.5rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);resize:vertical;font-family:inherit"></textarea>`;
   container.appendChild(row);
 }
 
@@ -9239,7 +9438,11 @@ async function saveEditProtocol(id) {
     const timeOfDay2 = row.querySelector('.ps-time')?.value || 'AM';
     const rawStepTime2 = row.querySelector('.ps-step-time')?.value?.trim() || null;
     const stepTime2 = stepTimeTo24hr(rawStepTime2, timeOfDay2);
-    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, sort_order: i });
+    const product = row.querySelector('.ps-product')?.value?.trim() || null;
+    const qtyPerHead = parseFloat(row.querySelector('.ps-qty')?.value) || null;
+    const unit = row.querySelector('.ps-unit')?.value || null;
+    const notes = row.querySelector('.ps-notes')?.value?.trim() || null;
+    if (stepName) steps.push({ protocol_id: id, step_name: stepName, day_offset: dayOffset, time_of_day: timeOfDay2, step_time: stepTime2||null, product, qty_per_head: qtyPerHead, unit, notes, sort_order: i });
   });
   if (steps.length > 0) await db.from('protocol_steps').insert(steps);
   // Update local cache
@@ -9427,7 +9630,7 @@ async function addGroupMember(groupId, role) {
     if (!lambId) { toast('Select a female'); return; }
     const { sire_id, ai_sire_id } = parseSireSelection(document.getElementById('gm-sire')?.value || '');
     const sireText = document.getElementById('gm-sire-text')?.value?.trim() || null;
-    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_text: sireText, role: 'donor' });
+    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, role: 'donor' });
     toast('Donor added');
   }
   if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, role==='recip'?'recips':'donors'); }
@@ -9460,11 +9663,17 @@ async function saveEditMemberSire(memberId, groupId) {
   if (sireVal.startsWith('ai:')) aiSireId = sireVal.replace('ai:', '');
   else if (sireVal.startsWith('lamb:')) sireId = sireVal.replace('lamb:', '');
 
-  await db.from('breeding_group_members').update({
+  const { error } = await db.from('breeding_group_members').update({
     ai_sire_id: aiSireId || null,
     sire_id: sireId || null,
     sire_text: (aiSireId || sireId) ? null : sireText,
   }).eq('id', memberId);
+
+  if (error) {
+    console.error('Sire update failed:', error);
+    toast('Save failed: ' + (error.message || 'unknown error'));
+    return;
+  }
 
   const updateFn = m => m.id === memberId ? { ...m, ai_sire_id: aiSireId||null, sire_id: sireId||null, sire_text: (aiSireId||sireId)?null:sireText } : m;
   if (window._planMembers) window._planMembers = window._planMembers.map(updateFn);
