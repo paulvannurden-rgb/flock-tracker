@@ -9437,7 +9437,7 @@ async function deleteProtocol(id) {
 async function openEditProtocol(id) {
   const [{ data: prot }, { data: steps }] = await Promise.all([
     db.from('breeding_protocols').select('*').eq('id', id).single(),
-    db.from('protocol_steps').select('*').eq('protocol_id', id).order('sort_order', {ascending:true}),
+    db.from('protocol_steps').select('*').eq('protocol_id', id).order('day_offset', {ascending:false}).order('step_time', {ascending:true, nullsFirst:true}).order('time_of_day', {ascending:true}),
   ]);
   if (!prot) return;
   showModal(`
