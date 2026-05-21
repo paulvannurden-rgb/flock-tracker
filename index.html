@@ -1280,7 +1280,7 @@ function renderPedigreeTab(el) {
 
   function getNode(id, aiId, text) {
     if (id) { const l = allLambs.find(x=>x.id===id); if(l) return l; }
-    if (aiId) { const r = allAiRams.find(x=>x.id===aiId); if(r) return { name: r.name+' 🧬', id: null, ai_id: r.id, ear_tag: null, dob: null, sex: 'Ram', sire_id: null, ai_sire_id: null, sire_text: null, dam_id: null, dam_text: null }; }
+    if (aiId) { const r = allAiRams.find(x=>x.id===aiId); if(r) return { name: r.name+' 🧬', id: null, ai_id: r.id, ear_tag: null, dob: null, sex: 'Ram', genetic_code: r.genetic_code, sire_id: null, ai_sire_id: null, sire_text: null, dam_id: null, dam_text: null }; }
     if (text) return { name: text, id: null, ear_tag: null, dob: null };
     return null;
   }
@@ -1294,6 +1294,7 @@ function renderPedigreeTab(el) {
       <div class="ped-node-name">${lamb.name}</div>
       ${lamb.ear_tag?`<div class="ped-node-sub">#${lamb.ear_tag}</div>`:''}
       ${lamb.sex?`<div class="ped-node-sub">${lamb.sex}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>`:''}
+      ${lamb.genetic_code?`<div class="ped-node-sub" style="color:var(--accent);font-weight:600">🧬 ${lamb.genetic_code}</div>`:''}
     </div>`;
     if (depth >= 3 || (!sire && !dam)) return nodeHtml;
     return `<div class="ped-row">
@@ -7261,7 +7262,7 @@ function redrawPedFromUI() {
 }
 
 function layoutAndDrawPed(animals) {
-  const NODE_W = 160, NODE_H = 60, HGAP = 40, VGAP = 80;
+  const NODE_W = 160, NODE_H = 72, HGAP = 40, VGAP = 80;
   const byId = {};
   animals.forEach(a => { byId[a.id] = a; });
 
@@ -7370,9 +7371,13 @@ function layoutAndDrawPed(animals) {
     if (!pos) return;
     const color = catColors[a._cat] || '#4020c0';
     const tag = a.ear_tag ? '#'+a.ear_tag : (a.registration_no||'');
+    const geneticCode = a.genetic_code || '';
     const cursor = a._type === 'lamb' ? 'pointer' : 'default';
     const onclick = a._type === 'lamb' ? `onclick="showLamb('${a.id}')"` : '';
-    nodes += `<div ${onclick} title="${a.name}${tag?' '+tag:''}" style="
+    const titleParts = [a.name];
+    if (tag) titleParts.push(tag);
+    if (geneticCode) titleParts.push('🧬 '+geneticCode);
+    nodes += `<div ${onclick} title="${titleParts.join(' · ')}" style="
       position:absolute;
       left:${pos.x}px;top:${pos.y}px;
       width:${NODE_W}px;height:${NODE_H}px;
@@ -7385,6 +7390,7 @@ function layoutAndDrawPed(animals) {
     ">
       <div style="color:#fff;font-size:15px;font-weight:700;font-family:system-ui,sans-serif;text-align:center;line-height:1.2;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
       ${tag ? `<div style="color:rgba(255,255,255,0.75);font-size:11px;font-family:system-ui,sans-serif;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tag}</div>` : ''}
+      ${geneticCode ? `<div style="color:rgba(255,255,255,0.92);font-size:10px;font-weight:600;font-family:system-ui,sans-serif;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">🧬 ${geneticCode}</div>` : ''}
     </div>`;
   });
 
