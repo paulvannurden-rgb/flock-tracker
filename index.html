@@ -1756,6 +1756,8 @@ function addCostRow(containerId) {
     <input type="number" placeholder="$0.00" step="0.01" min="0" style="width:80px;padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="cr-amount">
     <button type="button" onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0 0.2rem;line-height:1">×</button>`;
   container.appendChild(row);
+  const descEl = row.querySelector('.cr-desc');
+  if (descEl) mountAutocomplete(descEl, (customProducts.cost || []).map(p => p.name));
 }
 
 async function saveCostDesc(btn) {
@@ -1772,6 +1774,11 @@ async function saveCostDesc(btn) {
     const opt = document.createElement('option');
     opt.value = desc;
     dl.appendChild(opt);
+  });
+  // Update all live autocomplete option sets in the modal
+  const allOpts = (customProducts.cost || []).map(p => p.name);
+  document.querySelectorAll('.cr-desc').forEach(el => {
+    if (el._acSetOptions) el._acSetOptions(allOpts);
   });
   toast(`"${desc}" saved to list`);
   btn.style.color = 'var(--green)';
@@ -4494,6 +4501,8 @@ async function saveSupplyItem() {
     // Refresh datalist
     const dl = document.getElementById('sup-item-list');
     if (dl) dl.innerHTML = window._supplyItems.map(i=>`<option value="${i}">`).join('');
+    const itemEl = document.getElementById('sup-item');
+    if (itemEl && itemEl._acSetOptions) itemEl._acSetOptions(window._supplyItems);
   }
   toast(`"${item}" saved to list`);
 }
@@ -4507,6 +4516,8 @@ async function saveSupplySupplier() {
     window._supplySuppliers = [...existing, supplier];
     const dl = document.getElementById('sup-supplier-list');
     if (dl) dl.innerHTML = window._supplySuppliers.map(s=>`<option value="${s}">`).join('');
+    const supEl = document.getElementById('sup-supplier');
+    if (supEl && supEl._acSetOptions) supEl._acSetOptions(window._supplySuppliers);
   }
   toast(`"${supplier}" saved to list`);
 }
@@ -4519,6 +4530,12 @@ async function openAddSupply() {
   window._supplyItems = (items||[]).map(p=>p.name);
   window._supplySuppliers = (suppliers||[]).map(p=>p.name);
   showModal(_supplyModalHtml('🌾 Log Purchase', 'saveSupply()'));
+  setTimeout(() => {
+    const itemEl = document.getElementById('sup-item');
+    const supEl = document.getElementById('sup-supplier');
+    if (itemEl) mountAutocomplete(itemEl, window._supplyItems);
+    if (supEl) mountAutocomplete(supEl, window._supplySuppliers);
+  }, 30);
 }
 
 async function saveSupply() {
@@ -4552,7 +4569,13 @@ async function openEditSupply(id) {
   window._supplyItems = (items||[]).map(p=>p.name);
   window._supplySuppliers = (suppliers||[]).map(p=>p.name);
   showModal(_supplyModalHtml('✏️ Edit Purchase', `saveEditSupply('${id}')`, log));
-  setTimeout(() => updateSupplyCostPerUnit(), 0);
+  setTimeout(() => {
+    updateSupplyCostPerUnit();
+    const itemEl = document.getElementById('sup-item');
+    const supEl = document.getElementById('sup-supplier');
+    if (itemEl) mountAutocomplete(itemEl, window._supplyItems);
+    if (supEl) mountAutocomplete(supEl, window._supplySuppliers);
+  }, 30);
 }
 
 async function saveEditSupply(id) {
@@ -5738,6 +5761,100 @@ function downloadXLSX(rows, filename) {
   XLSX.writeFile(wb, `${filename}-${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
+// ── AUTOCOMPLETE (keyboard-friendly replacement for <datalist>) ────────
+// Usage: mountAutocomplete(inputEl, ['option1', 'option2', ...])
+// Free text allowed; supports Type/Filter/Arrow keys/Enter/Tab/Esc/Click.
+function mountAutocomplete(inputEl, options) {
+  if (!inputEl || inputEl._acMounted) return;
+  inputEl._acMounted = true;
+  // Remove native datalist attachment so it doesn't double-render
+  inputEl.removeAttribute('list');
+  inputEl.setAttribute('autocomplete', 'off');
+
+  // Create the suggestions panel (absolutely positioned, appended to body to escape modal overflow)
+  const panel = document.createElement('div');
+  panel.className = 'ac-panel';
+  panel.style.cssText = 'position:fixed;z-index:10000;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.15);max-height:240px;overflow-y:auto;display:none;font-size:0.85rem;min-width:160px';
+  document.body.appendChild(panel);
+
+  let filtered = [];
+  let active = -1;
+  let opts = options || [];
+
+  function positionPanel() {
+    const r = inputEl.getBoundingClientRect();
+    panel.style.left = r.left + 'px';
+    panel.style.top = (r.bottom + 2) + 'px';
+    panel.style.minWidth = r.width + 'px';
+  }
+
+  function render() {
+    if (filtered.length === 0) { panel.style.display = 'none'; return; }
+    positionPanel();
+    panel.innerHTML = filtered.map((o, i) => `<div class="ac-item" data-idx="${i}" style="padding:0.4rem 0.6rem;cursor:pointer;${i===active?'background:var(--accent-glow);color:var(--accent);font-weight:600':'color:var(--text)'}">${escapeHtml(o)}</div>`).join('');
+    panel.style.display = 'block';
+    panel.querySelectorAll('.ac-item').forEach(el => {
+      el.addEventListener('mousedown', e => { // mousedown not click — fires before input loses focus
+        e.preventDefault();
+        const idx = parseInt(el.dataset.idx);
+        commit(filtered[idx]);
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function filter() {
+    const q = (inputEl.value || '').toLowerCase().trim();
+    if (!q) filtered = opts.slice(0, 50);
+    else filtered = opts.filter(o => o.toLowerCase().includes(q)).slice(0, 50);
+    active = filtered.length > 0 ? 0 : -1;
+    render();
+  }
+
+  function commit(value) {
+    inputEl.value = value;
+    panel.style.display = 'none';
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function close() { panel.style.display = 'none'; active = -1; }
+
+  inputEl.addEventListener('input', filter);
+  inputEl.addEventListener('focus', filter);
+  inputEl.addEventListener('blur', () => setTimeout(close, 150));
+
+  inputEl.addEventListener('keydown', e => {
+    const open = panel.style.display !== 'none';
+    if (e.key === 'ArrowDown') {
+      if (!open) { filter(); return; }
+      e.preventDefault();
+      active = Math.min(filtered.length - 1, active + 1);
+      render();
+    } else if (e.key === 'ArrowUp') {
+      if (!open) return;
+      e.preventDefault();
+      active = Math.max(0, active - 1);
+      render();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (open && active >= 0 && filtered[active]) {
+        if (e.key === 'Enter') e.preventDefault(); // don't submit form
+        commit(filtered[active]);
+      }
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  // Expose for dynamic option updates
+  inputEl._acSetOptions = (newOpts) => { opts = newOpts || []; };
+  // Clean up panel if input is removed from DOM
+  inputEl._acDestroy = () => { panel.remove(); };
+}
+
 // ── MODALS ────────────────────────────────────────────
 function showModal(html, wide=false) {
   let overlay = document.getElementById('modal-overlay');
@@ -5748,6 +5865,8 @@ function showModal(html, wide=false) {
 function closeModal() {
   const o = document.getElementById('modal-overlay');
   if (o) o.style.display = 'none';
+  // Remove any orphaned autocomplete panels
+  document.querySelectorAll('.ac-panel').forEach(p => p.remove());
 }
 
 // ── ADD/EDIT LAMB ─────────────────────────────────────
