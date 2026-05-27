@@ -309,10 +309,11 @@ let allLambs = [];
 let allAiRams = [];
 let allSemenInventory = [];
 let customProducts = { vaccine: [], medication: [], cost: [] };
-let flockFilter = 'Active';
-let flockTypeFilter = 'All';
-let flockRoleFilter = 'All Roles';
-let flockSexFilter = 'All';
+let flockFilter = new Set(['Active']);
+let flockTypeFilter = new Set();
+let flockRoleFilter = new Set();
+let flockSexFilter = new Set();
+let flockGeneticFilter = new Set();
 let flockSearch = '';
 let confirmingDelete = null;
 
@@ -536,20 +537,196 @@ function showLamb(id) {
 // ── FLOCK PAGE ────────────────────────────────────────
 let flockViewMode = localStorage.getItem('flock_view_mode') || 'card';
 
+// Preserve focus + cursor for an input across a re-render. Pass the input's id.
+// Call _captureSearchFocus(id) BEFORE re-rendering; call _restoreSearchFocus(id) AFTER.
+function _captureSearchFocus(id) {
+  const el = document.getElementById(id);
+  if (!el || document.activeElement !== el) return null;
+  return { value: el.value, start: el.selectionStart, end: el.selectionEnd };
+}
+function _restoreSearchFocus(id, state) {
+  if (!state) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.focus();
+  try { el.setSelectionRange(state.start, state.end); } catch(e){}
+}
+
+// Debounced search updaters. Called from search input oninput.
+// They update the search variable IMMEDIATELY (so the caret/value stay in sync),
+// but defer the expensive re-render by a few ms so rapid typing doesn't pile up.
+let _flockSearchTimer = null;
+function flockSearchInput(value) {
+  flockSearch = value;
+  if (_flockSearchTimer) clearTimeout(_flockSearchTimer);
+  _flockSearchTimer = setTimeout(() => { _flockSearchTimer = null; renderFlock(); }, 120);
+}
+let _airamSearchTimer = null;
+function airamSearchInput(value) {
+  aiRamSearch = value;
+  if (_airamSearchTimer) clearTimeout(_airamSearchTimer);
+  _airamSearchTimer = setTimeout(() => { _airamSearchTimer = null; renderAiRams(); }, 120);
+}
+
+// Generic multi-select dropdown registry. Each registered group has:
+// { setRef, options, rerender } so the helpers can find them by id.
+window._multiSelectGroups = window._multiSelectGroups || {};
+
+function registerMultiSelect(id, setRef, rerenderFn) {
+  window._multiSelectGroups[id] = { setRef, rerender: rerenderFn };
+}
+
+// Multi-select dropdown. Reusable across pages.
+// id: unique id (must be registered via registerMultiSelect first)
+// label: prefix shown when 2+ selected, e.g. "Status (3)"
+// summary: shown when nothing selected, e.g. "All Statuses"
+// setRef: the Set being mutated
+// options: [{value, label}]
+function multiSelectHtml(id, label, summary, setRef, options) {
+  const selCount = setRef.size;
+  const buttonText = selCount === 0
+    ? summary
+    : selCount === 1
+      ? options.find(o => setRef.has(o.value))?.label || summary
+      : `${label} (${selCount})`;
+  const active = selCount > 0;
+  return `<div style="position:relative" class="flock-ms-wrap" data-ms-id="${id}">
+    <button type="button" onclick="toggleMs('${id}')" style="font-size:0.82rem;padding:0.35rem 0.7rem;background:${active?'var(--accent-glow)':'var(--surface)'};border:1px solid ${active?'var(--accent)':'var(--border)'};border-radius:var(--radius-sm);color:${active?'var(--accent)':'var(--text)'};cursor:pointer;font-weight:${active?600:400};display:flex;align-items:center;gap:0.4rem;white-space:nowrap">
+      <span>${buttonText}</span>
+      <span style="font-size:0.65rem;color:var(--text3)">▾</span>
+    </button>
+    <div id="flock-ms-${id}" class="flock-ms-panel" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.15);min-width:180px;max-height:280px;overflow-y:auto;padding:0.3rem 0" onclick="event.stopPropagation()">
+      ${options.map(o => `
+        <label style="display:flex;align-items:center;justify-content:flex-start;gap:0.5rem;padding:0.35rem 0.7rem;cursor:pointer;font-size:0.82rem;color:var(--text);width:100%;box-sizing:border-box" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+          <input type="checkbox" value="${String(o.value).replace(/"/g,'&quot;')}" ${setRef.has(o.value)?'checked':''} onchange="toggleMsValue('${id}','${String(o.value).replace(/'/g,"\\'")}', this.checked)" style="accent-color:var(--accent);width:14px !important;height:14px;flex:0 0 14px;margin:0;padding:0">
+          <span style="flex:1;text-align:left">${o.label}</span>
+        </label>`).join('')}
+      ${setRef.size > 0 ? `<div style="border-top:1px solid var(--border);padding:0.3rem 0.7rem"><button type="button" onclick="clearMs('${id}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.78rem;padding:0">Clear all</button></div>` : ''}
+    </div>
+  </div>`;
+}
+
+function toggleMs(id) {
+  // Close all other panels first
+  document.querySelectorAll('.flock-ms-panel').forEach(p => {
+    if (p.id !== `flock-ms-${id}`) p.style.display = 'none';
+  });
+  const panel = document.getElementById(`flock-ms-${id}`);
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleMsValue(id, value, checked) {
+  const grp = window._multiSelectGroups[id];
+  if (!grp) return;
+  if (checked) grp.setRef.add(value);
+  else grp.setRef.delete(value);
+  grp.rerender();
+  // Re-open the same panel after rerender
+  setTimeout(() => {
+    const p = document.getElementById(`flock-ms-${id}`);
+    if (p) p.style.display = 'block';
+  }, 0);
+}
+
+function clearMs(id) {
+  const grp = window._multiSelectGroups[id];
+  if (!grp) return;
+  grp.setRef.clear();
+  grp.rerender();
+}
+
+// Legacy aliases used by flock filters (so existing onclick handlers keep working)
+function flockMultiSelectHtml(id, label, summary, setRef, options) { return multiSelectHtml(id, label, summary, setRef, options); }
+function toggleFlockMs(id) { toggleMs(id); }
+function toggleFlockMsValue(id, value, checked) { toggleMsValue(id, value, checked); }
+function clearFlockMs(id) { clearMs(id); }
+
+function clearAllAiRamFilters() {
+  aiRamBreedFilter.clear();
+  aiRamGeneticFilter.clear();
+  aiRamInventoryFilter.clear();
+  aiRamSearch = '';
+  renderAiRams();
+}
+
+function clearAllFlockFilters() {
+  flockFilter.clear();
+  flockTypeFilter.clear();
+  flockRoleFilter.clear();
+  flockSexFilter.clear();
+  flockGeneticFilter.clear();
+  flockSearch = '';
+  renderFlock();
+}
+
+function _getFlockSetById(id) {
+  if (id === 'status') return flockFilter;
+  if (id === 'type') return flockTypeFilter;
+  if (id === 'role') return flockRoleFilter;
+  if (id === 'sex') return flockSexFilter;
+  if (id === 'genetic') return flockGeneticFilter;
+  return null;
+}
+
+// Close any open multi-select when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.flock-ms-wrap')) {
+    document.querySelectorAll('.flock-ms-panel').forEach(p => { p.style.display = 'none'; });
+  }
+});
+
 function renderFlock() {
-  const statuses = ['Active','Sold','Deceased','All'];
-  const flockTypes = ['All','Show','Breeding','Both'];
-  const roles = ['All Roles','Embryo Donor','Embryo Recipient','Standard'];
-  const sexes = ['All','Ewe','Wether','Ram'];
+  // Register flock filters with the generic multi-select system
+  registerMultiSelect('status', flockFilter, renderFlock);
+  registerMultiSelect('type', flockTypeFilter, renderFlock);
+  registerMultiSelect('role', flockRoleFilter, renderFlock);
+  registerMultiSelect('sex', flockSexFilter, renderFlock);
+  registerMultiSelect('genetic', flockGeneticFilter, renderFlock);
+  const statusOpts = [
+    {value:'Active', label:'Active'},
+    {value:'Sold', label:'Sold'},
+    {value:'Deceased', label:'Deceased'},
+  ];
+  const flockTypeOpts = [
+    {value:'Show', label:'Show Flock'},
+    {value:'Breeding', label:'Breeding Flock'},
+    {value:'Both', label:'Both'},
+  ];
+  const roleOpts = [
+    {value:'Standard', label:'Standard'},
+    {value:'Embryo Donor', label:'Donors'},
+    {value:'Embryo Recipient', label:'Recipients'},
+    {value:'Both', label:'Donor + Recipient'},
+  ];
+  const sexOpts = [
+    {value:'Ewe', label:'Ewes'},
+    {value:'Wether', label:'Wethers'},
+    {value:'Ram', label:'Rams'},
+  ];
+  // Build genetic code options from actual data
+  const geneticCodes = [...new Set(allLambs.map(l => l.genetic_code).filter(c => c && c.trim()))].sort();
+  const geneticOpts = geneticCodes.map(c => ({value: c, label: c}));
+
   const filtered = allLambs.filter(l => {
     const flockType = l.flock_type || (l.sex === 'Wether' ? 'Show' : 'Breeding');
-    const matchStatus = flockFilter === 'All' || l.status === flockFilter;
-    const matchType = flockTypeFilter === 'All' || flockType === flockTypeFilter || flockType === 'Both';
-    const matchRole = flockRoleFilter === 'All Roles' || l.role === flockRoleFilter || (flockRoleFilter === 'Embryo Donor' && l.role === 'Both') || (flockRoleFilter === 'Embryo Recipient' && l.role === 'Both');
-    const matchSex = flockSexFilter === 'All' || l.sex === flockSexFilter;
-    const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.alt_id||'').toLowerCase().includes(flockSearch.toLowerCase());
-    return matchStatus && matchType && matchRole && matchSex && matchSearch;
+    // Empty set = no filter (show all). Otherwise the value must be in the set.
+    const matchStatus = flockFilter.size === 0 || flockFilter.has(l.status||'Active');
+    const matchType = flockTypeFilter.size === 0 || flockTypeFilter.has(flockType) || flockType === 'Both';
+    // For role: "Both" lambs are also donors and recipients
+    let matchRole = flockRoleFilter.size === 0;
+    if (!matchRole) {
+      const role = l.role || 'Standard';
+      if (flockRoleFilter.has(role)) matchRole = true;
+      else if (role === 'Both' && (flockRoleFilter.has('Embryo Donor') || flockRoleFilter.has('Embryo Recipient'))) matchRole = true;
+    }
+    const matchSex = flockSexFilter.size === 0 || flockSexFilter.has(l.sex);
+    const matchGenetic = flockGeneticFilter.size === 0 || flockGeneticFilter.has(l.genetic_code);
+    const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.alt_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.genetic_code||'').toLowerCase().includes(flockSearch.toLowerCase());
+    return matchStatus && matchType && matchRole && matchSex && matchGenetic && matchSearch;
   });
+
+  // Count of active filters (excluding search) for the "clear filters" indicator
+  const activeFilterCount = flockFilter.size + flockTypeFilter.size + flockRoleFilter.size + flockSexFilter.size + flockGeneticFilter.size;
 
   const viewToggle = `
     <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
@@ -559,20 +736,14 @@ function renderFlock() {
 
   let html = `
     <div class="search-bar">
-      <input placeholder="Search name, tag, scrapie ID…" value="${flockSearch}" oninput="flockSearch=this.value;renderFlock()" style="flex:1;min-width:160px">
+      <input id="flock-search-input" placeholder="Search name, tag, scrapie ID, genetic code…" value="${flockSearch}" oninput="flockSearchInput(this.value)" style="flex:1;min-width:160px">
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
-        <select onchange="flockFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
-          ${statuses.map(s=>`<option value="${s}" ${flockFilter===s?'selected':''}>${s}</option>`).join('')}
-        </select>
-        <select onchange="flockTypeFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
-          ${flockTypes.map(t=>`<option value="${t}" ${flockTypeFilter===t?'selected':''}>${t==='All'?'All Flocks':t+' Flock'}</option>`).join('')}
-        </select>
-        <select onchange="flockRoleFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
-          ${roles.map(r=>`<option value="${r}" ${flockRoleFilter===r?'selected':''}>${r==='All Roles'?'All Roles':r==='Embryo Donor'?'Donors':r==='Embryo Recipient'?'Recipients':'Standard'}</option>`).join('')}
-        </select>
-        <select onchange="flockSexFilter=this.value;renderFlock()" style="font-size:0.82rem;padding:0.35rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:auto">
-          ${sexes.map(s=>`<option value="${s}" ${flockSexFilter===s?'selected':''}>${s==='All'?'All Sexes':s+'s'}</option>`).join('')}
-        </select>
+        ${flockMultiSelectHtml('status', 'Status', 'All Statuses', flockFilter, statusOpts)}
+        ${flockMultiSelectHtml('type', 'Flock', 'All Flocks', flockTypeFilter, flockTypeOpts)}
+        ${flockMultiSelectHtml('role', 'Role', 'All Roles', flockRoleFilter, roleOpts)}
+        ${flockMultiSelectHtml('sex', 'Sex', 'All Sexes', flockSexFilter, sexOpts)}
+        ${geneticOpts.length > 0 ? flockMultiSelectHtml('genetic', 'Genetic', 'All Codes', flockGeneticFilter, geneticOpts) : ''}
+        ${(activeFilterCount > 0 || flockSearch) ? `<button type="button" onclick="clearAllFlockFilters()" style="font-size:0.78rem;padding:0.35rem 0.7rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:500" title="Clear all filters and search">✕ Clear All</button>` : ''}
         ${viewToggle}
       </div>
     </div>
@@ -582,8 +753,6 @@ function renderFlock() {
         <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">${filtered.length}</span>
         <span style="font-size:0.75rem;color:var(--text3);font-weight:500">${filtered.length === 1 ? 'animal' : 'animals'}</span>
       </div>
-      ${flockTypeFilter !== 'All' ? `<span style="font-size:0.78rem;color:var(--text3)">${flockTypeFilter} Flock</span>` : ''}
-      ${flockFilter !== 'All' ? `<span style="font-size:0.78rem;color:var(--text3)">${flockFilter}</span>` : ''}
       ${flockSearch ? `<span style="font-size:0.78rem;color:var(--text3)">matching "${flockSearch}"</span>` : ''}
     </div>`;
 
@@ -599,6 +768,7 @@ function renderFlock() {
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.ear_tag?'#'+lamb.ear_tag:'—'}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.alt_id||'—'}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.scrapie_id||'—'}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.genetic_code?`<span style="color:var(--accent);font-weight:600">${lamb.genetic_code}</span>`:'—'}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.sex||'—'}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.breed||'—'}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.dob||'—'}</td>
@@ -614,6 +784,7 @@ function renderFlock() {
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Ear Tag</th>
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Alt ID</th>
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Scrapie ID</th>
+          <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Genetic Code</th>
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Sex</th>
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">Breed</th>
           <th style="padding:0.55rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3)">DOB</th>
@@ -642,12 +813,15 @@ function renderFlock() {
               ${lamb.role!=='Standard'?`<span class="badge badge-yellow" style="font-size:0.62rem">${lamb.role==='Embryo Donor'?'Donor':lamb.role==='Embryo Recipient'?'Recip':'Both'}</span>`:''}
             </div>
             <div style="font-size:0.75rem;color:var(--text3);margin-top:0.35rem">${lamb.sex||''}${lamb.breed?' · '+lamb.breed:''}${lamb.dob?' · '+calcAge(lamb.dob):''}</div>
+            ${lamb.genetic_code?`<div style="font-size:0.72rem;color:var(--accent);font-weight:600;margin-top:0.2rem">🧬 ${lamb.genetic_code}</div>`:''}
           </div>
         </div>`;
     });
     html += `</div>`;
   }
+  const _focusState = _captureSearchFocus('flock-search-input');
   document.getElementById('main-content').innerHTML = html;
+  _restoreSearchFocus('flock-search-input', _focusState);
 }
 
 function calcAge(dob) {
@@ -1348,8 +1522,52 @@ function getSireDisplay(sire_id, ai_sire_id, sire_text) {
 }
 
 let aiRamsViewMode = localStorage.getItem('airams_view_mode') || 'card';
+let aiRamSearch = '';
+let aiRamBreedFilter = new Set();
+let aiRamGeneticFilter = new Set();
+let aiRamInventoryFilter = new Set();
 
 function renderAiRams() {
+  // Register AI ram filters with the generic multi-select system
+  registerMultiSelect('ar-breed', aiRamBreedFilter, renderAiRams);
+  registerMultiSelect('ar-genetic', aiRamGeneticFilter, renderAiRams);
+  registerMultiSelect('ar-inv', aiRamInventoryFilter, renderAiRams);
+
+  // Build filter option lists from data
+  const breeds = [...new Set(allAiRams.map(r => r.breed).filter(b => b && b.trim()))].sort();
+  const breedOpts = breeds.map(b => ({value: b, label: b}));
+  const geneticCodes = [...new Set(allAiRams.map(r => r.genetic_code).filter(c => c && c.trim()))].sort();
+  const geneticOpts = geneticCodes.map(c => ({value: c, label: c}));
+  const inventoryOpts = [
+    {value: 'has', label: '🧪 Has straws'},
+    {value: 'none', label: 'No inventory'},
+  ];
+
+  // Apply filters
+  const q = aiRamSearch.toLowerCase().trim();
+  const filtered = allAiRams.filter(ram => {
+    if (q) {
+      const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null;
+      const sireName = sire ? sire.name : ram.sire_name || '';
+      const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null;
+      const damName = dam ? dam.name : ram.dam_name || '';
+      const hay = [ram.name, ram.registration_no, ram.breed, ram.genetic_code, sireName, damName].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (aiRamBreedFilter.size > 0 && !aiRamBreedFilter.has(ram.breed)) return false;
+    if (aiRamGeneticFilter.size > 0 && !aiRamGeneticFilter.has(ram.genetic_code)) return false;
+    if (aiRamInventoryFilter.size > 0) {
+      const totalStraws = allSemenInventory.filter(i => i.ai_ram_id === ram.id).reduce((s,i) => s+(i.straws||0), 0);
+      const hasInv = totalStraws > 0;
+      const matchesHas = aiRamInventoryFilter.has('has') && hasInv;
+      const matchesNone = aiRamInventoryFilter.has('none') && !hasInv;
+      if (!matchesHas && !matchesNone) return false;
+    }
+    return true;
+  });
+
+  const activeFilterCount = aiRamBreedFilter.size + aiRamGeneticFilter.size + aiRamInventoryFilter.size;
+
   const viewToggle = `
     <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
       <button onclick="aiRamsViewMode='card';localStorage.setItem('airams_view_mode','card');renderAiRams()" title="Card view" style="padding:0.35rem 0.6rem;background:${aiRamsViewMode==='card'?'var(--accent)':'var(--surface2)'};color:${aiRamsViewMode==='card'?'#fff':'var(--text3)'};border:none;cursor:pointer;font-size:0.85rem">⊞</button>
@@ -1360,15 +1578,33 @@ function renderAiRams() {
     <div class="section-header"><button class="btn btn-primary btn-sm" onclick="openAddAiRam()">+ Add AI Ram</button>
       <div class="section-title" style="font-size:1.15rem">AI Rams</div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-        ${viewToggle}
         <button class="btn btn-secondary btn-sm" onclick="openSemenInventory()">🧪 Inventory</button>
         <button class="btn btn-secondary btn-sm" onclick="openAddInventoryPicker()">+ Add Inventory</button></div>
+    </div>
+    <div class="search-bar">
+      <input id="airam-search-input" placeholder="Search name, registration, breed, genetic code, sire, dam…" value="${aiRamSearch.replace(/"/g,'&quot;')}" oninput="airamSearchInput(this.value)" style="flex:1;min-width:160px">
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+        ${breedOpts.length > 0 ? multiSelectHtml('ar-breed', 'Breed', 'All Breeds', aiRamBreedFilter, breedOpts) : ''}
+        ${geneticOpts.length > 0 ? multiSelectHtml('ar-genetic', 'Genetic', 'All Codes', aiRamGeneticFilter, geneticOpts) : ''}
+        ${multiSelectHtml('ar-inv', 'Inventory', 'All Inventory', aiRamInventoryFilter, inventoryOpts)}
+        ${(activeFilterCount > 0 || aiRamSearch) ? `<button type="button" onclick="clearAllAiRamFilters()" style="font-size:0.78rem;padding:0.35rem 0.7rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:500" title="Clear all filters and search">✕ Clear All</button>` : ''}
+        ${viewToggle}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.9rem;display:flex;align-items:center;gap:0.5rem">
+        <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">${filtered.length}</span>
+        <span style="font-size:0.75rem;color:var(--text3);font-weight:500">${filtered.length === 1 ? 'AI ram' : 'AI rams'}</span>
+      </div>
+      ${aiRamSearch ? `<span style="font-size:0.78rem;color:var(--text3)">matching "${aiRamSearch}"</span>` : ''}
     </div>`;
 
   if (allAiRams.length === 0) {
     html += `<div class="empty"><div class="empty-icon">🐏</div><h3>No AI rams yet</h3><p>Add AI rams to use them in breeding and embryo records</p></div>`;
+  } else if (filtered.length === 0) {
+    html += `<div class="empty"><div class="empty-icon">🔍</div><h3>No AI rams match</h3><p>Try a different search or clear filters</p></div>`;
   } else if (aiRamsViewMode === 'table') {
-    const rows = allAiRams.map(ram => {
+    const rows = filtered.map(ram => {
       const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
       const totalStraws = inv.reduce((s,i) => s+(i.straws||0), 0);
       const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null;
@@ -1410,7 +1646,7 @@ function renderAiRams() {
     </div></div>`;
   } else {
     html += `<div class="flock-grid">`;
-    allAiRams.forEach(ram => {
+    filtered.forEach(ram => {
       const inv = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
       const totalStraws = inv.reduce((s, i) => s + (i.straws || 0), 0);
       const invBadge = totalStraws > 0
@@ -1441,7 +1677,9 @@ function renderAiRams() {
     });
     html += `</div>`;
   }
+  const _focusState = _captureSearchFocus('airam-search-input');
   document.getElementById('main-content').innerHTML = html;
+  _restoreSearchFocus('airam-search-input', _focusState);
 }
 
 function confirmDeleteAiRam(id) {
@@ -8302,6 +8540,7 @@ function renderPlanningHTML() {
               <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`:''}
               <button class="btn-icon btn-sm" onclick="printPlan('${g.id}')" title="Print / Export">🖨️</button>
               <button class="btn-icon btn-sm" onclick="printMaterialsReport('${g.id}')" title="Materials Needed">📦</button>
+              <button class="btn-icon btn-sm" onclick="duplicateGroupPlan('${g.id}')" title="Duplicate Plan">⧉</button>
               <button class="btn-icon btn-sm" onclick="openEditGroupPage('${g.id}')" title="Edit">✏️</button>
               <button class="btn-icon btn-sm" onclick="openManageGroupMembers('${g.id}')" title="Members">👥</button>
               <button class="btn-icon btn-sm" onclick="deleteGroupPage('${g.id}')" style="color:var(--danger)" title="Delete">🗑</button>
@@ -9540,6 +9779,13 @@ async function saveDuplicateProtocol(sourceId) {
       day_offset: s.day_offset,
       time_of_day: s.time_of_day,
       step_time: s.step_time,
+      product: s.product || null,
+      qty_per_head: s.qty_per_head || null,
+      unit: s.unit || null,
+      product2: s.product2 || null,
+      qty_per_head2: s.qty_per_head2 || null,
+      unit2: s.unit2 || null,
+      notes: s.notes || null,
       sort_order: i,
     }));
     await db.from('protocol_steps').insert(newSteps);
@@ -9551,6 +9797,95 @@ async function saveDuplicateProtocol(sourceId) {
   closeModal();
   // Open edit so they can immediately adjust
   await openEditProtocol(newProt.id);
+}
+
+async function duplicateGroupPlan(id) {
+  const group = (window._planGroups||[]).find(g => g.id === id);
+  if (!group) return;
+  const members = (window._planMembers||[]).filter(m => m.group_id === id);
+  const donorCount = members.filter(m => (m.role||'donor') === 'donor').length;
+  const recipCount = members.filter(m => m.role === 'recip').length;
+  const protName = (window._planProtocols||[]).find(p => p.id === group.protocol_id)?.name || '';
+  const recipProtName = (window._planProtocols||[]).find(p => p.id === group.recip_protocol_id)?.name || '';
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">⧉ Duplicate Breeding Plan</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>New Plan Name *</label><input id="dgp-name" value="Copy of ${group.name}" style="font-weight:600"></div>
+    <div class="row">
+      <div class="field"><label>Type</label>
+        <select id="dgp-type" disabled style="opacity:0.7">
+          <option value="flush" ${group.type==='flush'?'selected':''}>🔬 Flush</option>
+          <option value="breeding" ${group.type==='breeding'?'selected':''}>🐏 Breeding</option>
+        </select>
+      </div>
+      <div class="field"><label>Target Date</label><input type="date" id="dgp-date" value="${group.target_date||''}"></div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.6rem 0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text2)">
+      <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">Will copy:</div>
+      <div>• Donor protocol: <strong>${protName || '(none)'}</strong></div>
+      ${group.type==='flush'?`<div>• Recipient protocol: <strong>${recipProtName || '(none)'}</strong></div>`:''}
+      <div>• Notes</div>
+    </div>
+    <div class="field" style="margin-top:0.5rem">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+        <input type="checkbox" id="dgp-copy-members" ${(donorCount+recipCount)>0?'checked':''} style="accent-color:var(--accent);width:14px;height:14px">
+        <span>Copy ${donorCount} donor${donorCount!==1?'s':''}${group.type==='flush'?' and '+recipCount+' recipient'+(recipCount!==1?'s':''):''}</span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDuplicateGroupPlan('${id}')">Save Copy</button>
+    </div>`);
+
+  setTimeout(() => {
+    const inp = document.getElementById('dgp-name');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 100);
+}
+
+async function saveDuplicateGroupPlan(sourceId) {
+  const name = document.getElementById('dgp-name')?.value?.trim();
+  if (!name) { toast('Name required'); return; }
+  const target_date = document.getElementById('dgp-date')?.value || null;
+  const copyMembers = document.getElementById('dgp-copy-members')?.checked;
+
+  const source = (window._planGroups||[]).find(g => g.id === sourceId);
+  if (!source) { toast('Source plan not found'); return; }
+
+  const { data: newGroup, error: gErr } = await db.from('breeding_groups').insert({
+    name,
+    type: source.type,
+    target_date,
+    protocol_id: source.protocol_id || null,
+    recip_protocol_id: source.recip_protocol_id || null,
+    notes: source.notes || null,
+    status: 'Planned',
+  }).select().single();
+  if (gErr || !newGroup?.id) { toast('Save failed: ' + (gErr?.message||'unknown')); return; }
+
+  let memberCount = 0;
+  if (copyMembers) {
+    const sourceMembers = (window._planMembers||[]).filter(m => m.group_id === sourceId);
+    if (sourceMembers.length > 0) {
+      const newMembers = sourceMembers.map(m => ({
+        group_id: newGroup.id,
+        lamb_id: m.lamb_id || null,
+        sire_id: m.sire_id || null,
+        ai_sire_id: m.ai_sire_id || null,
+        sire_text: m.sire_text || null,
+        recip_text: m.recip_text || null,
+        role: m.role || 'donor',
+      }));
+      const { error: mErr } = await db.from('breeding_group_members').insert(newMembers);
+      if (mErr) { toast('Plan copied but members failed: ' + (mErr.message||'unknown')); }
+      else { memberCount = newMembers.length; }
+    }
+  }
+
+  if (window._planGroups) window._planGroups.push(newGroup);
+  toast(`Plan "${name}" created${memberCount?' with '+memberCount+' member'+(memberCount!==1?'s':''):''}`);
+  closeModal();
+  await renderPlanning();
 }
 
 async function deleteProtocol(id) {
