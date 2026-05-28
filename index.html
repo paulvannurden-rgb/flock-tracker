@@ -9394,15 +9394,15 @@ async function openEditGroupPage(id) {
     <div class="modal-header"><div class="modal-title">✏️ Edit: ${g.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="row">
       <div class="field"><label>Name</label><input id="eg-name" value="${g.name}"></div>
-      <div class="field"><label>Type</label><select id="eg-type"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="ivf" ${g.type==='ivf'?'selected':''}>🧬 IVF</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
+      <div class="field"><label>Type</label><select id="eg-type" onchange="egToggleRecipField()"><option value="flush" ${g.type==='flush'?'selected':''}>🔬 Flush</option><option value="ivf" ${g.type==='ivf'?'selected':''}>🧬 IVF</option><option value="breeding" ${g.type==='breeding'?'selected':''}>🐏 Breeding</option></select></div>
     </div>
     <div class="row">
       <div class="field"><label>Target Date</label><input type="date" id="eg-date" value="${g.target_date||''}" onchange="previewEditGroupSchedule()"></div>
       <div class="field"><label>Status</label><select id="eg-status">${statuses.map(s=>`<option value="${s}" ${g.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div>
-    <div class="field"><label>Donor Protocol</label><select id="eg-protocol" onchange="previewEditGroupSchedule()">${protOpts}</select></div>
-    ${g.type==='flush'?`<div class="field"><label>Recip Protocol</label><select id="eg-recip-protocol" onchange="previewEditGroupSchedule()">${recipProtOpts}</select></div>`:''}
-    <div id="eg-schedule-preview">${buildPreview(g.target_date, g.protocol_id) + (g.type==='flush'&&g.recip_protocol_id ? buildPreview(g.target_date, g.recip_protocol_id, true) : '')}</div>
+    <div class="field"><label id="eg-protocol-label">${(g.type==='flush'||g.type==='ivf')?'Donor Protocol':'Protocol'}</label><select id="eg-protocol" onchange="previewEditGroupSchedule()">${protOpts}</select></div>
+    <div class="field" id="eg-recip-row" style="${(g.type==='flush'||g.type==='ivf')?'':'display:none'}"><label>Recip Protocol</label><select id="eg-recip-protocol" onchange="previewEditGroupSchedule()">${recipProtOpts}</select></div>
+    <div id="eg-schedule-preview">${buildPreview(g.target_date, g.protocol_id) + ((g.type==='flush'||g.type==='ivf')&&g.recip_protocol_id ? buildPreview(g.target_date, g.recip_protocol_id, true) : '')}</div>
     <div class="field"><label>Notes</label><textarea id="eg-notes" rows="2">${g.notes||''}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -9410,13 +9410,25 @@ async function openEditGroupPage(id) {
     </div>`);
 }
 
+function egToggleRecipField() {
+  const type = document.getElementById('eg-type')?.value;
+  const isFlushLike = (type === 'flush' || type === 'ivf');
+  const row = document.getElementById('eg-recip-row');
+  if (row) row.style.display = isFlushLike ? '' : 'none';
+  const lbl = document.getElementById('eg-protocol-label');
+  if (lbl) lbl.textContent = isFlushLike ? 'Donor Protocol' : 'Protocol';
+  previewEditGroupSchedule();
+}
+
 async function saveEditGroupPage(id) {
   const name = document.getElementById('eg-name')?.value?.trim();
   if (!name) { toast('Name required'); return; }
+  const type = document.getElementById('eg-type')?.value;
+  const isFlushLike = (type === 'flush' || type === 'ivf');
   const protocol_id = document.getElementById('eg-protocol')?.value || null;
-  const recip_protocol_id = document.getElementById('eg-recip-protocol')?.value || null;
+  const recip_protocol_id = isFlushLike ? (document.getElementById('eg-recip-protocol')?.value || null) : null;
   await db.from('breeding_groups').update({
-    name, type: document.getElementById('eg-type')?.value,
+    name, type,
     target_date: document.getElementById('eg-date')?.value || null,
     status: document.getElementById('eg-status')?.value,
     protocol_id: protocol_id||null,
@@ -9425,7 +9437,7 @@ async function saveEditGroupPage(id) {
   }).eq('id', id);
   // Update cache so renderPlanningHTML reflects immediately
   window._planGroups = (window._planGroups||[]).map(g => g.id === id ? {
-    ...g, name, type: document.getElementById('eg-type')?.value,
+    ...g, name, type,
     target_date: document.getElementById('eg-date')?.value||null,
     status: document.getElementById('eg-status')?.value,
     protocol_id: protocol_id||null,
@@ -9698,7 +9710,9 @@ async function previewGroupSchedule() {
 async function previewEditGroupSchedule() {
   const targetDate = document.getElementById('eg-date')?.value;
   const protocolId = document.getElementById('eg-protocol')?.value;
-  const recipProtocolId = document.getElementById('eg-recip-protocol')?.value;
+  const type = document.getElementById('eg-type')?.value;
+  const isFlushLike = (type === 'flush' || type === 'ivf');
+  const recipProtocolId = isFlushLike ? document.getElementById('eg-recip-protocol')?.value : null;
   const preview = document.getElementById('eg-schedule-preview');
   if (!preview) return;
   if (!targetDate || (!protocolId && !recipProtocolId)) { preview.innerHTML = ''; return; }
@@ -10171,20 +10185,27 @@ function switchGmTab(tab) {
 
 async function addGroupMember(groupId, role) {
   role = role || 'donor';
+  let inserted = null;
   if (role === 'recip') {
     const lambId = document.getElementById('gm-recip-lamb')?.value || null;
     const recipText = document.getElementById('gm-recip-text')?.value?.trim() || null;
     if (!lambId && !recipText) { toast('Select a recipient or enter a name'); return; }
-    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId||null, recip_text: recipText||null, role: 'recip' });
+    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId||null, recip_text: recipText||null, role: 'recip' }).select().single();
+    if (error) { toast('Failed: ' + (error.message||'unknown')); return; }
+    inserted = data;
     toast('Recipient added');
   } else {
     const lambId = document.getElementById('gm-lamb')?.value;
     if (!lambId) { toast('Select a female'); return; }
     const { sire_id, ai_sire_id } = parseSireSelection(document.getElementById('gm-sire')?.value || '');
     const sireText = document.getElementById('gm-sire-text')?.value?.trim() || null;
-    await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, role: 'donor' });
+    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, role: 'donor' }).select().single();
+    if (error) { toast('Failed: ' + (error.message||'unknown')); return; }
+    inserted = data;
     toast('Donor added');
   }
+  // Keep the in-memory cache in sync so the Materials Report recalculates correctly
+  if (inserted && window._planMembers) window._planMembers.push(inserted);
   if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, role==='recip'?'recips':'donors'); }
   else openManageGroupMembers(groupId, role==='recip'?'recips':'donors');
 }
@@ -10238,6 +10259,7 @@ async function saveEditMemberSire(memberId, groupId) {
 
 async function removeGroupMember(memberId, groupId, activeTab) {
   await db.from('breeding_group_members').delete().eq('id', memberId);
+  if (window._planMembers) window._planMembers = window._planMembers.filter(m => m.id !== memberId);
   toast('Removed');
   if (currentPage === 'planning') { await renderPlanning(); openManageGroupMembers(groupId, activeTab||'donors'); }
   else openManageGroupMembers(groupId, activeTab||'donors');
