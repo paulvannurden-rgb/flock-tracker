@@ -4607,24 +4607,56 @@ function clearSupplyFilters() {
   filterSupplyLog();
 }
 
-function _supplyModalHtml(title, saveFunc, vals) {
-  // Build item and supplier datalists from custom_products
+// Builds one product row's HTML. idx = unique row index, vals = prefill values (optional).
+function _supplyRowHtml(idx, vals) {
+  const v = (k) => vals?.[k] ?? '';
   const itemOpts = (window._supplyItems||[]).map(i=>`<option value="${i}">`).join('');
+  const unitOpts = getSupplyUnits().map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('');
+  return `<div class="sup-row" data-row-idx="${idx}" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:0.6rem;background:var(--surface2);position:relative">
+    <datalist id="sup-item-list-${idx}">${itemOpts}</datalist>
+    <div class="row">
+      <div class="field"><label>Item *</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <input class="sup-item" list="sup-item-list-${idx}" placeholder="e.g. Calf Manna" value="${v('item')}" style="flex:1" oninput="updateSupplyCostPerUnit(this)">
+          <button type="button" title="Save item to list" onclick="saveSupplyItem(this)" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem">💾</button>
+        </div>
+      </div>
+      <div class="field"><label>Category</label><select class="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option ${v('category')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Quantity</label><input type="number" class="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="supCostChanged(this,'qty')"></div>
+      <div class="field"><label>Unit</label>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <select class="sup-unit" onchange="updateSupplyCostPerUnit(this)" style="flex:1">${unitOpts}<option value="__custom__">+ Add unit...</option></select>
+        </div>
+        <input class="sup-unit-custom" placeholder="Custom unit name" style="display:none;margin-top:0.3rem;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input type="number" class="sup-lbs-per-unit" step="0.01" min="0" value="${v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit(this)"></div>
+      <div class="field"><label>Cost per Lb</label>
+        <div class="sup-cost-per-lb" style="padding:0.55rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:#1d4ed8;min-height:38px">—</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Total Cost ($)</label><input type="number" class="sup-cost" step="0.01" min="0" value="${v('cost')||''}" placeholder="0.00" oninput="supCostChanged(this,'total')"></div>
+      <div class="field"><label>Cost per Unit ($)</label><input type="number" class="sup-cpu" step="0.01" min="0" value="${v('cost')&&v('quantity')?(parseFloat(v('cost'))/parseFloat(v('quantity'))).toFixed(2):''}" placeholder="0.00" oninput="supCostChanged(this,'unit')"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Cost / Unit <span style="font-size:0.72rem;color:var(--text3)">(calculated)</span></label>
+        <div class="sup-cost-per-unit" style="padding:0.55rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:var(--accent);min-height:38px">—</div>
+      </div>
+    </div>
+    <button type="button" class="sup-row-remove" onclick="removeSupplyRow(this)" title="Remove this product" style="position:absolute;top:0.5rem;right:0.5rem;background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0.2rem 0.4rem">×</button>
+  </div>`;
+}
+
+function _supplyModalHtml(title, saveFunc, vals, multiMode) {
   const supplierOpts = (window._supplySuppliers||[]).map(s=>`<option value="${s}">`).join('');
   const v = (k) => vals?.[k] ?? '';
   return `
     <div class="modal-header"><div class="modal-title">${title}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <datalist id="sup-item-list">${itemOpts}</datalist>
     <datalist id="sup-supplier-list">${supplierOpts}</datalist>
-    <div class="row">
-      <div class="field"><label>Item *</label>
-        <div style="display:flex;gap:0.35rem;align-items:center">
-          <input id="sup-item" list="sup-item-list" placeholder="e.g. Calf Manna" value="${v('item')}" style="flex:1" oninput="updateSupplyCostPerUnit()">
-          <button type="button" title="Save item to list" onclick="saveSupplyItem()" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem">💾</button>
-        </div>
-      </div>
-      <div class="field"><label>Category</label><select id="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option ${v('category')===c?'selected':''}>${c}</option>`).join('')}</select></div>
-    </div>
     <div class="row">
       <div class="field"><label>Date *</label><input type="date" id="sup-date" value="${v('date')||new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Supplier</label>
@@ -4634,30 +4666,9 @@ function _supplyModalHtml(title, saveFunc, vals) {
         </div>
       </div>
     </div>
-    <div class="row">
-      <div class="field"><label>Quantity</label><input type="number" id="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="supCostChanged('qty')"></div>
-      <div class="field"><label>Unit</label>
-        <div style="display:flex;gap:0.35rem;align-items:center">
-          <select id="sup-unit" onchange="updateSupplyCostPerUnit()" style="flex:1">${getSupplyUnits().map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('')}<option value="__custom__">+ Add unit...</option></select>
-        </div>
-        <input id="sup-unit-custom" placeholder="Custom unit name" style="display:none;margin-top:0.3rem;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">
-      </div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional, for cost/lb calc)</span></label><input type="number" id="sup-lbs-per-unit" step="0.01" min="0" value="${v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit()"></div>
-      <div class="field"><label>Cost per Lb</label>
-        <div id="sup-cost-per-lb" style="padding:0.55rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:#1d4ed8;min-height:38px">—</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Total Cost ($)</label><input type="number" id="sup-cost" step="0.01" min="0" value="${v('cost')||''}" placeholder="0.00" oninput="supCostChanged('total')"></div>
-      <div class="field"><label>Cost per Unit ($)</label><input type="number" id="sup-cpu" step="0.01" min="0" value="${v('cost')&&v('quantity')?(parseFloat(v('cost'))/parseFloat(v('quantity'))).toFixed(2):''}" placeholder="0.00" oninput="supCostChanged('unit')"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Cost / Unit <span style="font-size:0.72rem;color:var(--text3)">(calculated)</span></label>
-        <div id="sup-cost-per-unit" style="padding:0.55rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:var(--accent);min-height:38px">—</div>
-      </div>
-    </div>
+    <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.75rem 0 0.4rem">Products${multiMode?' <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0">(one purchase can include multiple items)</span>':''}</div>
+    <div id="sup-rows">${_supplyRowHtml(0, vals)}</div>
+    ${multiMode ? `<button type="button" class="btn btn-secondary btn-sm" onclick="addSupplyRow()" style="margin-bottom:0.75rem">+ Add Another Product</button>` : ''}
     <div class="field"><label>Notes</label><textarea id="sup-notes" rows="2">${v('notes')||''}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -4665,10 +4676,31 @@ function _supplyModalHtml(title, saveFunc, vals) {
     </div>`;
 }
 
-function supCostChanged(source) {
-  const qty = parseFloat(document.getElementById('sup-qty')?.value) || 0;
-  const totalEl = document.getElementById('sup-cost');
-  const cpuEl = document.getElementById('sup-cpu');
+let _supplyRowCounter = 1;
+function addSupplyRow() {
+  const container = document.getElementById('sup-rows');
+  if (!container) return;
+  const idx = _supplyRowCounter++;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = _supplyRowHtml(idx, null);
+  const rowEl = wrapper.firstElementChild;
+  container.appendChild(rowEl);
+  const itemEl = rowEl.querySelector('.sup-item');
+  if (itemEl) mountAutocomplete(itemEl, window._supplyItems || []);
+}
+
+function removeSupplyRow(btn) {
+  const rows = document.querySelectorAll('#sup-rows .sup-row');
+  if (rows.length <= 1) { toast('At least one product is required'); return; }
+  btn.closest('.sup-row').remove();
+}
+
+function supCostChanged(el, source) {
+  const row = el.closest('.sup-row');
+  if (!row) return;
+  const qty = parseFloat(row.querySelector('.sup-qty')?.value) || 0;
+  const totalEl = row.querySelector('.sup-cost');
+  const cpuEl = row.querySelector('.sup-cpu');
   const cpu = parseFloat(cpuEl?.value) || 0;
   const total = parseFloat(totalEl?.value) || 0;
 
@@ -4683,64 +4715,74 @@ function supCostChanged(source) {
     if (cpu > 0 && totalEl && qty > 0) totalEl.value = (cpu * qty).toFixed(2);
     else if (total > 0 && cpuEl && qty > 0 && !cpuEl.matches(':focus')) cpuEl.value = (total / qty).toFixed(2);
   }
-  updateSupplyCostPerUnit();
+  updateSupplyCostPerUnit(el);
 }
 
-function updateSupplyCostPerUnit() {
-  const cost = parseFloat(document.getElementById('sup-cost')?.value) || 0;
-  const qty = parseFloat(document.getElementById('sup-qty')?.value) || 0;
-  const unitSel = document.getElementById('sup-unit');
-  const unit = unitSel?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value || 'unit') : (unitSel?.value || 'unit');
-  const lbsPerUnit = parseFloat(document.getElementById('sup-lbs-per-unit')?.value) || 0;
-  const cpuEl = document.getElementById('sup-cost-per-unit');
-  const cplEl = document.getElementById('sup-cost-per-lb');
+function updateSupplyCostPerUnit(el) {
+  const row = el.closest('.sup-row');
+  if (!row) return;
+  const cost = parseFloat(row.querySelector('.sup-cost')?.value) || 0;
+  const qty = parseFloat(row.querySelector('.sup-qty')?.value) || 0;
+  const unitSel = row.querySelector('.sup-unit');
+  const unitCustomEl = row.querySelector('.sup-unit-custom');
+  const unit = unitSel?.value === '__custom__' ? (unitCustomEl?.value || 'unit') : (unitSel?.value || 'unit');
+  const lbsPerUnit = parseFloat(row.querySelector('.sup-lbs-per-unit')?.value) || 0;
+  const cpuEl = row.querySelector('.sup-cost-per-unit');
+  const cplEl = row.querySelector('.sup-cost-per-lb');
   if (cpuEl) cpuEl.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
   if (cplEl) {
     const totalLbs = qty * lbsPerUnit;
     cplEl.textContent = cost > 0 && totalLbs > 0 ? `$${(cost/totalLbs).toFixed(3)} / lb` : '—';
   }
   // Also sync cpu input if qty changes
-  const cpuInput = document.getElementById('sup-cpu');
+  const cpuInput = row.querySelector('.sup-cpu');
   if (cpuInput && cost > 0 && qty > 0 && !cpuInput.matches(':focus')) {
     cpuInput.value = (cost/qty).toFixed(2);
   }
   // Show/hide custom unit input
-  const customInput = document.getElementById('sup-unit-custom');
-  if (customInput) customInput.style.display = unitSel?.value === '__custom__' ? '' : 'none';
+  if (unitCustomEl) unitCustomEl.style.display = unitSel?.value === '__custom__' ? '' : 'none';
 }
 
-function saveCustomSupplyUnit() {
-  const val = document.getElementById('sup-unit-custom')?.value?.trim();
+function saveCustomSupplyUnit(el) {
+  const row = el.closest('.sup-row');
+  if (!row) return;
+  const customInput = row.querySelector('.sup-unit-custom');
+  const val = customInput?.value?.trim();
   if (!val) return;
   const existing = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
   if (!existing.includes(val)) {
     existing.push(val);
     localStorage.setItem('flock_supply_units', JSON.stringify(existing));
   }
-  // Switch select to new value
-  const sel = document.getElementById('sup-unit');
+  // Switch select to new value in this row
+  const sel = row.querySelector('.sup-unit');
   if (sel) {
     const opt = document.createElement('option');
     opt.value = val; opt.textContent = val; opt.selected = true;
     sel.insertBefore(opt, sel.lastChild);
     sel.value = val;
   }
-  document.getElementById('sup-unit-custom').style.display = 'none';
+  if (customInput) customInput.style.display = 'none';
   toast(`"${val}" added as unit`);
 }
 
-async function saveSupplyItem() {
-  const item = document.getElementById('sup-item')?.value?.trim();
+async function saveSupplyItem(btn) {
+  const row = btn.closest('.sup-row');
+  if (!row) return;
+  const itemEl = row.querySelector('.sup-item');
+  const item = itemEl?.value?.trim();
   if (!item) return;
   const existing = window._supplyItems || [];
   if (!existing.includes(item)) {
     await db.from('custom_products').insert({ name: item, type: 'supply_item' });
     window._supplyItems = [...existing, item];
-    // Refresh datalist
-    const dl = document.getElementById('sup-item-list');
-    if (dl) dl.innerHTML = window._supplyItems.map(i=>`<option value="${i}">`).join('');
-    const itemEl = document.getElementById('sup-item');
-    if (itemEl && itemEl._acSetOptions) itemEl._acSetOptions(window._supplyItems);
+    // Refresh datalist + autocomplete on every row (new item should appear everywhere)
+    document.querySelectorAll('#sup-rows .sup-row').forEach(r => {
+      const dl = r.querySelector('datalist[id^="sup-item-list-"]');
+      if (dl) dl.innerHTML = window._supplyItems.map(i=>`<option value="${i}">`).join('');
+      const rItemEl = r.querySelector('.sup-item');
+      if (rItemEl && rItemEl._acSetOptions) rItemEl._acSetOptions(window._supplyItems);
+    });
   }
   toast(`"${item}" saved to list`);
 }
@@ -4767,9 +4809,10 @@ async function openAddSupply() {
   ]);
   window._supplyItems = (items||[]).map(p=>p.name);
   window._supplySuppliers = (suppliers||[]).map(p=>p.name);
-  showModal(_supplyModalHtml('🌾 Log Purchase', 'saveSupply()'));
+  _supplyRowCounter = 1;
+  showModal(_supplyModalHtml('🌾 Log Purchase', 'saveSupply()', null, true));
   setTimeout(() => {
-    const itemEl = document.getElementById('sup-item');
+    const itemEl = document.querySelector('#sup-rows .sup-item');
     const supEl = document.getElementById('sup-supplier');
     if (itemEl) mountAutocomplete(itemEl, window._supplyItems);
     if (supEl) mountAutocomplete(supEl, window._supplySuppliers);
@@ -4777,24 +4820,38 @@ async function openAddSupply() {
 }
 
 async function saveSupply() {
-  const item = document.getElementById('sup-item')?.value?.trim();
   const date = document.getElementById('sup-date')?.value;
-  if (!item) { toast('Item required'); return; }
   if (!date) { toast('Date required'); return; }
-  // Resolve custom unit
-  const supUnitSel = document.getElementById('sup-unit');
-  const supUnit = supUnitSel?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value?.trim() || null) : (supUnitSel?.value || null);
-  if (supUnitSel?.value === '__custom__' && supUnit) saveCustomSupplyUnit();
-  await db.from('supply_log').insert({
-    item, category: document.getElementById('sup-cat')?.value||null,
-    date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
-    unit: supUnit,
-    lbs_per_unit: document.getElementById('sup-lbs-per-unit')?.value ? parseFloat(document.getElementById('sup-lbs-per-unit').value) : null,
-    cost: document.getElementById('sup-cost')?.value ? parseFloat(document.getElementById('sup-cost').value) : null,
-    supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
-    notes: document.getElementById('sup-notes')?.value?.trim()||null,
-  });
-  toast('Logged'); closeModal(); renderSupplies();
+  const supplier = document.getElementById('sup-supplier')?.value?.trim()||null;
+  const notes = document.getElementById('sup-notes')?.value?.trim()||null;
+
+  const rows = document.querySelectorAll('#sup-rows .sup-row');
+  const inserts = [];
+  for (const row of rows) {
+    const item = row.querySelector('.sup-item')?.value?.trim();
+    if (!item) continue; // skip blank rows silently
+    const unitSel = row.querySelector('.sup-unit');
+    const unit = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom')?.value?.trim() || null) : (unitSel?.value || null);
+    if (unitSel?.value === '__custom__' && unit) {
+      saveCustomSupplyUnit(row.querySelector('.sup-unit'));
+    }
+    inserts.push({
+      item,
+      category: row.querySelector('.sup-cat')?.value||null,
+      date,
+      quantity: row.querySelector('.sup-qty')?.value ? parseFloat(row.querySelector('.sup-qty').value) : null,
+      unit,
+      lbs_per_unit: row.querySelector('.sup-lbs-per-unit')?.value ? parseFloat(row.querySelector('.sup-lbs-per-unit').value) : null,
+      cost: row.querySelector('.sup-cost')?.value ? parseFloat(row.querySelector('.sup-cost').value) : null,
+      supplier, notes,
+    });
+  }
+  if (inserts.length === 0) { toast('At least one item required'); return; }
+
+  const { error } = await db.from('supply_log').insert(inserts);
+  if (error) { toast('Save failed: ' + (error.message||'unknown')); return; }
+  toast(inserts.length === 1 ? 'Logged' : `Logged ${inserts.length} items`);
+  closeModal(); renderSupplies();
 }
 
 async function openEditSupply(id) {
@@ -4806,29 +4863,33 @@ async function openEditSupply(id) {
   if (!log) return;
   window._supplyItems = (items||[]).map(p=>p.name);
   window._supplySuppliers = (suppliers||[]).map(p=>p.name);
-  showModal(_supplyModalHtml('✏️ Edit Purchase', `saveEditSupply('${id}')`, log));
+  _supplyRowCounter = 1;
+  // Editing always operates on a single existing log entry — multiMode off (no add-product button)
+  showModal(_supplyModalHtml('✏️ Edit Purchase', `saveEditSupply('${id}')`, log, false));
   setTimeout(() => {
-    updateSupplyCostPerUnit();
-    const itemEl = document.getElementById('sup-item');
+    const firstItemEl = document.querySelector('#sup-rows .sup-item');
+    if (firstItemEl) updateSupplyCostPerUnit(firstItemEl);
     const supEl = document.getElementById('sup-supplier');
-    if (itemEl) mountAutocomplete(itemEl, window._supplyItems);
+    if (firstItemEl) mountAutocomplete(firstItemEl, window._supplyItems);
     if (supEl) mountAutocomplete(supEl, window._supplySuppliers);
   }, 30);
 }
 
 async function saveEditSupply(id) {
-  const item = document.getElementById('sup-item')?.value?.trim();
+  const row = document.querySelector('#sup-rows .sup-row');
+  const item = row?.querySelector('.sup-item')?.value?.trim();
   const date = document.getElementById('sup-date')?.value;
   if (!item) { toast('Item required'); return; }
   if (!date) { toast('Date required'); return; }
-  const supUnitSel2 = document.getElementById('sup-unit');
-  const supUnit = supUnitSel2?.value === '__custom__' ? (document.getElementById('sup-unit-custom')?.value?.trim() || null) : (supUnitSel2?.value || null);
-  if (supUnitSel2?.value === '__custom__' && supUnit) saveCustomSupplyUnit();
+  const unitSel2 = row?.querySelector('.sup-unit');
+  const unit = unitSel2?.value === '__custom__' ? (row?.querySelector('.sup-unit-custom')?.value?.trim() || null) : (unitSel2?.value || null);
+  if (unitSel2?.value === '__custom__' && unit) saveCustomSupplyUnit(unitSel2);
   await db.from('supply_log').update({
-    item, category: document.getElementById('sup-cat')?.value||null,
-    date, quantity: document.getElementById('sup-qty')?.value ? parseFloat(document.getElementById('sup-qty').value) : null,
-    unit: document.getElementById('sup-unit')?.value||null,
-    cost: document.getElementById('sup-cost')?.value ? parseFloat(document.getElementById('sup-cost').value) : null,
+    item, category: row?.querySelector('.sup-cat')?.value||null,
+    date, quantity: row?.querySelector('.sup-qty')?.value ? parseFloat(row.querySelector('.sup-qty').value) : null,
+    unit,
+    lbs_per_unit: row?.querySelector('.sup-lbs-per-unit')?.value ? parseFloat(row.querySelector('.sup-lbs-per-unit').value) : null,
+    cost: row?.querySelector('.sup-cost')?.value ? parseFloat(row.querySelector('.sup-cost').value) : null,
     supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
     notes: document.getElementById('sup-notes')?.value?.trim()||null,
   }).eq('id', id);
