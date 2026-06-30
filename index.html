@@ -4456,10 +4456,37 @@ async function deleteCost(id, type) {
 
 // ── SUPPLIES PAGE ──────────────────────────────────────
 const SUPPLY_CATEGORIES = ['Feed', 'Hay', 'Bedding', 'Supplement', 'Other'];
-const SUPPLY_UNITS = ['bags', 'bales', 'lbs', 'tons', 'gallons', 'tubs', 'pails', 'units'];
+// Built-in units with sensible default measurement types.
+// type: 'weight' (lbs/unit), 'volume' (mL/unit), 'count' (no conversion), 'other' (custom label)
+const SUPPLY_UNITS_BASE = [
+  { name: 'bags', type: 'weight' },
+  { name: 'bales', type: 'weight' },
+  { name: 'lbs', type: 'weight' },
+  { name: 'tons', type: 'weight' },
+  { name: 'gallons', type: 'volume' },
+  { name: 'tubs', type: 'weight' },
+  { name: 'pails', type: 'weight' },
+  { name: 'units', type: 'count' },
+];
+const UNIT_TYPE_LABELS = { weight: 'Weight (lbs)', volume: 'Volume (mL)', count: 'Count', other: 'Other' };
+
 function getSupplyUnits() {
-  const custom = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
-  return [...SUPPLY_UNITS, ...custom.filter(u => !SUPPLY_UNITS.includes(u))];
+  // Returns array of { name, type, size } combining built-ins with any saved custom units.
+  const customRaw = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
+  // Migrate legacy format (plain string array) to object format
+  const custom = customRaw.map(u => typeof u === 'string' ? { name: u, type: 'other' } : u);
+  const builtins = SUPPLY_UNITS_BASE.filter(b => !custom.some(c => c.name === b.name));
+  return [...builtins, ...custom];
+}
+
+function getSupplyCategories() {
+  const custom = JSON.parse(localStorage.getItem('flock_supply_categories') || '[]');
+  return [...SUPPLY_CATEGORIES.filter(c => c !== 'Other'), ...custom.filter(c => !SUPPLY_CATEGORIES.includes(c)), 'Other'];
+}
+
+function getUnitType(unitName) {
+  const units = getSupplyUnits();
+  return units.find(u => u.name === unitName)?.type || 'other';
 }
 
 async function renderSupplies() {
@@ -4611,7 +4638,11 @@ function clearSupplyFilters() {
 function _supplyRowHtml(idx, vals) {
   const v = (k) => vals?.[k] ?? '';
   const itemOpts = (window._supplyItems||[]).map(i=>`<option value="${i}">`).join('');
-  const unitOpts = getSupplyUnits().map(u=>`<option ${v('unit')===u?'selected':''}>${u}</option>`).join('');
+  const units = getSupplyUnits();
+  const unitOpts = units.map(u=>`<option value="${u.name}" ${v('unit')===u.name?'selected':''}>${u.name}</option>`).join('');
+  const categories = getSupplyCategories();
+  const catOpts = categories.map(c=>`<option ${v('category')===c?'selected':''}>${c}</option>`).join('');
+  const currentUnitType = v('unit') ? getUnitType(v('unit')) : (units[0]?.type || 'weight');
   return `<div class="sup-row" data-row-idx="${idx}" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:0.6rem;background:var(--surface2);position:relative">
     <datalist id="sup-item-list-${idx}">${itemOpts}</datalist>
     <div class="row">
@@ -4621,20 +4652,36 @@ function _supplyRowHtml(idx, vals) {
           <button type="button" title="Save item to list" onclick="saveSupplyItem(this)" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;cursor:pointer;color:var(--accent);font-size:0.85rem">💾</button>
         </div>
       </div>
-      <div class="field"><label>Category</label><select class="sup-cat">${SUPPLY_CATEGORIES.map(c=>`<option ${v('category')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Category</label>
+        <select class="sup-cat" onchange="handleSupplyCatChange(this)" style="width:100%">${catOpts}<option value="__custom__">+ Add category...</option></select>
+        <div style="display:none;margin-top:0.3rem;display:flex;gap:0.35rem" class="sup-cat-custom-wrap">
+          <input class="sup-cat-custom" placeholder="Custom category name" style="flex:1;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <button type="button" onclick="saveCustomSupplyCategory(this)" style="background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.35rem 0.6rem;cursor:pointer;color:#fff;font-size:0.8rem;font-weight:600">Add</button>
+        </div>
+      </div>
     </div>
     <div class="row">
       <div class="field"><label>Quantity</label><input type="number" class="sup-qty" step="0.01" min="0" value="${v('quantity')||''}" placeholder="e.g. 10" oninput="supCostChanged(this,'qty')"></div>
       <div class="field"><label>Unit</label>
         <div style="display:flex;gap:0.35rem;align-items:center">
-          <select class="sup-unit" onchange="updateSupplyCostPerUnit(this)" style="flex:1">${unitOpts}<option value="__custom__">+ Add unit...</option></select>
+          <select class="sup-unit" onchange="handleSupplyUnitChange(this)" style="flex:1">${unitOpts}<option value="__custom__">+ Add unit...</option></select>
         </div>
-        <input class="sup-unit-custom" placeholder="Custom unit name" style="display:none;margin-top:0.3rem;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">
+        <div class="sup-unit-custom-wrap" style="display:none;margin-top:0.4rem;padding:0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <input class="sup-unit-custom" placeholder="e.g. bottle, syringe, jug" style="padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%;margin-bottom:0.4rem">
+          <label style="font-size:0.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:0.2rem">Measurement Type</label>
+          <select class="sup-unit-custom-type" style="width:100%;margin-bottom:0.4rem">
+            <option value="weight">⚖️ Weight (lbs per unit)</option>
+            <option value="volume">💧 Volume (mL per unit)</option>
+            <option value="count">🔢 Count (no conversion)</option>
+            <option value="other">📦 Other / custom</option>
+          </select>
+          <button type="button" onclick="saveCustomSupplyUnit(this)" style="width:100%;background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.4rem 0.6rem;cursor:pointer;color:#fff;font-size:0.8rem;font-weight:600">Add Unit</button>
+        </div>
       </div>
     </div>
-    <div class="row">
-      <div class="field"><label>Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input type="number" class="sup-lbs-per-unit" step="0.01" min="0" value="${v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit(this)"></div>
-      <div class="field"><label>Cost per Lb</label>
+    <div class="row sup-conversion-row">
+      <div class="field sup-conversion-field"><label class="sup-conversion-label">Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input type="number" class="sup-conversion-size" step="0.01" min="0" value="${v('unit_size')||v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit(this)"></div>
+      <div class="field sup-conversion-cost-field"><label class="sup-conversion-cost-label">Cost per Lb</label>
         <div class="sup-cost-per-lb" style="padding:0.55rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:#1d4ed8;min-height:38px">—</div>
       </div>
     </div>
@@ -4649,6 +4696,59 @@ function _supplyRowHtml(idx, vals) {
     </div>
     <button type="button" class="sup-row-remove" onclick="removeSupplyRow(this)" title="Remove this product" style="position:absolute;top:0.5rem;right:0.5rem;background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0.2rem 0.4rem">×</button>
   </div>`;
+}
+
+// Update the conversion field's label/visibility based on the row's current unit type
+function refreshSupplyConversionField(row) {
+  const unitSel = row.querySelector('.sup-unit');
+  const unitName = unitSel?.value === '__custom__' ? null : unitSel?.value;
+  const type = unitName ? getUnitType(unitName) : 'other';
+  const sizeInput = row.querySelector('.sup-conversion-size');
+  const sizeLabel = row.querySelector('.sup-conversion-label');
+  const costLabel = row.querySelector('.sup-conversion-cost-label');
+  const conversionRow = row.querySelector('.sup-conversion-row');
+  const costField = row.querySelector('.sup-conversion-cost-field');
+  const sizeField = row.querySelector('.sup-conversion-field');
+  row.dataset.unitType = type;
+  if (type === 'count') {
+    // No conversion needed for count-based units (e.g. "5 syringes")
+    if (conversionRow) conversionRow.style.display = 'none';
+    if (sizeInput) sizeInput.value = '';
+  } else if (type === 'weight') {
+    if (conversionRow) conversionRow.style.display = '';
+    if (sizeField) sizeField.style.display = '';
+    if (costField) costField.style.display = '';
+    if (sizeLabel) sizeLabel.innerHTML = 'Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
+    if (costLabel) costLabel.textContent = 'Cost per Lb';
+  } else if (type === 'volume') {
+    if (conversionRow) conversionRow.style.display = '';
+    if (sizeField) sizeField.style.display = '';
+    if (costField) costField.style.display = '';
+    if (sizeLabel) sizeLabel.innerHTML = 'mL per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
+    if (costLabel) costLabel.textContent = 'Cost per mL';
+  } else {
+    // 'other' — show a generic amount field but no labeled cost-per (we don't know the unit)
+    if (conversionRow) conversionRow.style.display = '';
+    if (sizeField) sizeField.style.display = '';
+    if (costField) costField.style.display = 'none';
+    if (sizeLabel) sizeLabel.innerHTML = 'Amount per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
+  }
+}
+
+function handleSupplyUnitChange(sel) {
+  const row = sel.closest('.sup-row');
+  if (!row) return;
+  const wrap = row.querySelector('.sup-unit-custom-wrap');
+  if (wrap) wrap.style.display = sel.value === '__custom__' ? '' : 'none';
+  if (sel.value !== '__custom__') refreshSupplyConversionField(row);
+  updateSupplyCostPerUnit(sel);
+}
+
+function handleSupplyCatChange(sel) {
+  const row = sel.closest('.sup-row');
+  if (!row) return;
+  const wrap = row.querySelector('.sup-cat-custom-wrap');
+  if (wrap) wrap.style.display = sel.value === '__custom__' ? '' : 'none';
 }
 
 function _supplyModalHtml(title, saveFunc, vals, multiMode) {
@@ -4687,6 +4787,7 @@ function addSupplyRow() {
   container.appendChild(rowEl);
   const itemEl = rowEl.querySelector('.sup-item');
   if (itemEl) mountAutocomplete(itemEl, window._supplyItems || []);
+  refreshSupplyConversionField(rowEl);
 }
 
 function removeSupplyRow(btn) {
@@ -4724,46 +4825,85 @@ function updateSupplyCostPerUnit(el) {
   const cost = parseFloat(row.querySelector('.sup-cost')?.value) || 0;
   const qty = parseFloat(row.querySelector('.sup-qty')?.value) || 0;
   const unitSel = row.querySelector('.sup-unit');
-  const unitCustomEl = row.querySelector('.sup-unit-custom');
-  const unit = unitSel?.value === '__custom__' ? (unitCustomEl?.value || 'unit') : (unitSel?.value || 'unit');
-  const lbsPerUnit = parseFloat(row.querySelector('.sup-lbs-per-unit')?.value) || 0;
+  const unitCustomWrap = row.querySelector('.sup-unit-custom-wrap');
+  const unit = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom')?.value || 'unit') : (unitSel?.value || 'unit');
+  const sizePerUnit = parseFloat(row.querySelector('.sup-conversion-size')?.value) || 0;
+  const type = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom-type')?.value || 'other') : getUnitType(unitSel?.value);
   const cpuEl = row.querySelector('.sup-cost-per-unit');
   const cplEl = row.querySelector('.sup-cost-per-lb');
   if (cpuEl) cpuEl.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
   if (cplEl) {
-    const totalLbs = qty * lbsPerUnit;
-    cplEl.textContent = cost > 0 && totalLbs > 0 ? `$${(cost/totalLbs).toFixed(3)} / lb` : '—';
+    const totalSize = qty * sizePerUnit;
+    if (type === 'weight') {
+      cplEl.textContent = cost > 0 && totalSize > 0 ? `$${(cost/totalSize).toFixed(3)} / lb` : '—';
+    } else if (type === 'volume') {
+      cplEl.textContent = cost > 0 && totalSize > 0 ? `$${(cost/totalSize).toFixed(3)} / mL` : '—';
+    } else {
+      cplEl.textContent = '—';
+    }
   }
   // Also sync cpu input if qty changes
   const cpuInput = row.querySelector('.sup-cpu');
   if (cpuInput && cost > 0 && qty > 0 && !cpuInput.matches(':focus')) {
     cpuInput.value = (cost/qty).toFixed(2);
   }
-  // Show/hide custom unit input
-  if (unitCustomEl) unitCustomEl.style.display = unitSel?.value === '__custom__' ? '' : 'none';
+  // Show/hide custom unit input wrapper
+  if (unitCustomWrap) unitCustomWrap.style.display = unitSel?.value === '__custom__' ? '' : 'none';
 }
 
 function saveCustomSupplyUnit(el) {
   const row = el.closest('.sup-row');
   if (!row) return;
   const customInput = row.querySelector('.sup-unit-custom');
+  const typeSel = row.querySelector('.sup-unit-custom-type');
   const val = customInput?.value?.trim();
   if (!val) return;
-  const existing = JSON.parse(localStorage.getItem('flock_supply_units') || '[]');
-  if (!existing.includes(val)) {
-    existing.push(val);
+  const type = typeSel?.value || 'other';
+  const existing = (JSON.parse(localStorage.getItem('flock_supply_units') || '[]')).map(u => typeof u === 'string' ? { name: u, type: 'other' } : u);
+  if (!existing.some(u => u.name === val)) {
+    existing.push({ name: val, type });
     localStorage.setItem('flock_supply_units', JSON.stringify(existing));
   }
-  // Switch select to new value in this row
+  // Switch select to new value in this row, and refresh every other row's unit dropdown too
+  document.querySelectorAll('#sup-rows .sup-row, #sup-rows').forEach(() => {});
+  document.querySelectorAll('#sup-rows .sup-unit').forEach(sel => {
+    if (!sel.querySelector(`option[value="${CSS.escape(val)}"]`)) {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = val;
+      sel.insertBefore(opt, sel.lastChild);
+    }
+  });
   const sel = row.querySelector('.sup-unit');
-  if (sel) {
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val; opt.selected = true;
-    sel.insertBefore(opt, sel.lastChild);
-    sel.value = val;
+  if (sel) sel.value = val;
+  const wrap = row.querySelector('.sup-unit-custom-wrap');
+  if (wrap) wrap.style.display = 'none';
+  refreshSupplyConversionField(row);
+  toast(`"${val}" added as a ${UNIT_TYPE_LABELS[type]||type} unit`);
+}
+
+function saveCustomSupplyCategory(el) {
+  const row = el.closest('.sup-row');
+  if (!row) return;
+  const customInput = row.querySelector('.sup-cat-custom');
+  const val = customInput?.value?.trim();
+  if (!val) return;
+  const existing = JSON.parse(localStorage.getItem('flock_supply_categories') || '[]');
+  if (!existing.includes(val)) {
+    existing.push(val);
+    localStorage.setItem('flock_supply_categories', JSON.stringify(existing));
   }
-  if (customInput) customInput.style.display = 'none';
-  toast(`"${val}" added as unit`);
+  document.querySelectorAll('#sup-rows .sup-cat').forEach(sel => {
+    if (!sel.querySelector(`option[value="${CSS.escape(val)}"]`)) {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = val;
+      sel.insertBefore(opt, sel.lastChild);
+    }
+  });
+  const sel = row.querySelector('.sup-cat');
+  if (sel) sel.value = val;
+  const wrap = row.querySelector('.sup-cat-custom-wrap');
+  if (wrap) wrap.style.display = 'none';
+  toast(`"${val}" added as a category`);
 }
 
 async function saveSupplyItem(btn) {
@@ -4816,6 +4956,7 @@ async function openAddSupply() {
     const supEl = document.getElementById('sup-supplier');
     if (itemEl) mountAutocomplete(itemEl, window._supplyItems);
     if (supEl) mountAutocomplete(supEl, window._supplySuppliers);
+    document.querySelectorAll('#sup-rows .sup-row').forEach(r => refreshSupplyConversionField(r));
   }, 30);
 }
 
@@ -4830,18 +4971,33 @@ async function saveSupply() {
   for (const row of rows) {
     const item = row.querySelector('.sup-item')?.value?.trim();
     if (!item) continue; // skip blank rows silently
+
+    // Resolve category (handle un-confirmed custom category)
+    const catSel = row.querySelector('.sup-cat');
+    let category = catSel?.value === '__custom__' ? (row.querySelector('.sup-cat-custom')?.value?.trim() || null) : (catSel?.value || null);
+    if (catSel?.value === '__custom__' && category) saveCustomSupplyCategory(row.querySelector('.sup-cat'));
+
+    // Resolve unit + its measurement type (handle un-confirmed custom unit)
     const unitSel = row.querySelector('.sup-unit');
-    const unit = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom')?.value?.trim() || null) : (unitSel?.value || null);
-    if (unitSel?.value === '__custom__' && unit) {
-      saveCustomSupplyUnit(row.querySelector('.sup-unit'));
+    let unit, unitType;
+    if (unitSel?.value === '__custom__') {
+      unit = row.querySelector('.sup-unit-custom')?.value?.trim() || null;
+      unitType = row.querySelector('.sup-unit-custom-type')?.value || 'other';
+      if (unit) saveCustomSupplyUnit(row.querySelector('.sup-unit'));
+    } else {
+      unit = unitSel?.value || null;
+      unitType = unit ? getUnitType(unit) : null;
     }
+
+    const sizePerUnit = row.querySelector('.sup-conversion-size')?.value ? parseFloat(row.querySelector('.sup-conversion-size').value) : null;
+
     inserts.push({
-      item,
-      category: row.querySelector('.sup-cat')?.value||null,
-      date,
+      item, category, date,
       quantity: row.querySelector('.sup-qty')?.value ? parseFloat(row.querySelector('.sup-qty').value) : null,
       unit,
-      lbs_per_unit: row.querySelector('.sup-lbs-per-unit')?.value ? parseFloat(row.querySelector('.sup-lbs-per-unit').value) : null,
+      unit_type: unitType,
+      unit_size: sizePerUnit,
+      lbs_per_unit: unitType === 'weight' ? sizePerUnit : null, // kept for backward compatibility with existing reports
       cost: row.querySelector('.sup-cost')?.value ? parseFloat(row.querySelector('.sup-cost').value) : null,
       supplier, notes,
     });
@@ -4868,6 +5024,8 @@ async function openEditSupply(id) {
   showModal(_supplyModalHtml('✏️ Edit Purchase', `saveEditSupply('${id}')`, log, false));
   setTimeout(() => {
     const firstItemEl = document.querySelector('#sup-rows .sup-item');
+    const firstRow = document.querySelector('#sup-rows .sup-row');
+    if (firstRow) refreshSupplyConversionField(firstRow);
     if (firstItemEl) updateSupplyCostPerUnit(firstItemEl);
     const supEl = document.getElementById('sup-supplier');
     if (firstItemEl) mountAutocomplete(firstItemEl, window._supplyItems);
@@ -4881,14 +5039,30 @@ async function saveEditSupply(id) {
   const date = document.getElementById('sup-date')?.value;
   if (!item) { toast('Item required'); return; }
   if (!date) { toast('Date required'); return; }
+
+  const catSel = row?.querySelector('.sup-cat');
+  let category = catSel?.value === '__custom__' ? (row?.querySelector('.sup-cat-custom')?.value?.trim() || null) : (catSel?.value || null);
+  if (catSel?.value === '__custom__' && category) saveCustomSupplyCategory(catSel);
+
   const unitSel2 = row?.querySelector('.sup-unit');
-  const unit = unitSel2?.value === '__custom__' ? (row?.querySelector('.sup-unit-custom')?.value?.trim() || null) : (unitSel2?.value || null);
-  if (unitSel2?.value === '__custom__' && unit) saveCustomSupplyUnit(unitSel2);
+  let unit, unitType;
+  if (unitSel2?.value === '__custom__') {
+    unit = row?.querySelector('.sup-unit-custom')?.value?.trim() || null;
+    unitType = row?.querySelector('.sup-unit-custom-type')?.value || 'other';
+    if (unit) saveCustomSupplyUnit(unitSel2);
+  } else {
+    unit = unitSel2?.value || null;
+    unitType = unit ? getUnitType(unit) : null;
+  }
+  const sizePerUnit = row?.querySelector('.sup-conversion-size')?.value ? parseFloat(row.querySelector('.sup-conversion-size').value) : null;
+
   await db.from('supply_log').update({
-    item, category: row?.querySelector('.sup-cat')?.value||null,
+    item, category,
     date, quantity: row?.querySelector('.sup-qty')?.value ? parseFloat(row.querySelector('.sup-qty').value) : null,
     unit,
-    lbs_per_unit: row?.querySelector('.sup-lbs-per-unit')?.value ? parseFloat(row.querySelector('.sup-lbs-per-unit').value) : null,
+    unit_type: unitType,
+    unit_size: sizePerUnit,
+    lbs_per_unit: unitType === 'weight' ? sizePerUnit : null,
     cost: row?.querySelector('.sup-cost')?.value ? parseFloat(row.querySelector('.sup-cost').value) : null,
     supplier: document.getElementById('sup-supplier')?.value?.trim()||null,
     notes: document.getElementById('sup-notes')?.value?.trim()||null,
