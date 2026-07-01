@@ -4680,6 +4680,14 @@ function _supplyRowHtml(idx, vals) {
       </div>
     </div>
     <div class="row sup-conversion-row">
+      <div class="field" style="flex:0 0 auto"><label>Measurement Type</label>
+        <select class="sup-unit-type" onchange="handleSupplyUnitTypeChange(this)" style="min-width:130px">
+          <option value="weight" ${(v('unit_type')||'weight')==='weight'?'selected':''}>⚖️ Weight (lbs)</option>
+          <option value="volume" ${v('unit_type')==='volume'?'selected':''}>💧 Volume (mL)</option>
+          <option value="count" ${v('unit_type')==='count'?'selected':''}>🔢 Count</option>
+          <option value="other" ${v('unit_type')==='other'?'selected':''}>📦 Other</option>
+        </select>
+      </div>
       <div class="field sup-conversion-field"><label class="sup-conversion-label">Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><input type="number" class="sup-conversion-size" step="0.01" min="0" value="${v('unit_size')||v('lbs_per_unit')||''}" placeholder="e.g. 50" oninput="updateSupplyCostPerUnit(this)"></div>
       <div class="field sup-conversion-cost-field"><label class="sup-conversion-cost-label">Cost per Lb</label>
         <div class="sup-cost-per-lb" style="padding:0.55rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.88rem;font-weight:600;color:#1d4ed8;min-height:38px">—</div>
@@ -4698,37 +4706,54 @@ function _supplyRowHtml(idx, vals) {
   </div>`;
 }
 
+// When the inline measurement type dropdown changes
+function handleSupplyUnitTypeChange(sel) {
+  const row = sel.closest('.sup-row');
+  if (!row) return;
+  sel.dataset.manuallySet = '1'; // prevent auto-overwrite when unit changes
+  refreshSupplyConversionField(row);
+  updateSupplyCostPerUnit(sel);
+}
+
 // Update the conversion field's label/visibility based on the row's current unit type
 function refreshSupplyConversionField(row) {
+  // Read from the inline type dropdown (authoritative), falling back to unit name lookup
+  const typeSel = row.querySelector('.sup-unit-type');
   const unitSel = row.querySelector('.sup-unit');
-  const unitName = unitSel?.value === '__custom__' ? null : unitSel?.value;
-  const type = unitName ? getUnitType(unitName) : 'other';
+  let type = typeSel?.value || (unitSel?.value && unitSel.value !== '__custom__' ? getUnitType(unitSel.value) : 'weight');
+
+  // If a unit is selected and the type hasn't been manually overridden, default the dropdown to the unit's type
+  if (!typeSel?.dataset.manuallySet && unitSel?.value && unitSel.value !== '__custom__') {
+    const inferred = getUnitType(unitSel.value);
+    if (typeSel && typeSel.value !== inferred && !typeSel.dataset.manuallySet) {
+      typeSel.value = inferred;
+      type = inferred;
+    }
+  }
+
   const sizeInput = row.querySelector('.sup-conversion-size');
   const sizeLabel = row.querySelector('.sup-conversion-label');
   const costLabel = row.querySelector('.sup-conversion-cost-label');
-  const conversionRow = row.querySelector('.sup-conversion-row');
-  const costField = row.querySelector('.sup-conversion-cost-field');
   const sizeField = row.querySelector('.sup-conversion-field');
+  const costField = row.querySelector('.sup-conversion-cost-field');
   row.dataset.unitType = type;
+
   if (type === 'count') {
-    // No conversion needed for count-based units (e.g. "5 syringes")
-    if (conversionRow) conversionRow.style.display = 'none';
+    if (sizeField) sizeField.style.display = 'none';
+    if (costField) costField.style.display = 'none';
     if (sizeInput) sizeInput.value = '';
   } else if (type === 'weight') {
-    if (conversionRow) conversionRow.style.display = '';
     if (sizeField) sizeField.style.display = '';
     if (costField) costField.style.display = '';
     if (sizeLabel) sizeLabel.innerHTML = 'Lbs per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
     if (costLabel) costLabel.textContent = 'Cost per Lb';
   } else if (type === 'volume') {
-    if (conversionRow) conversionRow.style.display = '';
     if (sizeField) sizeField.style.display = '';
     if (costField) costField.style.display = '';
     if (sizeLabel) sizeLabel.innerHTML = 'mL per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
     if (costLabel) costLabel.textContent = 'Cost per mL';
   } else {
-    // 'other' — show a generic amount field but no labeled cost-per (we don't know the unit)
-    if (conversionRow) conversionRow.style.display = '';
+    // 'other'
     if (sizeField) sizeField.style.display = '';
     if (costField) costField.style.display = 'none';
     if (sizeLabel) sizeLabel.innerHTML = 'Amount per Unit <span style="font-size:0.72rem;color:var(--text3)">(optional)</span>';
@@ -4740,7 +4765,16 @@ function handleSupplyUnitChange(sel) {
   if (!row) return;
   const wrap = row.querySelector('.sup-unit-custom-wrap');
   if (wrap) wrap.style.display = sel.value === '__custom__' ? '' : 'none';
-  if (sel.value !== '__custom__') refreshSupplyConversionField(row);
+  if (sel.value !== '__custom__') {
+    // Auto-set the measurement type dropdown to match the selected unit's known type
+    const typeSel = row.querySelector('.sup-unit-type');
+    if (typeSel) {
+      const inferred = getUnitType(sel.value);
+      typeSel.value = inferred;
+      delete typeSel.dataset.manuallySet;
+    }
+    refreshSupplyConversionField(row);
+  }
   updateSupplyCostPerUnit(sel);
 }
 
@@ -4828,7 +4862,9 @@ function updateSupplyCostPerUnit(el) {
   const unitCustomWrap = row.querySelector('.sup-unit-custom-wrap');
   const unit = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom')?.value || 'unit') : (unitSel?.value || 'unit');
   const sizePerUnit = parseFloat(row.querySelector('.sup-conversion-size')?.value) || 0;
-  const type = unitSel?.value === '__custom__' ? (row.querySelector('.sup-unit-custom-type')?.value || 'other') : getUnitType(unitSel?.value);
+  // Read measurement type from the inline dropdown (authoritative)
+  const typeSel = row.querySelector('.sup-unit-type');
+  const type = typeSel?.value || row.dataset.unitType || 'weight';
   const cpuEl = row.querySelector('.sup-cost-per-unit');
   const cplEl = row.querySelector('.sup-cost-per-lb');
   if (cpuEl) cpuEl.textContent = cost > 0 && qty > 0 ? `$${(cost/qty).toFixed(2)} / ${unit}` : '—';
@@ -4982,11 +5018,11 @@ async function saveSupply() {
     let unit, unitType;
     if (unitSel?.value === '__custom__') {
       unit = row.querySelector('.sup-unit-custom')?.value?.trim() || null;
-      unitType = row.querySelector('.sup-unit-custom-type')?.value || 'other';
+      unitType = row.querySelector('.sup-unit-custom-type')?.value || row.querySelector('.sup-unit-type')?.value || 'other';
       if (unit) saveCustomSupplyUnit(row.querySelector('.sup-unit'));
     } else {
       unit = unitSel?.value || null;
-      unitType = unit ? getUnitType(unit) : null;
+      unitType = row.querySelector('.sup-unit-type')?.value || (unit ? getUnitType(unit) : null);
     }
 
     const sizePerUnit = row.querySelector('.sup-conversion-size')?.value ? parseFloat(row.querySelector('.sup-conversion-size').value) : null;
@@ -5048,11 +5084,11 @@ async function saveEditSupply(id) {
   let unit, unitType;
   if (unitSel2?.value === '__custom__') {
     unit = row?.querySelector('.sup-unit-custom')?.value?.trim() || null;
-    unitType = row?.querySelector('.sup-unit-custom-type')?.value || 'other';
+    unitType = row?.querySelector('.sup-unit-custom-type')?.value || row?.querySelector('.sup-unit-type')?.value || 'other';
     if (unit) saveCustomSupplyUnit(unitSel2);
   } else {
     unit = unitSel2?.value || null;
-    unitType = unit ? getUnitType(unit) : null;
+    unitType = row?.querySelector('.sup-unit-type')?.value || (unit ? getUnitType(unit) : null);
   }
   const sizePerUnit = row?.querySelector('.sup-conversion-size')?.value ? parseFloat(row.querySelector('.sup-conversion-size').value) : null;
 
