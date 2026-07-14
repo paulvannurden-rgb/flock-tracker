@@ -8363,7 +8363,8 @@ function generateSemenReport() {
   // Doses per animal by type
   const DOSES = { flush: 2, breeding: 1, ivf: 0.5 };
 
-  // Build needed: { ai_ram_id|sire_text: { name, needed, groups: [] } }
+  // Build needed: key = "ai_ram_id|semen_type" or "text:sireName"
+  // Each entry tracks frozen and fresh doses separately
   const needed = {};
 
   groups.forEach(g => {
@@ -8372,11 +8373,14 @@ function generateSemenReport() {
 
     groupDonors.forEach(m => {
       const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
-      const key = m.ai_sire_id || ('text:' + (m.sire_text||'Unknown'));
+      const semenType = m.ai_sire_id ? (m.semen_type || 'frozen') : null; // only AI sires have frozen/fresh
+      const key = m.ai_sire_id
+        ? m.ai_sire_id + (semenType ? '|' + semenType : '')
+        : 'text:' + (m.sire_text||'Unknown');
       const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || 'Unknown / Not Set');
       const donorLamb = allLambs.find(l => l.id === m.lamb_id);
 
-      if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, needed: 0, entries: [] };
+      if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, semenType, needed: 0, entries: [] };
       needed[key].needed += dosesEach;
       needed[key].entries.push({
         groupName: g.name,
@@ -8384,11 +8388,12 @@ function generateSemenReport() {
         targetDate: g.target_date,
         donorName: donorLamb?.name || '?',
         doses: dosesEach,
+        semenType,
       });
     });
   });
 
-  // Build inventory summary
+  // Build inventory summary (inventory = frozen straws only)
   const inventory = {};
   allAiRams.forEach(ram => {
     const straws = allSemenInventory.filter(i => i.ai_ram_id === ram.id && i.straws > 0);
@@ -8399,18 +8404,30 @@ function generateSemenReport() {
   // Build table rows
   let tableRows = '';
   let grandNeeded = 0;
+  let grandFrozenNeeded = 0;
+  let grandFreshNeeded = 0;
   let grandAvailable = 0;
 
   Object.entries(needed).forEach(([key, s]) => {
-    const avail = s.ai_sire_id ? (inventory[s.ai_sire_id]?.total || 0) : '—';
-    const availNum = typeof avail === 'number' ? avail : 0;
-    const diff = typeof avail === 'number' ? avail - s.needed : null;
+    const isFrozen = s.semenType === 'frozen';
+    const isFresh = s.semenType === 'fresh';
+    const isNoType = !s.semenType; // text-based / non-AI sire
+
+    // Inventory only applies to frozen AI semen
+    const avail = (s.ai_sire_id && isFrozen) ? (inventory[s.ai_sire_id]?.total || 0) : (isFresh ? 'Fresh (arrange)' : '—');
+    const availNum = typeof avail === 'number' ? avail : null;
+    const diff = availNum !== null ? availNum - s.needed : null;
     const diffColor = diff === null ? '#888' : diff >= 0 ? '#15803d' : '#dc2626';
     const diffText = diff === null ? '—' : diff >= 0 ? '+'+diff : ''+diff;
-    grandNeeded += s.needed;
-    if (typeof avail === 'number') grandAvailable += avail;
 
-    // Group detail sub-rows
+    grandNeeded += s.needed;
+    if (isFrozen) grandFrozenNeeded += s.needed;
+    if (isFresh) grandFreshNeeded += s.needed;
+    if (availNum !== null) grandAvailable += availNum;
+
+    const semenBadge = isFrozen ? `<span style="background:#dbeafe;color:#1e40af;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px">❄️ FROZEN</span>`
+      : isFresh ? `<span style="background:#dcfce7;color:#15803d;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px">🌱 FRESH</span>` : '';
+
     const subRows = s.entries.map(e =>
       `<tr style="background:#fafafa">
         <td style="padding:4px 10px 4px 24px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupName}</td>
@@ -8421,27 +8438,35 @@ function generateSemenReport() {
       </tr>`
     ).join('');
 
-    const invDetail = s.ai_sire_id && inventory[s.ai_sire_id]?.detail?.length
+    const invDetail = s.ai_sire_id && isFrozen && inventory[s.ai_sire_id]?.detail?.length
       ? inventory[s.ai_sire_id].detail.map(i => `${i.location}: ${i.straws}`).join(', ')
       : '';
 
+    const availDisplay = isFresh
+      ? `<span style="color:#15803d;font-style:italic">Fresh (arrange separately)</span>`
+      : `${avail}${invDetail ? ` <span style="font-size:9px;color:#888">(${invDetail})</span>` : ''}`;
+
+    const statusText = diff === null
+      ? (isFresh ? '📋 Coordinate collection' : '')
+      : diff < 0 ? `⚠️ Short ${Math.abs(diff)} doses` : diff === 0 ? '✓ Exact' : '✓ OK';
+
     tableRows += `<tr style="border-bottom:2px solid #e5e7eb">
-      <td style="padding:8px 10px;font-weight:700;font-size:11px" colspan="2">${s.name}</td>
+      <td style="padding:8px 10px;font-weight:700;font-size:11px" colspan="2">${s.name}${semenBadge}</td>
       <td style="padding:8px;font-size:11px">${s.entries[0]?.targetDate||'—'}</td>
       <td style="padding:8px;font-size:11px">${s.needed} doses</td>
-      <td style="padding:8px;font-size:11px;font-weight:600">${avail}${invDetail?' <span style="font-size:9px;color:#888">('+invDetail+')</span>':''}</td>
+      <td style="padding:8px;font-size:11px;font-weight:600">${availDisplay}</td>
       <td style="padding:8px;font-size:12px;font-weight:700;color:${diffColor}">${diffText}</td>
-      <td style="padding:8px;font-size:10px;color:#888">${diff!==null&&diff<0?'⚠️ Short '+(Math.abs(diff))+' doses':diff===0?'✓ Exact':diff>0?'✓ OK':''}</td>
+      <td style="padding:8px;font-size:10px;color:#888">${statusText}</td>
     </tr>${subRows}`;
   });
 
-  const grandDiff = grandAvailable - grandNeeded;
+  const grandDiff = grandAvailable - grandFrozenNeeded; // balance only compares frozen against inventory
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Semen Report</title>
   <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
   .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
   .header h1{font-size:18px;font-weight:700}.header p{font-size:11px;color:#555;margin-top:3px}
-  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+  .summary{display:grid;grid-template-columns:repeat(${grandFreshNeeded > 0 ? 5 : 4},1fr);gap:8px;margin-bottom:18px}
   .sum-card{background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center}
   .sum-card .val{font-size:20px;font-weight:700}.sum-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-top:2px}
   table{width:100%;border-collapse:collapse}
@@ -8457,10 +8482,11 @@ function generateSemenReport() {
   <div class="summary">
     <div class="sum-card"><div class="val">${groups.length}</div><div class="lbl">Active Groups</div></div>
     <div class="sum-card"><div class="val">${grandNeeded}</div><div class="lbl">Total Doses Needed</div></div>
-    <div class="sum-card"><div class="val">${grandAvailable}</div><div class="lbl">Total In Inventory</div></div>
+    <div class="sum-card" style="background:#eff6ff;border-color:#bfdbfe"><div class="val" style="color:#1e40af">❄️ ${grandFrozenNeeded}</div><div class="lbl">Frozen Doses</div></div>
+    ${grandFreshNeeded > 0 ? `<div class="sum-card" style="background:#f0fdf4;border-color:#bbf7d0"><div class="val" style="color:#15803d">🌱 ${grandFreshNeeded}</div><div class="lbl">Fresh Doses</div></div>` : ''}
     <div class="sum-card" style="background:${grandDiff<0?'#fef2f2':'#f0fdf4'};border-color:${grandDiff<0?'#fca5a5':'#86efac'}">
       <div class="val" style="color:${grandDiff<0?'#dc2626':'#15803d'}">${grandDiff>=0?'+':''}${grandDiff}</div>
-      <div class="lbl">Net Balance</div>
+      <div class="lbl">Frozen Balance</div>
     </div>
   </div>
   <table>
@@ -8470,7 +8496,8 @@ function generateSemenReport() {
     <tbody>${tableRows || '<tr><td colspan="7" style="padding:16px;text-align:center;color:#888">No active groups with assigned sires</td></tr>'}</tbody>
   </table>
   <div class="legend">
-    Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = 0.5 doses/animal
+    Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = 0.5 doses/animal<br>
+    ❄️ Frozen: counted against semen inventory · 🌱 Fresh: coordinate collection separately (not deducted from inventory)
   </div>
   <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
   </body></html>`;
@@ -10386,8 +10413,9 @@ async function openManageGroupMembers(groupId, activeTab) {
     const lamb = allLambs.find(l => l.id === m.lamb_id);
     const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
     const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || '—');
+    const semenBadge = m.ai_sire_id && m.semen_type ? (m.semen_type === 'frozen' ? `<span style="font-size:0.7rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">❄️ Frozen</span>` : `<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">🌱 Fresh</span>`) : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:0.85rem;flex:1;min-width:0"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span></div>
+      <div style="font-size:0.85rem;flex:1;min-width:0"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span>${semenBadge}</div>
       <div style="display:flex;gap:0.25rem;flex-shrink:0">
         <button class="btn-icon btn-sm" onclick="openEditMemberSire('${m.id}','${groupId}')" title="Edit sire">✏️</button>
         <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
@@ -10423,7 +10451,18 @@ async function openManageGroupMembers(groupId, activeTab) {
         <div class="field" style="margin-bottom:0.4rem"><label>Female</label>
           <select id="gm-lamb"><option value="">— Select ewe —</option>${allEweOpts}</select>
         </div>
-        <div class="field" style="margin-bottom:0.4rem"><label>Sire</label><select id="gm-sire">${sireOpts}</select></div>
+        <div class="field" style="margin-bottom:0.4rem"><label>Sire</label><select id="gm-sire" onchange="handleGmSireChange(this)">${sireOpts}</select></div>
+        <div class="field" id="gm-semen-type-row" style="display:none;margin-bottom:0.4rem">
+          <label>Semen Type</label>
+          <div style="display:flex;gap:0.5rem">
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+              <input type="radio" name="gm-semen-type" value="frozen" checked style="accent-color:var(--accent)"> ❄️ Frozen
+            </label>
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+              <input type="radio" name="gm-semen-type" value="fresh" style="accent-color:var(--accent)"> 🌱 Fresh
+            </label>
+          </div>
+        </div>
         <div class="field" style="margin-bottom:0.5rem"><label>Sire (if not in system)</label><input id="gm-sire-text" placeholder="Sire name"></div>
         <button class="btn btn-primary btn-sm" style="width:100%" onclick="addGroupMember('${groupId}','donor')">+ Add Donor</button>
       </div>
@@ -10444,6 +10483,20 @@ async function openManageGroupMembers(groupId, activeTab) {
     </div>`:''}
 
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal();if(currentPage==='planning')renderPlanning();else openPlanningManager()">Back</button></div>`);
+}
+
+// Show/hide semen type (frozen/fresh) when an AI sire is selected in Add Donor form
+function handleGmSireChange(sel) {
+  const isAi = sel.value.startsWith('ai:');
+  const row = document.getElementById('gm-semen-type-row');
+  if (row) row.style.display = isAi ? '' : 'none';
+}
+
+// Show/hide semen type in Edit Sire modal
+function handleEmsSireChange(sel) {
+  const isAi = sel.value.startsWith('ai:');
+  const row = document.getElementById('ems-semen-type-row');
+  if (row) row.style.display = isAi ? '' : 'none';
 }
 
 function switchGmTab(tab) {
@@ -10470,7 +10523,8 @@ async function addGroupMember(groupId, role) {
     if (!lambId) { toast('Select a female'); return; }
     const { sire_id, ai_sire_id } = parseSireSelection(document.getElementById('gm-sire')?.value || '');
     const sireText = document.getElementById('gm-sire-text')?.value?.trim() || null;
-    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, role: 'donor' }).select().single();
+    const semenType = ai_sire_id ? (document.querySelector('input[name="gm-semen-type"]:checked')?.value || 'frozen') : null;
+    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, semen_type: semenType, role: 'donor' }).select().single();
     if (error) { toast('Failed: ' + (error.message||'unknown')); return; }
     inserted = data;
     toast('Donor added');
@@ -10487,11 +10541,24 @@ function openEditMemberSire(memberId, groupId) {
   const lamb = m ? allLambs.find(l => l.id === m.lamb_id) : null;
   // Build selectedId in the format sireOptions expects
   const currentSireId = m?.ai_sire_id ? 'ai:' + m.ai_sire_id : (m?.sire_id ? 'lamb:' + m.sire_id : '');
+  const isAiSire = !!m?.ai_sire_id;
+  const currentSemenType = m?.semen_type || 'frozen';
   const sireOpts = sireOptions(currentSireId);
 
   showModal(`
     <div class="modal-header"><div class="modal-title">✏️ Edit Sire — ${lamb?.name||'Animal'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div class="field"><label>Sire (from AI Rams)</label><select id="ems-sire">${sireOpts}</select></div>
+    <div class="field"><label>Sire (from AI Rams)</label><select id="ems-sire" onchange="handleEmsSireChange(this)">${sireOpts}</select></div>
+    <div class="field" id="ems-semen-type-row" style="${isAiSire?'':'display:none'}">
+      <label>Semen Type</label>
+      <div style="display:flex;gap:0.5rem">
+        <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+          <input type="radio" name="ems-semen-type" value="frozen" ${currentSemenType==='frozen'?'checked':''} style="accent-color:var(--accent)"> ❄️ Frozen
+        </label>
+        <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+          <input type="radio" name="ems-semen-type" value="fresh" ${currentSemenType==='fresh'?'checked':''} style="accent-color:var(--accent)"> 🌱 Fresh
+        </label>
+      </div>
+    </div>
     <div class="field"><label>Sire (if not in system)</label><input id="ems-sire-text" value="${m?.sire_text||''}" placeholder="Sire name"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal();openManageGroupMembers('${groupId}','donors')">Cancel</button>
@@ -10507,10 +10574,13 @@ async function saveEditMemberSire(memberId, groupId) {
   if (sireVal.startsWith('ai:')) aiSireId = sireVal.replace('ai:', '');
   else if (sireVal.startsWith('lamb:')) sireId = sireVal.replace('lamb:', '');
 
+  const semenType = aiSireId ? (document.querySelector('input[name="ems-semen-type"]:checked')?.value || 'frozen') : null;
+
   const { error } = await db.from('breeding_group_members').update({
     ai_sire_id: aiSireId || null,
     sire_id: sireId || null,
     sire_text: (aiSireId || sireId) ? null : sireText,
+    semen_type: semenType,
   }).eq('id', memberId);
 
   if (error) {
@@ -10519,7 +10589,7 @@ async function saveEditMemberSire(memberId, groupId) {
     return;
   }
 
-  const updateFn = m => m.id === memberId ? { ...m, ai_sire_id: aiSireId||null, sire_id: sireId||null, sire_text: (aiSireId||sireId)?null:sireText } : m;
+  const updateFn = m => m.id === memberId ? { ...m, ai_sire_id: aiSireId||null, sire_id: sireId||null, sire_text: (aiSireId||sireId)?null:sireText, semen_type: semenType } : m;
   if (window._planMembers) window._planMembers = window._planMembers.map(updateFn);
   if (window._currentGroupMembers) window._currentGroupMembers = window._currentGroupMembers.map(updateFn);
 
