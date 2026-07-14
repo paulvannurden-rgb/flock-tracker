@@ -8342,6 +8342,10 @@ function printSemenReport() {
     <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.25rem 0.5rem;margin-bottom:0.75rem">
       ${groupCheckboxes}
     </div>
+    <label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:0.75rem;cursor:pointer;font-size:0.83rem;color:var(--text)">
+      <input type="checkbox" id="sr-show-all-inventory" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+      <span><strong>Include full inventory snapshot</strong> — show all frozen straws on hand, including rams not in selected plans, with post-plan balance</span>
+    </label>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="generateSemenReport()">Generate Report</button>
@@ -8351,6 +8355,7 @@ function printSemenReport() {
 function generateSemenReport() {
   const selected = [...document.querySelectorAll('.sr-group-cb:checked')].map(c => c.value);
   if (selected.length === 0) { toast('Select at least one group'); return; }
+  const showAllInventory = document.getElementById('sr-show-all-inventory')?.checked !== false;
   closeModal();
 
   const selectedSet = new Set(selected);
@@ -8506,6 +8511,69 @@ function generateSemenReport() {
 
   const grandDiff = grandAvailable - grandFrozenNeeded; // balance only compares frozen against inventory
 
+  // ── FULL INVENTORY SNAPSHOT ──────────────────────────
+  // Build per-ram frozen usage from the plan (only frozen semen drawn from inventory)
+  let inventorySection = '';
+  if (showAllInventory) {
+    // Tally frozen straws committed per ram from the plan
+    const frozenCommitted = {}; // ram_id -> straws committed
+    Object.values(needed).forEach(s => {
+      if (s.ai_sire_id && s.semenType === 'frozen') {
+        frozenCommitted[s.ai_sire_id] = (frozenCommitted[s.ai_sire_id] || 0) + s.needed;
+      }
+    });
+
+    // All rams with any frozen inventory
+    const allRamsWithInv = allAiRams.filter(r => inventory[r.id]?.total > 0);
+    if (allRamsWithInv.length > 0) {
+      let grandTotalInv = 0;
+      let grandTotalAfter = 0;
+      const invRows = allRamsWithInv.map(r => {
+        const total = inventory[r.id]?.total || 0;
+        const committed = frozenCommitted[r.id] || 0;
+        const afterPlan = total - committed;
+        const inPlan = committed > 0;
+        const detail = inventory[r.id]?.detail?.map(i => `${i.location}: ${i.straws}`).join(', ') || '';
+        grandTotalInv += total;
+        grandTotalAfter += afterPlan;
+        const afterColor = afterPlan < 0 ? '#dc2626' : afterPlan === 0 ? '#92400e' : '#15803d';
+        return `<tr style="border-bottom:1px solid #e5e7eb">
+          <td style="padding:7px 10px;font-weight:600;font-size:11px">${r.name} 🧬</td>
+          <td style="padding:7px 8px;font-size:11px">${total} ${detail?`<span style="font-size:9px;color:#888">(${detail})</span>`:''}</td>
+          <td style="padding:7px 8px;font-size:11px;color:${committed>0?'#1e40af':'#aaa'}">${committed > 0 ? committed + ' ❄️' : '—'}</td>
+          <td style="padding:7px 8px;font-size:12px;font-weight:700;color:${afterColor}">${afterPlan >= 0 ? '+' : ''}${afterPlan}</td>
+          <td style="padding:7px 8px;font-size:10px;color:#888">${!inPlan ? '(not in selected plans)' : afterPlan < 0 ? '⚠️ Short' : afterPlan === 0 ? '✓ Fully committed' : '✓ Surplus'}</td>
+        </tr>`;
+      }).join('');
+
+      const grandAfterColor = grandTotalAfter < 0 ? '#dc2626' : '#15803d';
+      inventorySection = `
+        <h2 style="font-size:14px;font-weight:700;margin:24px 0 10px;border-top:2px solid #333;padding-top:14px">🧪 Full Frozen Inventory Snapshot</h2>
+        <p style="font-size:10px;color:#666;margin-bottom:10px">All rams with frozen straws on hand. "After Plan" = current inventory minus straws committed in the selected plans above.</p>
+        <table>
+          <thead><tr style="background:#1a1a1a;color:#fff">
+            <th style="padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em">Ram</th>
+            <th style="padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em">Current Inventory</th>
+            <th style="padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em">Committed (Plan)</th>
+            <th style="padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em">After Plan</th>
+            <th style="padding:7px 8px;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em">Status</th>
+          </tr></thead>
+          <tbody>
+            ${invRows}
+            <tr style="background:#f3f4f6;font-weight:700;border-top:2px solid #333">
+              <td style="padding:7px 10px;font-size:11px">TOTAL</td>
+              <td style="padding:7px 8px;font-size:11px">${grandTotalInv} straws</td>
+              <td style="padding:7px 8px;font-size:11px;color:#1e40af">${grandFrozenNeeded > 0 ? grandFrozenNeeded : '—'}</td>
+              <td style="padding:7px 8px;font-size:12px;font-weight:700;color:${grandAfterColor}">${grandTotalAfter >= 0 ? '+' : ''}${grandTotalAfter}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>`;
+    } else {
+      inventorySection = `<p style="margin-top:24px;padding:12px;background:#f9f9f9;border:1px solid #e5e7eb;border-radius:6px;font-size:10px;color:#888;text-align:center;border-top:2px solid #333;">No frozen semen inventory on hand.</p>`;
+    }
+  }
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Semen Report</title>
   <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
   .header{border-bottom:3px double #333;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
@@ -8543,6 +8611,7 @@ function generateSemenReport() {
     Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = straws set on group (defaults to 0.5/ewe if not set)<br>
     ❄️ Frozen: counted against semen inventory · 🌱 Fresh: coordinate collection separately (not deducted from inventory)
   </div>
+  ${inventorySection}
   <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
   </body></html>`;
 
