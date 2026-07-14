@@ -8369,28 +8369,72 @@ function generateSemenReport() {
 
   groups.forEach(g => {
     const groupDonors = members.filter(m => m.group_id === g.id && (m.role||'donor') === 'donor');
-    const dosesEach = DOSES[g.type] || 1;
+    // IVF: uses per-member ivf_straws field (default 0.5) — handled below
+    // Non-IVF: flat dose per donor
+    const dosesEach = g.type === 'ivf' ? null : (DOSES[g.type] || 1);
 
-    groupDonors.forEach(m => {
-      const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
-      const semenType = m.ai_sire_id ? (m.semen_type || 'frozen') : null; // only AI sires have frozen/fresh
-      const key = m.ai_sire_id
-        ? m.ai_sire_id + (semenType ? '|' + semenType : '')
-        : 'text:' + (m.sire_text||'Unknown');
-      const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || 'Unknown / Not Set');
-      const donorLamb = allLambs.find(l => l.id === m.lamb_id);
+    if (g.type === 'ivf') {
+      // IVF: semen tracked per donor ewe, with optional sharing across ewes with same sire
+      // For shared groups: only count straws ONCE per sire (using first shared member's straws value)
+      const seenSharedSires = new Set();
 
-      if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, semenType, needed: 0, entries: [] };
-      needed[key].needed += dosesEach;
-      needed[key].entries.push({
-        groupName: g.name,
-        groupType: g.type,
-        targetDate: g.target_date,
-        donorName: donorLamb?.name || '?',
-        doses: dosesEach,
-        semenType,
+      groupDonors.forEach(m => {
+        const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+        const semenType = m.ai_sire_id ? (m.semen_type || 'frozen') : null;
+        const key = m.ai_sire_id
+          ? m.ai_sire_id + (semenType ? '|' + semenType : '')
+          : 'text:' + (m.sire_text||'Unknown');
+        const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || 'Unknown / Not Set');
+        const donorLamb = allLambs.find(l => l.id === m.lamb_id);
+        const straws = m.ivf_straws || 0.5;
+
+        // If shared, only count straws once for the first ewe with that sire
+        const sharedKey = key + '|shared';
+        if (m.semen_shared) {
+          if (seenSharedSires.has(sharedKey)) {
+            // Already counted — just add ewe name to the existing entry's donor name
+            if (needed[key]) {
+              const lastEntry = needed[key].entries[needed[key].entries.length - 1];
+              if (lastEntry?.shared) lastEntry.donorName += ', ' + (donorLamb?.name || '?');
+            }
+            return; // skip — don't add straws again
+          }
+          seenSharedSires.add(sharedKey);
+        }
+
+        if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, semenType, needed: 0, entries: [] };
+        needed[key].needed += straws;
+        needed[key].entries.push({
+          groupName: g.name,
+          groupType: 'ivf',
+          targetDate: g.target_date,
+          donorName: donorLamb?.name || '?',
+          doses: straws,
+          semenType,
+          shared: m.semen_shared,
+        });
       });
-    });
+    } else {
+      groupDonors.forEach(m => {
+        const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+        const semenType = m.ai_sire_id ? (m.semen_type || 'frozen') : null;
+        const key = m.ai_sire_id
+          ? m.ai_sire_id + (semenType ? '|' + semenType : '')
+          : 'text:' + (m.sire_text||'Unknown');
+        const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || 'Unknown / Not Set');
+        const donorLamb = allLambs.find(l => l.id === m.lamb_id);
+        if (!needed[key]) needed[key] = { name: sireName, ai_sire_id: m.ai_sire_id, semenType, needed: 0, entries: [] };
+        needed[key].needed += dosesEach;
+        needed[key].entries.push({
+          groupName: g.name,
+          groupType: g.type,
+          targetDate: g.target_date,
+          donorName: donorLamb?.name || '?',
+          doses: dosesEach,
+          semenType,
+        });
+      });
+    }
   });
 
   // Build inventory summary (inventory = frozen straws only)
@@ -8433,7 +8477,7 @@ function generateSemenReport() {
         <td style="padding:4px 10px 4px 24px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupName}</td>
         <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.donorName}</td>
         <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.targetDate||'—'}</td>
-        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupType?.toUpperCase()||'—'} · ${e.doses} dose${e.doses!==1?'s':''}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupType?.toUpperCase()||'—'} · ${e.doses} straw${e.doses!==1?'s':''}${e.shared?' 🤝':''}</td>
         <td colspan="3" style="border-bottom:1px solid #f0f0f0"></td>
       </tr>`
     ).join('');
@@ -8496,7 +8540,7 @@ function generateSemenReport() {
     <tbody>${tableRows || '<tr><td colspan="7" style="padding:16px;text-align:center;color:#888">No active groups with assigned sires</td></tr>'}</tbody>
   </table>
   <div class="legend">
-    Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = 0.5 doses/animal<br>
+    Dose assumptions: Flush = 2 doses/animal · Breeding = 1 dose/animal · IVF = straws set on group (defaults to 0.5/ewe if not set)<br>
     ❄️ Frozen: counted against semen inventory · 🌱 Fresh: coordinate collection separately (not deducted from inventory)
   </div>
   <div class="footer">${farmName} · Generated ${printDate} · Flock Health Ledger</div>
@@ -8825,11 +8869,12 @@ function renderPlanningHTML() {
             <div>
               <div style="font-size:1rem;font-weight:700;color:var(--text)">${g.name}</div>
               <div style="display:flex;gap:0.35rem;margin-top:0.3rem;flex-wrap:wrap;align-items:center">
-                <span class="badge ${g.type==='flush'?'badge-purple':'badge-green'}">${g.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
+                <span class="badge ${g.type==='ivf'?'badge-purple':g.type==='flush'?'badge-purple':'badge-green'}">${g.type==='ivf'?'🧬 IVF':g.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
                 <span style="background:${bg};color:${col};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${g.status}</span>
                 ${g.target_date?`<span class="badge badge-blue">🎯 ${g.target_date}</span>`:''}
                 ${prot?`<span class="badge badge-gray">${prot.name}</span>`:''}
                 ${recipProt?`<span class="badge badge-gray">Recip: ${recipProt.name}</span>`:''}
+                ${g.type==='ivf'?`<span class="badge badge-blue">🧬 ${donors.length} ewe${donors.length!==1?'s':''}</span>`:''}
               </div>
             </div>
             <div style="display:flex;gap:0.35rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -9194,6 +9239,14 @@ async function openCompletePlan(groupId) {
 }
 
 let _cpNextRow = 0;
+function updateCpExpected(i) {
+  const breedDate = document.getElementById(`cp-date-${i}`)?.value;
+  const dueEl = document.getElementById(`cp-due-${i}`);
+  if (!breedDate || !dueEl) return;
+  const due = new Date(new Date(breedDate + 'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+  dueEl.value = due;
+}
+
 function validateCpEmbryos() {
   const tbody = document.getElementById('cp-tbody');
   if (!tbody) return;
@@ -9546,9 +9599,7 @@ function openNewGroupInline() {
 function ngToggleRecipField() {
   const type = document.getElementById('ng-type')?.value;
   const row = document.getElementById('ng-recip-row');
-  const donorLabel = document.querySelector('label[for="ng-protocol"], #ng-protocol')?.previousElementSibling;
   if (row) row.style.display = (type === 'flush' || type === 'ivf') ? '' : 'none';
-  // Update donor protocol label
   const protField = document.getElementById('ng-protocol');
   if (protField) {
     const lbl = protField.closest('.field')?.querySelector('label');
@@ -9733,7 +9784,6 @@ async function saveEditGroupPage(id) {
     recip_protocol_id: recip_protocol_id||null,
     notes: document.getElementById('eg-notes')?.value?.trim()||null,
   }).eq('id', id);
-  // Update cache so renderPlanningHTML reflects immediately
   window._planGroups = (window._planGroups||[]).map(g => g.id === id ? {
     ...g, name, type,
     target_date: document.getElementById('eg-date')?.value||null,
@@ -10409,19 +10459,70 @@ async function openManageGroupMembers(groupId, activeTab) {
   const donors = (members||[]).filter(m => (m.role||'donor') === 'donor');
   const recips = (members||[]).filter(m => m.role === 'recip');
 
-  const donorRows = donors.map(m => {
-    const lamb = allLambs.find(l => l.id === m.lamb_id);
-    const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
-    const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || '—');
-    const semenBadge = m.ai_sire_id && m.semen_type ? (m.semen_type === 'frozen' ? `<span style="font-size:0.7rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">❄️ Frozen</span>` : `<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">🌱 Fresh</span>`) : '';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:0.85rem;flex:1;min-width:0"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span>${semenBadge}</div>
-      <div style="display:flex;gap:0.25rem;flex-shrink:0">
-        <button class="btn-icon btn-sm" onclick="openEditMemberSire('${m.id}','${groupId}')" title="Edit sire">✏️</button>
-        <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
-      </div>
-    </div>`;
-  }).join('') || `<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No donors yet</div>`;
+  const isIvf = g.type === 'ivf';
+
+  // Build donor rows — for IVF groups also show straws and shared status
+  // Group donors by sire so we can detect when multiple ewes share a sire
+  const sireGroups = {};
+  donors.forEach(m => {
+    const sireKey = m.ai_sire_id || ('text:' + (m.sire_text||''));
+    if (!sireGroups[sireKey]) sireGroups[sireKey] = [];
+    sireGroups[sireKey].push(m);
+  });
+
+  const donorRows = (() => {
+    const seenSharedPrimary = {}; // sireKey -> primary member
+    return donors.map(m => {
+      const lamb = allLambs.find(l => l.id === m.lamb_id);
+      const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
+      const sireName = sire ? sire.name + ' 🧬' : (m.sire_text || '—');
+      const semenBadge = m.ai_sire_id && m.semen_type ? (m.semen_type === 'frozen' ? `<span style="font-size:0.7rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">❄️ Frozen</span>` : `<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem;margin-left:0.3rem">🌱 Fresh</span>`) : '';
+      const sireKey = m.ai_sire_id || ('text:' + (m.sire_text||''));
+      const siblingsExist = isIvf && m.ai_sire_id && (sireGroups[sireKey]?.length > 1);
+
+      // Determine if this is a secondary shared member (primary has already been seen)
+      let isSecondaryShared = false;
+      let primaryStraws = m.ivf_straws || 0.5;
+      if (isIvf && m.semen_shared && siblingsExist) {
+        if (seenSharedPrimary[sireKey]) {
+          isSecondaryShared = true;
+          primaryStraws = seenSharedPrimary[sireKey].ivf_straws || 0.5;
+        } else {
+          seenSharedPrimary[sireKey] = m; // mark this one as primary
+        }
+      }
+
+      const ivfInfo = isIvf ? `
+        <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.25rem;flex-wrap:wrap">
+          <label style="font-size:0.72rem;color:var(--text3)">Straws:</label>
+          ${isSecondaryShared
+            ? `<span style="width:60px;padding:0.2rem 0.4rem;font-size:0.78rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);display:inline-flex;align-items:center;justify-content:center">${primaryStraws}</span>
+               <span style="font-size:0.7rem;color:var(--text3)">🔒 set by primary</span>`
+            : `<input type="number" step="0.5" min="0.5" value="${m.ivf_straws||0.5}" style="width:60px;padding:0.2rem 0.4rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="updateMemberIvfStraws('${m.id}','${groupId}',this.value,document.getElementById('share-${m.id}')?.checked)">`
+          }
+          ${siblingsExist && !isSecondaryShared ? `<label style="display:flex;align-items:center;gap:0.3rem;font-size:0.72rem;color:var(--text3);cursor:pointer">
+            <input type="checkbox" id="share-${m.id}" ${m.semen_shared?'checked':''} style="accent-color:var(--accent)" onchange="updateMemberIvfStraws('${m.id}','${groupId}',this.closest('div').querySelector('input[type=number]').value,this.checked)">
+            Share semen with other ${sireName} ewes
+          </label>` : ''}
+          ${siblingsExist && isSecondaryShared ? `<label style="display:flex;align-items:center;gap:0.3rem;font-size:0.72rem;color:var(--text3);cursor:pointer">
+            <input type="checkbox" id="share-${m.id}" checked style="accent-color:var(--accent)" onchange="updateMemberIvfStraws('${m.id}','${groupId}','${primaryStraws}',this.checked)">
+            Sharing with ${sireName} pool
+          </label>` : ''}
+          ${m.semen_shared ? `<span style="font-size:0.7rem;background:#fef9c3;color:#854d0e;border-radius:0.2rem;padding:0.05rem 0.35rem">🤝 Shared</span>` : ''}
+        </div>` : '';
+
+      return `<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:0.85rem;flex:1;min-width:0"><span style="font-weight:600;color:var(--text)">${lamb?.name||'Unknown'}</span>${lamb?.ear_tag?` <span style="color:var(--text3)">#${lamb.ear_tag}</span>`:''} <span style="color:var(--text3)">× ${sireName}</span>${semenBadge}</div>
+          <div style="display:flex;gap:0.25rem;flex-shrink:0">
+            <button class="btn-icon btn-sm" onclick="openEditMemberSire('${m.id}','${groupId}')" title="Edit sire">✏️</button>
+            <button class="btn-icon btn-sm" onclick="removeGroupMember('${m.id}','${groupId}','donors')" style="color:var(--danger)">🗑</button>
+          </div>
+        </div>
+        ${ivfInfo}
+      </div>`;
+    }).join('') || `<div style="color:var(--text3);font-size:0.82rem;padding:0.5rem 0">No donors yet</div>`;
+  })();
 
   const recipRows = recips.map(m => {
     const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
@@ -10463,6 +10564,7 @@ async function openManageGroupMembers(groupId, activeTab) {
             </label>
           </div>
         </div>
+        ${isIvf ? `<div class="field" style="margin-bottom:0.4rem"><label>Straws for this ewe <span style="font-size:0.72rem;color:var(--text3);font-weight:400">(default 0.5)</span></label><input type="number" id="gm-ivf-straws" step="0.5" min="0.5" value="0.5" placeholder="0.5" style="max-width:100px"></div>` : ''}
         <div class="field" style="margin-bottom:0.5rem"><label>Sire (if not in system)</label><input id="gm-sire-text" placeholder="Sire name"></div>
         <button class="btn btn-primary btn-sm" style="width:100%" onclick="addGroupMember('${groupId}','donor')">+ Add Donor</button>
       </div>
@@ -10483,6 +10585,42 @@ async function openManageGroupMembers(groupId, activeTab) {
     </div>`:''}
 
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal();if(currentPage==='planning')renderPlanning();else openPlanningManager()">Back</button></div>`);
+}
+
+// Inline update of ivf_straws and semen_shared on a donor row without reopening the modal
+async function updateMemberIvfStraws(memberId, groupId, straws, shared) {
+  const ivf_straws = parseFloat(straws) || 0.5;
+  const semen_shared = !!shared;
+  const { error } = await db.from('breeding_group_members').update({ ivf_straws, semen_shared }).eq('id', memberId);
+  if (error) { toast('Update failed: ' + (error.message||'unknown')); return; }
+
+  // Update cache for this member
+  const upd = m => m.id === memberId ? { ...m, ivf_straws, semen_shared } : m;
+  if (window._planMembers) window._planMembers = window._planMembers.map(upd);
+  if (window._currentGroupMembers) window._currentGroupMembers = window._currentGroupMembers.map(upd);
+
+  // If this member is shared and their straws changed, sync all other shared siblings to the same value
+  // (so the report reads correctly from any member in the shared group)
+  if (semen_shared) {
+    const members = window._currentGroupMembers || [];
+    const thisM = members.find(m => m.id === memberId);
+    const sireKey = thisM?.ai_sire_id;
+    if (sireKey) {
+      const siblings = members.filter(m => m.id !== memberId && m.ai_sire_id === sireKey && m.semen_shared);
+      if (siblings.length > 0) {
+        // Sync straws on shared siblings (update each individually for mock compatibility)
+        for (const sib of siblings) {
+          await db.from('breeding_group_members').update({ ivf_straws }).eq('id', sib.id);
+        }
+        const syncUpd = m => (m.ai_sire_id === sireKey && m.semen_shared && m.id !== memberId) ? { ...m, ivf_straws } : m;
+        if (window._planMembers) window._planMembers = window._planMembers.map(syncUpd);
+        if (window._currentGroupMembers) window._currentGroupMembers = window._currentGroupMembers.map(syncUpd);
+      }
+    }
+  }
+
+  // Refresh the modal so share checkboxes and locked states update
+  openManageGroupMembers(groupId, 'donors');
 }
 
 // Show/hide semen type (frozen/fresh) when an AI sire is selected in Add Donor form
@@ -10524,7 +10662,8 @@ async function addGroupMember(groupId, role) {
     const { sire_id, ai_sire_id } = parseSireSelection(document.getElementById('gm-sire')?.value || '');
     const sireText = document.getElementById('gm-sire-text')?.value?.trim() || null;
     const semenType = ai_sire_id ? (document.querySelector('input[name="gm-semen-type"]:checked')?.value || 'frozen') : null;
-    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, semen_type: semenType, role: 'donor' }).select().single();
+    const ivfStraws = parseFloat(document.getElementById('gm-ivf-straws')?.value) || 0.5;
+    const { data, error } = await db.from('breeding_group_members').insert({ group_id: groupId, lamb_id: lambId, sire_id: sire_id||null, ai_sire_id: ai_sire_id||null, sire_text: (sire_id||ai_sire_id)?null:sireText, semen_type: semenType, ivf_straws: ivfStraws, semen_shared: false, role: 'donor' }).select().single();
     if (error) { toast('Failed: ' + (error.message||'unknown')); return; }
     inserted = data;
     toast('Donor added');
