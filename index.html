@@ -110,7 +110,7 @@
   .tab:hover:not(.active) { color: var(--text2); }
 
   /* FLOCK GRID */
-  .flock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; }
+  .flock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.85rem; }
 
   /* SEARCH BAR */
   .search-bar { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
@@ -1926,7 +1926,7 @@ function openSemenInventory() {
   const grandTotal = allSemenInventory.filter(i => i.straws > 0).reduce((s,i) => s + (i.straws||0), 0);
   showModal(`
     <div class="modal-header"><div class="modal-title">🧪 Semen Inventory</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 1rem;margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 1rem;margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.35rem">
       <span style="font-size:0.78rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.07em">Total Straws in Inventory</span>
       <span style="font-size:1.2rem;font-weight:700;color:var(--accent)">${grandTotal}</span>
     </div>
@@ -4872,8 +4872,9 @@ function _supplyRowHtml(idx, vals) {
         <select class="sup-cat" onchange="handleSupplyCatChange(this)" style="width:100%">${catOpts}<option value="__custom__">+ Add category...</option></select>
         <div style="display:none;margin-top:0.3rem" class="sup-cat-custom-wrap">
           <div style="display:flex;gap:0.35rem">
-          <input class="sup-cat-custom" placeholder="Custom category name" style="flex:1;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-          <button type="button" onclick="saveCustomSupplyCategory(this)" style="background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.35rem 0.6rem;cursor:pointer;color:#fff;font-size:0.8rem;font-weight:600">Add</button>
+            <input class="sup-cat-custom" placeholder="Custom category name" style="flex:1;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            <button type="button" onclick="saveCustomSupplyCategory(this)" style="background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.35rem 0.6rem;cursor:pointer;color:#fff;font-size:0.8rem;font-weight:600">Add</button>
+          </div>
         </div>
       </div>
     </div>
