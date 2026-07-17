@@ -211,10 +211,11 @@
     .sup-header-row { flex-direction: column !important; gap: 0 !important; }
     .sup-header-row .field { width: 100% !important; }
 
-    /* Inputs and selects: full width, no fixed max-width overrides */
-    .modal input[style*="max-width"],
-    .modal select[style*="max-width"],
-    .modal input[style*="width:"] {
+    /* Inputs and selects: full width, no fixed max-width overrides
+       Excludes bulk weight rows which handle their own layout */
+    .modal input[style*="max-width"]:not(#bulk-weight-rows input),
+    .modal select[style*="max-width"]:not(#bulk-weight-rows select),
+    .modal input[style*="width:"]:not(#bulk-weight-rows input):not([placeholder="lbs"]):not([placeholder="HH:MM"]) {
       max-width: 100% !important;
       width: 100% !important;
       box-sizing: border-box;
@@ -249,6 +250,8 @@
     .search-bar > div { flex-wrap: wrap; gap: 0.3rem; }
     /* Multi-select filter dropdown: open left-aligned, cap width */
     .flock-ms-panel { max-width: calc(100vw - 2rem) !important; }
+    /* Time inputs: never shrink below usable size */
+    .modal input[placeholder="HH:MM"] { min-width: 80px !important; }
     /* Complete Plan table: scroll horizontally rather than overflow */
     .modal table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   }
@@ -3405,7 +3408,12 @@ function openAddWeightGlobal() {
     <div class="row">
       <div class="field"><label>Weight (lbs) *</label><input type="number" id="wg-weight" step="0.1" min="0" placeholder="e.g. 125.5"></div>
       <div class="field"><label>Date *</label><input type="date" id="wg-date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Time <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label><div style="display:flex;gap:0.35rem"><input type="text" id="wg-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="flex:1"><select id="wg-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem"><option>AM</option><option>PM</option></select></div></div>
+    </div>
+    <div class="field"><label>Time <span style="font-size:0.72rem;color:var(--text3)">(optional)</span></label>
+      <div style="display:flex;gap:0.5rem;max-width:240px">
+        <input type="text" id="wg-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="flex:1;min-width:80px">
+        <select id="wg-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem;flex-shrink:0"><option>AM</option><option>PM</option></select>
+      </div>
     </div>
     <div class="field"><label>Notes</label><input id="wg-notes" placeholder="Optional notes"></div>
     <div class="modal-actions">
@@ -7798,14 +7806,16 @@ async function openBulkWeight() {
     </div>
     <div style="height:340px;overflow-y:scroll" id="bulk-weight-rows">
       ${active.map(lamb => `
-        <div id="bw-row-${lamb.id}" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">
+        <div id="bw-row-${lamb.id}" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
           <input type="checkbox" id="bw-cb-${lamb.id}" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-          <div style="flex:1;min-width:0">
+          <div style="flex:1;min-width:120px">
             <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${lamb.name}</span>
             <span style="font-size:0.75rem;color:var(--text3)">${lamb.ear_tag?' #'+lamb.ear_tag:''} ${lamb.flock_type?'· '+lamb.flock_type:''}</span>
           </div>
-          <input type="number" step="0.1" id="bw-wt-${lamb.id}" placeholder="lbs" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
-          <input type="date" id="bw-date-${lamb.id}" value="${defaultDate}" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+          <div style="display:flex;gap:0.35rem;flex-shrink:0">
+            <input type="number" step="0.1" id="bw-wt-${lamb.id}" placeholder="lbs" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+            <input type="date" id="bw-date-${lamb.id}" value="${defaultDate}" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+          </div>
         </div>`).join('')}
     </div>
     <div class="modal-actions">
@@ -11343,7 +11353,7 @@ function calcExpectedLamb() {
 
 // ── STARTUP ───────────────────────────────────────────
 // Set farm name on login screen from localStorage and init biometric UI
-(function startup() {
+document.addEventListener('DOMContentLoaded', function() {
   try {
     const p = JSON.parse(localStorage.getItem('flock_farm_profile') || '{}');
     const name = p.type === 'business' ? (p.bizname || p.name || '') : (p.name || '');
@@ -11352,7 +11362,7 @@ function calcExpectedLamb() {
       if (el) el.textContent = name;
     }
   } catch(e) {}
-  // Init biometric UI (shows Face ID button if credential registered)
-  initBiometricUI().catch(() => {});
-})();
+  // Small delay so the login screen renders before Face ID prompt appears
+  setTimeout(() => initBiometricUI().catch(() => {}), 300);
+});
 </script>
