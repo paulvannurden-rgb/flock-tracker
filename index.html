@@ -195,17 +195,21 @@
     header { flex-wrap: wrap; gap: 0.5rem; }
 
     /* ── MODAL MOBILE FIXES ──────────────────────────── */
-    /* Tighten overlay padding so modal gets full width */
-    .modal-overlay { padding: 0.5rem; align-items: flex-end; }
-    /* Modal: full width, taller max-height, less padding */
+    /* Full-screen modal on mobile */
+    .modal-overlay { padding: 0; align-items: stretch; }
     .modal {
       padding: 1rem;
-      max-height: 92vh;
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0; /* sheet-style from bottom */
+      max-height: 100vh;
+      height: 100vh;
+      max-width: 100% !important;
+      border-radius: 0;
     }
     /* Stack side-by-side .row fields vertically on small screens */
-    .row { flex-direction: column; gap: 0; }
-    .row .field { min-width: 0; width: 100%; }
+    .row { flex-direction: column !important; gap: 0 !important; }
+    .row .field { min-width: 0 !important; width: 100% !important; }
+    /* Supply modal date/supplier header row */
+    .sup-header-row { flex-direction: column !important; gap: 0 !important; }
+    .sup-header-row .field { width: 100% !important; }
 
     /* Inputs and selects: full width, no fixed max-width overrides */
     .modal input[style*="max-width"],
@@ -220,9 +224,19 @@
       width: 100% !important;
       max-width: 100% !important;
     }
-    /* Supply row product cards: stack unit + custom wrap */
-    .sup-row .row { flex-direction: column; gap: 0; }
-    .sup-row .sup-conversion-row { flex-direction: column; gap: 0; }
+    /* Supply modal specific: stack ALL flex children in product rows */
+    .sup-row .row,
+    .sup-row .sup-conversion-row { flex-direction: column !important; gap: 0 !important; }
+    .sup-row .row .field,
+    .sup-row .sup-conversion-row .field { flex: 1 1 100% !important; min-width: 0 !important; width: 100% !important; }
+    /* Remove the auto-width on measurement type field */
+    .sup-row .sup-conversion-row .field[style*="flex:0"] { flex: 1 1 100% !important; }
+    .sup-row .sup-unit-type { min-width: 0 !important; width: 100% !important; }
+    /* Custom category/unit wrap: stack input + button */
+    .sup-cat-custom-wrap,
+    .sup-unit-custom-wrap { flex-wrap: wrap; }
+    /* IVF donor straws row: wrap */
+    [data-step-row] > div { flex-wrap: wrap; }
     /* Protocol step rows: stack the fields */
     [data-step-row] > div:first-child { flex-wrap: wrap; gap: 0.4rem; }
     [data-step-row] .ps-prod-row,
@@ -4702,7 +4716,8 @@ function _supplyRowHtml(idx, vals) {
       </div>
       <div class="field"><label>Category</label>
         <select class="sup-cat" onchange="handleSupplyCatChange(this)" style="width:100%">${catOpts}<option value="__custom__">+ Add category...</option></select>
-        <div style="display:none;margin-top:0.3rem;display:flex;gap:0.35rem" class="sup-cat-custom-wrap">
+        <div style="display:none;margin-top:0.3rem" class="sup-cat-custom-wrap">
+          <div style="display:flex;gap:0.35rem">
           <input class="sup-cat-custom" placeholder="Custom category name" style="flex:1;padding:0.35rem 0.6rem;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
           <button type="button" onclick="saveCustomSupplyCategory(this)" style="background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.35rem 0.6rem;cursor:pointer;color:#fff;font-size:0.8rem;font-weight:600">Add</button>
         </div>
@@ -4839,7 +4854,7 @@ function _supplyModalHtml(title, saveFunc, vals, multiMode) {
   return `
     <div class="modal-header"><div class="modal-title">${title}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <datalist id="sup-supplier-list">${supplierOpts}</datalist>
-    <div class="row">
+    <div class="row sup-header-row">
       <div class="field"><label>Date *</label><input type="date" id="sup-date" value="${v('date')||new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Supplier</label>
         <div style="display:flex;gap:0.35rem;align-items:center">
