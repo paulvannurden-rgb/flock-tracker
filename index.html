@@ -276,8 +276,21 @@
     <h1>Flock Health Ledger</h1>
     <p id="login-farm-name">Hidden Creek Lambs</p>
     <div class="login-error" id="login-error"></div>
+    <div id="biometric-btn-wrap" style="display:none;margin-bottom:0.75rem">
+      <button class="btn btn-primary" id="biometric-btn" style="width:100%;justify-content:center;background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:1rem" onclick="loginWithBiometric()">
+        <span style="font-size:1.3rem">🔒</span> Sign in with Face ID / Fingerprint
+      </button>
+      <div style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:0.75rem;color:var(--text3)">or</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+    </div>
     <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="Enter flock password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
+    <div id="biometric-setup-wrap" style="display:none;margin-top:0.75rem;text-align:center">
+      <button onclick="registerBiometric()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.8rem;text-decoration:underline">Set up Face ID / Fingerprint for this device</button>
+    </div>
   </div>
 </div>
 
@@ -383,15 +396,134 @@ let confirmingDelete = null;
 function doLogin() {
   const pw = document.getElementById('login-password').value;
   if (pw === FLOCK_PASSWORD) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    init();
+    grantAccess();
+    // After first successful password login, offer to set up biometrics
+    if (window.PublicKeyCredential && !localStorage.getItem('flock_passkey_id')) {
+      setTimeout(() => {
+        const wrap = document.getElementById('biometric-setup-wrap');
+        if (wrap) wrap.style.display = 'block';
+      }, 100);
+    }
   } else {
     const el = document.getElementById('login-error');
     el.textContent = 'Incorrect password. Please try again.';
     el.style.display = 'block';
   }
 }
+
+function grantAccess() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('login-error').style.display = 'none';
+  init();
+}
+
+// ── WEBAUTHN / BIOMETRIC LOGIN ─────────────────────────
+// Uses the browser's built-in WebAuthn API (Face ID on iPhone, fingerprint on Android/Mac)
+// Credentials never leave the device — only a credential ID is stored in localStorage.
+
+const WA_RP_ID = location.hostname || 'localhost';
+const WA_RP_NAME = 'Flock Health Ledger';
+const WA_USER_ID = new TextEncoder().encode('flock-user');
+const WA_USER_NAME = 'flock@hiddenCreek';
+
+async function initBiometricUI() {
+  if (!window.PublicKeyCredential) return; // browser doesn't support WebAuthn
+  const credId = localStorage.getItem('flock_passkey_id');
+  if (credId) {
+    // Credential already registered — show the Face ID button and auto-attempt
+    const wrap = document.getElementById('biometric-btn-wrap');
+    if (wrap) wrap.style.display = 'block';
+    // Auto-attempt on load (feels native — user just sees the Face ID prompt)
+    await loginWithBiometric(true);
+  } else {
+    // No credential yet — show "Set up" link after DOM is ready
+    const setupWrap = document.getElementById('biometric-setup-wrap');
+    if (setupWrap) setupWrap.style.display = 'block';
+  }
+}
+
+async function registerBiometric() {
+  if (!window.PublicKeyCredential) {
+    alert('This browser does not support biometric login.');
+    return;
+  }
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: WA_RP_NAME, id: WA_RP_ID },
+        user: { id: WA_USER_ID, name: WA_USER_NAME, displayName: 'Flock User' },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },   // ES256
+          { type: 'public-key', alg: -257 },  // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform', // built-in sensor (Face ID / Touch ID)
+          userVerification: 'required',
+          residentKey: 'preferred',
+        },
+        timeout: 60000,
+        attestation: 'none',
+      }
+    });
+    // Store the credential ID in localStorage
+    const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    localStorage.setItem('flock_passkey_id', credId);
+    // Show the Face ID button
+    const btnWrap = document.getElementById('biometric-btn-wrap');
+    if (btnWrap) btnWrap.style.display = 'block';
+    const setupWrap = document.getElementById('biometric-setup-wrap');
+    if (setupWrap) setupWrap.style.display = 'none';
+    alert('Face ID / Fingerprint set up! You can now use it to sign in on this device.');
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') {
+      // NotAllowedError = user cancelled — don't show error
+      const el = document.getElementById('login-error');
+      el.textContent = 'Biometric setup failed: ' + (err.message || err.name);
+      el.style.display = 'block';
+    }
+  }
+}
+
+async function loginWithBiometric(silent) {
+  const credIdStr = localStorage.getItem('flock_passkey_id');
+  if (!credIdStr) return;
+  try {
+    const credIdBytes = Uint8Array.from(atob(credIdStr), c => c.charCodeAt(0));
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        rpId: WA_RP_ID,
+        allowCredentials: [{ type: 'public-key', id: credIdBytes }],
+        userVerification: 'required',
+        timeout: 60000,
+      }
+    });
+    // Success — grant access
+    grantAccess();
+  } catch (err) {
+    if (!silent && err.name !== 'NotAllowedError') {
+      const el = document.getElementById('login-error');
+      el.textContent = 'Biometric login failed. Please use your password.';
+      el.style.display = 'block';
+    }
+    // On failure or cancel, fall through to password login (already visible)
+  }
+}
+
+// Remove stored passkey (user can do this from settings if needed)
+function removeBiometric() {
+  localStorage.removeItem('flock_passkey_id');
+  const btnWrap = document.getElementById('biometric-btn-wrap');
+  if (btnWrap) btnWrap.style.display = 'none';
+  const setupWrap = document.getElementById('biometric-setup-wrap');
+  if (setupWrap) setupWrap.style.display = 'block';
+  toast('Face ID removed from this device');
+}
+
 // Farm profile stored in localStorage
 function getFarmProfile() {
   try {
@@ -440,6 +572,17 @@ function openFarmSettings() {
     </div>
     <div class="field"><label>Website</label><input id="fs-website" value="${p.website||''}" placeholder="www.example.com"></div>
     <div class="field"><label>Invoice Notes / Payment Terms</label><textarea id="fs-terms" rows="2" placeholder="e.g. Payment due within 30 days. Checks payable to Hidden Creek Lambs.">${p.terms||''}</textarea></div>
+
+    ${window.PublicKeyCredential ? `<div style="border-top:1px solid var(--border);margin-top:0.75rem;padding-top:0.75rem">
+      <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Biometric Login</div>
+      ${localStorage.getItem('flock_passkey_id')
+        ? `<div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:0.82rem;color:var(--text)">✅ Face ID / Fingerprint active on this device</span>
+            <button onclick="removeBiometric();closeModal();" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);padding:0.3rem 0.6rem;cursor:pointer;font-size:0.78rem">Remove</button>
+           </div>`
+        : `<button onclick="closeModal();setTimeout(()=>{document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';setTimeout(registerBiometric,100)},100)" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:var(--radius-sm);padding:0.3rem 0.6rem;cursor:pointer;font-size:0.78rem">Set up Face ID / Fingerprint</button>`
+      }
+    </div>` : ''}
 
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -11197,4 +11340,19 @@ function calcExpectedLamb() {
   const el = document.getElementById('br-expected');
   if (el) el.value = d.toISOString().slice(0, 10);
 }
+
+// ── STARTUP ───────────────────────────────────────────
+// Set farm name on login screen from localStorage and init biometric UI
+(function startup() {
+  try {
+    const p = JSON.parse(localStorage.getItem('flock_farm_profile') || '{}');
+    const name = p.type === 'business' ? (p.bizname || p.name || '') : (p.name || '');
+    if (name) {
+      const el = document.getElementById('login-farm-name');
+      if (el) el.textContent = name;
+    }
+  } catch(e) {}
+  // Init biometric UI (shows Face ID button if credential registered)
+  initBiometricUI().catch(() => {});
+})();
 </script>
