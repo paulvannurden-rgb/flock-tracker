@@ -4796,14 +4796,28 @@ function filterSupplyLog() {
       <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Overview${item||supplier||cat||from||to?' (filtered)':''}</div>
       <div class="flock-grid" style="margin-bottom:1.25rem">
         ${predictions.map(p => `
-          <div class="card" style="padding:1rem">
-            <div style="font-weight:700;color:var(--text)">${p.item}</div>
-            <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${p.category||''}</div>
-            <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.2rem">
-              <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total purchased</span><span style="font-weight:600">${p.totalQty} ${p.unit||''}</span></div>
-              <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total spent</span><span style="font-weight:600;color:var(--accent)">$${p.totalCost.toFixed(0)}</span></div>
-              ${p.avgDays?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Avg reorder</span><span style="font-weight:600">every ${p.avgDays}d</span></div>`:''}
-              ${p.lastDate?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Last purchased</span><span style="font-weight:600">${p.lastDate}</span></div>`:''}
+          <div class="card" style="padding:0.75rem">
+            <div style="font-weight:700;color:var(--text);font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.item}</div>
+            <div style="font-size:0.68rem;color:var(--text3);margin-top:0.1rem;margin-bottom:0.5rem">${p.category||''}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">
+              <div>
+                <div style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Purchased</div>
+                <div style="font-size:0.82rem;font-weight:700;color:var(--text)">${p.totalQty} <span style="font-weight:400;font-size:0.72rem">${p.unit||''}</span></div>
+              </div>
+              <div>
+                <div style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Total spent</div>
+                <div style="font-size:0.82rem;font-weight:700;color:var(--accent)">$${p.totalCost.toFixed(0)}</div>
+              </div>
+              ${p.avgDays?`
+              <div>
+                <div style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Avg reorder</div>
+                <div style="font-size:0.82rem;font-weight:700;color:var(--text)">${p.avgDays}d</div>
+              </div>` : ''}
+              ${p.lastDate?`
+              <div>
+                <div style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Last bought</div>
+                <div style="font-size:0.78rem;font-weight:600;color:var(--text2)">${p.lastDate}</div>
+              </div>` : ''}
             </div>
           </div>`).join('')}
       </div>` : '';
