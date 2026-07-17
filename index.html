@@ -212,10 +212,10 @@
     .sup-header-row .field { width: 100% !important; }
 
     /* Inputs and selects: full width, no fixed max-width overrides
-       Excludes bulk weight rows which handle their own layout */
-    .modal input[style*="max-width"]:not(#bulk-weight-rows input),
+       Excludes checkboxes, radios, bulk weight rows, and intentionally small inputs */
+    .modal input[style*="max-width"]:not([type="checkbox"]):not([type="radio"]):not(#bulk-weight-rows input),
     .modal select[style*="max-width"]:not(#bulk-weight-rows select),
-    .modal input[style*="width:"]:not(#bulk-weight-rows input):not([placeholder="lbs"]):not([placeholder="HH:MM"]) {
+    .modal input[style*="width:"]:not([type="checkbox"]):not([type="radio"]):not(#bulk-weight-rows input):not([placeholder="lbs"]):not([placeholder="HH:MM"]) {
       max-width: 100% !important;
       width: 100% !important;
       box-sizing: border-box;
@@ -4723,7 +4723,6 @@ async function renderSupplies() {
       <button class="btn btn-secondary btn-sm" onclick="clearSupplyFilters()">Clear</button>
       <span id="sup-filter-count" style="font-size:0.78rem;color:var(--text3);margin-left:0.25rem"></span>
     </div>
-    <div id="sup-overview"></div>
     <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Purchase Log</div>
     <div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
@@ -4767,58 +4766,6 @@ function filterSupplyLog() {
   // Update count
   const countEl = document.getElementById('sup-filter-count');
   if (countEl) countEl.textContent = filtered.length < logs.length ? `${filtered.length} of ${logs.length} shown` : '';
-
-  // Rebuild overview from filtered logs
-  const today = new Date().toISOString().slice(0,10);
-  const byItem = {};
-  filtered.forEach(l => {
-    if (!byItem[l.item]) byItem[l.item] = { item: l.item, category: l.category, unit: l.unit, entries: [] };
-    byItem[l.item].entries.push(l);
-  });
-  const predictions = Object.values(byItem).map(it => {
-    const sorted = [...it.entries].sort((a,b) => a.date > b.date ? 1 : -1);
-    const totalQty = sorted.reduce((s,e) => s+(e.quantity||0), 0);
-    const totalCost = sorted.reduce((s,e) => s+(e.cost||0), 0);
-    let avgDays=null, nextPurchase=null;
-    if (sorted.length >= 2) {
-      const gaps = [];
-      for (let i=1; i<sorted.length; i++) {
-        const d1=new Date(sorted[i-1].date), d2=new Date(sorted[i].date);
-        gaps.push((d2-d1)/(1000*60*60*24));
-      }
-      avgDays = Math.round(gaps.reduce((s,g)=>s+g,0)/gaps.length);
-      nextPurchase = new Date(new Date(sorted[sorted.length-1].date).getTime()+avgDays*24*60*60*1000).toISOString().slice(0,10);
-    }
-    return {...it, totalQty, totalCost, avgDays, nextPurchase, lastDate: sorted[sorted.length-1]?.date};
-  });
-  const dueSoon = predictions.filter(p => p.nextPurchase && p.nextPurchase <= today);
-
-  const overviewEl = document.getElementById('sup-overview');
-  if (overviewEl) {
-    overviewEl.innerHTML = `
-      ${dueSoon.length>0?`<div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:1.25rem">
-        <div style="font-size:0.78rem;font-weight:700;color:#92560a;margin-bottom:0.4rem">⚠️ Due for Reorder (${dueSoon.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:0.4rem">${dueSoon.map(p=>`<span style="background:#fef3cd;border:1px solid #fcd68a;border-radius:0.25rem;padding:0.2rem 0.6rem;font-size:0.78rem;font-weight:600;color:#92560a">${p.item}</span>`).join('')}</div>
-      </div>`:''}
-      ${predictions.length>0?`
-        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">Overview${item||supplier||cat||from||to?' (filtered)':''}</div>
-        <div class="flock-grid" style="margin-bottom:1.25rem">
-          ${predictions.map(p => {
-            const isDue = p.nextPurchase && p.nextPurchase <= today;
-            const isSoon = p.nextPurchase && p.nextPurchase > today && p.nextPurchase <= new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
-            return `<div class="card" style="padding:1rem${isDue?';border-color:#fcd68a':isSoon?';border-color:#fde68a':''}">
-              <div style="font-weight:700;color:var(--text)">${p.item}</div>
-              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${p.category||''}</div>
-              <div style="margin-top:0.6rem;display:flex;flex-direction:column;gap:0.2rem">
-                <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total purchased</span><span style="font-weight:600">${p.totalQty} ${p.unit||''}</span></div>
-                <div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Total spent</span><span style="font-weight:600;color:var(--accent)">$${p.totalCost.toFixed(0)}</span></div>
-                ${p.avgDays?`<div style="display:flex;justify-content:space-between;font-size:0.8rem"><span style="color:var(--text3)">Avg reorder</span><span style="font-weight:600">every ${p.avgDays}d</span></div>`:''}
-                ${p.nextPurchase?`<div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-top:0.1rem"><span style="color:var(--text3)">Next est.</span><span style="font-weight:600;color:${isDue?'#dc2626':isSoon?'#d97706':'var(--text)'}">${p.nextPurchase}${isDue?' ⚠️':isSoon?' 🔔':''}</span></div>`:''}
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`:''}`;
-  }
 
   // Rebuild log table
   const tbody = document.getElementById('sup-log-tbody');
@@ -7778,13 +7725,13 @@ async function openBulkWeight() {
   showModal(`
     <div class="modal-header"><div class="modal-title">⚖️ Bulk Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Enter weights for multiple animals. Leave blank to skip.</div>
-    <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0.4rem;margin-bottom:0.5rem;align-items:center">
-      <input type="date" id="bw-global-date" value="${defaultDate}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
-      <input type="text" id="bw-global-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
-      <select id="bw-global-ampm" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem">
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;align-items:center">
+      <input type="date" id="bw-global-date" value="${defaultDate}" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
+      <input type="text" id="bw-global-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:80px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
+      <select id="bw-global-ampm" style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem">
         <option>AM</option><option>PM</option>
       </select>
-      <button class="btn btn-secondary btn-sm" onclick="applyGlobalWeightDate()" title="Copy this date to all individual rows below">Apply date to all</button>
+      <button class="btn btn-secondary btn-sm" onclick="applyGlobalWeightDate()" title="Copy this date to all individual rows below" style="flex-shrink:0">Apply date to all</button>
     </div>
     <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.5rem;align-items:center">
       <input id="bw-search" placeholder="Search..." oninput="bwFilterList()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
