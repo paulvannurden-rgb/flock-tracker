@@ -193,6 +193,54 @@
     main { padding: 0.75rem; padding-top: 1rem; }
     .flock-grid { grid-template-columns: 1fr 1fr; }
     header { flex-wrap: wrap; gap: 0.5rem; }
+
+    /* ── MODAL MOBILE FIXES ──────────────────────────── */
+    /* Tighten overlay padding so modal gets full width */
+    .modal-overlay { padding: 0.5rem; align-items: flex-end; }
+    /* Modal: full width, taller max-height, less padding */
+    .modal {
+      padding: 1rem;
+      max-height: 92vh;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0; /* sheet-style from bottom */
+    }
+    /* Stack side-by-side .row fields vertically on small screens */
+    .row { flex-direction: column; gap: 0; }
+    .row .field { min-width: 0; width: 100%; }
+
+    /* Inputs and selects: full width, no fixed max-width overrides */
+    .modal input[style*="max-width"],
+    .modal select[style*="max-width"],
+    .modal input[style*="width:"] {
+      max-width: 100% !important;
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+    /* Date inputs specifically — prevent overflow */
+    .modal input[type="date"] {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    /* Supply row product cards: stack unit + custom wrap */
+    .sup-row .row { flex-direction: column; gap: 0; }
+    .sup-row .sup-conversion-row { flex-direction: column; gap: 0; }
+    /* Protocol step rows: stack the fields */
+    [data-step-row] > div:first-child { flex-wrap: wrap; gap: 0.4rem; }
+    [data-step-row] .ps-prod-row,
+    [data-step-row] .ps-prod-row2 { flex-wrap: wrap; }
+    /* Group member manage modal: stack tab panels */
+    .modal-actions { flex-wrap: wrap; }
+    .modal-actions .btn { flex: 1; min-width: 0; text-align: center; }
+    /* Search bar filter buttons: allow wrap and shrink text */
+    .search-bar { flex-wrap: wrap; gap: 0.4rem; }
+    .search-bar > div { flex-wrap: wrap; gap: 0.3rem; }
+    /* Multi-select filter dropdown: open left-aligned, cap width */
+    .flock-ms-panel { max-width: calc(100vw - 2rem) !important; }
+    /* Complete Plan table: scroll horizontally rather than overflow */
+    .modal table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+  /* Flock/AI ram card grids: single column on very small screens */
+  @media (max-width: 480px) {
+    .flock-grid { grid-template-columns: 1fr; }
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
