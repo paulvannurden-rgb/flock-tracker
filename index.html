@@ -1285,6 +1285,7 @@ async function renderBreedingTab(el) {
               <div style="font-size:0.78rem;color:var(--text3);margin-top:0.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
                 ${r.breeding_date?`<span>🗓 Bred: ${r.breeding_date}</span>`:''}
                 ${r.expected_lamb_date?`<span>📅 Expected: ${r.expected_lamb_date}</span>`:''}
+                ${r.ai_sire_id && r.semen_type ? (r.semen_type==='frozen' ? `<span style="font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️ Frozen</span>` : `<span style="font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱 Fresh</span>`) : ''}
                 ${(()=>{ const ob = r.outcome==='Confirmed Pregnant'?'badge-green':r.outcome==='Lamb Born'?'badge-blue':r.outcome==='Not Pregnant'||r.outcome==='Failed'?'badge-red':'badge-gray'; return r.outcome&&r.outcome!=='Pending'?`<span class="badge ${ob}" style="font-size:0.65rem">${r.outcome}</span>`:''; })()}
               </div>
               ${r.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;font-style:italic">${r.notes}</div>`:''}
@@ -1490,7 +1491,10 @@ async function renderEmbryoTab(el) {
         html += `<div class="card" style="margin-bottom:0.75rem">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
-              <div style="font-weight:600;color:var(--text)">Flush: ${f.flush_date}</div>
+              <div style="font-weight:600;color:var(--text);display:flex;align-items:center;gap:0.4rem">
+                Flush: ${f.flush_date}
+                ${f.ai_sire_id && f.semen_type ? (f.semen_type==='frozen' ? `<span style="font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️ Frozen</span>` : `<span style="font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱 Fresh</span>`) : ''}
+              </div>
               <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.flush_type?' · '+f.flush_type:''}${f.notes?' — '+f.notes:''}</div>
               ${(()=>{ const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null); const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||null); return sireName ? `<div style="font-size:0.82rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
             </div>
@@ -3582,7 +3586,10 @@ function renderBreedingTable(allRecs, filters) {
                     <span style="font-weight:600;color:var(--accent);cursor:pointer" onclick="showLamb('${r.lamb_id}')">${lamb?.name||'Unknown'}</span>
                     ${lamb?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${lamb.ear_tag}</span>`:''}
                   </td>
-                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}</td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    ${sireName}
+                    ${r.ai_sire_id && r.semen_type ? (r.semen_type==='frozen' ? `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️</span>` : `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱</span>`) : ''}
+                  </td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${r.breeding_date||'—'}</td>
                   <td style="padding:0.75rem 1rem;white-space:nowrap">
                     <span style="color:${isOverdue?'#dc2626':'var(--text2)'};font-weight:${isOverdue?'600':'400'}">${r.expected_lamb_date||'—'}</span>
@@ -3870,6 +3877,7 @@ function renderFlushTable(allRecs, allTransfers, filters) {
                   <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${f.flush_date||'—'}</td>
                   <td style="padding:0.75rem 1rem">
                     <span style="background:${typeBg};color:${typeColor};padding:0.2rem 0.6rem;border-radius:1rem;font-size:0.75rem;font-weight:600">${flushType}</span>
+                    ${f.ai_sire_id && f.semen_type ? (f.semen_type==='frozen' ? `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️</span>` : `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱</span>`) : ''}
                   </td>
                   <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_collected ?? '—'}</td>
                   <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_transferred ?? '—'}</td>
@@ -4039,9 +4047,18 @@ async function renderAnalytics() {
   const defaultFrom = new Date(new Date().setFullYear(new Date().getFullYear()-2)).toISOString().slice(0,10);
 
   // Render with filters
-  function buildAnalyticsHTML(fromDate, toDate) {
-    const filterBreed = (breedingRecs||[]).filter(r => (!fromDate||r.breeding_date>=fromDate) && (!toDate||r.breeding_date<=toDate));
-    const filterTransfer = (transfers||[]).filter(t => (!fromDate||t.implant_date>=fromDate) && (!toDate||t.implant_date<=toDate));
+  function buildAnalyticsHTML(fromDate, toDate, semenType) {
+    let filterBreed = (breedingRecs||[]).filter(r => (!fromDate||r.breeding_date>=fromDate) && (!toDate||r.breeding_date<=toDate));
+    let filterTransfer = (transfers||[]).filter(t => (!fromDate||t.implant_date>=fromDate) && (!toDate||t.implant_date<=toDate));
+
+    // Apply semen type filter — only affects AI sire records (natural service has no type)
+    if (semenType) {
+      filterBreed = filterBreed.filter(r => !r.ai_sire_id || r.semen_type === semenType);
+      filterTransfer = filterTransfer.filter(t => {
+        const flush = (flushes||[]).find(f => f.id === t.flush_id);
+        return !flush?.ai_sire_id || flush?.semen_type === semenType;
+      });
+    }
 
     const conceivedOutcomes = ['Confirmed Pregnant','Lamb Born'];
     const decidedOutcomes = ['Confirmed Pregnant','Lamb Born','Not Pregnant','Failed'];
@@ -4270,14 +4287,21 @@ async function renderAnalytics() {
     return `
       <div class="section-header"><div class="section-title" style="font-size:1.15rem">📈 Analytics</div></div>
 
-      <!-- Date Range Filter -->
+      <!-- Date Range + Semen Type Filter -->
       <div class="card" style="margin-bottom:1.25rem;padding:1rem">
         <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
           <div class="field" style="margin:0;flex:1;min-width:130px"><label>From</label><input type="date" id="analytics-from" value="${fromDate}" onchange="applyAnalyticsFilter()"></div>
           <div class="field" style="margin:0;flex:1;min-width:130px"><label>To</label><input type="date" id="analytics-to" value="${toDate}" onchange="applyAnalyticsFilter()"></div>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analytics-from').value='';document.getElementById('analytics-to').value='';applyAnalyticsFilter()">Clear</button>
+          <div class="field" style="margin:0;flex:0 0 auto"><label>Semen Type</label>
+            <select id="analytics-semen-type" onchange="applyAnalyticsFilter()" style="padding:0.4rem 0.6rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+              <option value="">All</option>
+              <option value="frozen" ${window._analyticsSemenType==='frozen'?'selected':''}>❄️ Frozen only</option>
+              <option value="fresh" ${window._analyticsSemenType==='fresh'?'selected':''}>🌱 Fresh only</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analytics-from').value='';document.getElementById('analytics-to').value='';document.getElementById('analytics-semen-type').value='';applyAnalyticsFilter()">Clear</button>
         </div>
-        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">Pending outcomes are excluded from rate calculations.</div>
+        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">Pending outcomes are excluded from rate calculations. Semen type filter applies to AI sire records only.</div>
       </div>
 
       <!-- NEEDS UPDATE -->
@@ -4355,7 +4379,8 @@ async function renderAnalytics() {
   }
 
   window._buildAnalyticsHTML = buildAnalyticsHTML;
-  document.getElementById('main-content').innerHTML = buildAnalyticsHTML(defaultFrom, today);
+  window._analyticsSemenType = window._analyticsSemenType || '';
+  document.getElementById('main-content').innerHTML = buildAnalyticsHTML(defaultFrom, today, window._analyticsSemenType);
 }
 
 function setPendingFilter(mode) {
@@ -4370,9 +4395,11 @@ function setPendingFilter(mode) {
 function applyAnalyticsFilter() {
   const from = document.getElementById('analytics-from')?.value || '';
   const to = document.getElementById('analytics-to')?.value || '';
+  const semenType = document.getElementById('analytics-semen-type')?.value || '';
+  window._analyticsSemenType = semenType;
   if (!window._buildAnalyticsHTML) return;
   const scrollPos = document.getElementById('main-content').scrollTop;
-  document.getElementById('main-content').innerHTML = window._buildAnalyticsHTML(from, to);
+  document.getElementById('main-content').innerHTML = window._buildAnalyticsHTML(from, to, semenType);
   document.getElementById('main-content').scrollTop = scrollPos;
 }
 
@@ -4716,7 +4743,7 @@ async function renderSupplies() {
       <input id="sup-filter-supplier" placeholder="Supplier..." oninput="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:140px">
       <select id="sup-filter-cat" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
         <option value="">All Categories</option>
-        ${SUPPLY_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}
+        ${getSupplyCategories().map(c=>`<option>${c}</option>`).join('')}
       </select>
       <input type="date" id="sup-filter-from" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
       <input type="date" id="sup-filter-to" onchange="filterSupplyLog()" style="padding:0.4rem 0.65rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
@@ -5157,6 +5184,13 @@ function saveCustomSupplyCategory(el) {
   if (sel) sel.value = val;
   const wrap = row.querySelector('.sup-cat-custom-wrap');
   if (wrap) wrap.style.display = 'none';
+  // Also update the filter dropdown if it's on the page
+  const filterSel = document.getElementById('sup-filter-cat');
+  if (filterSel && !filterSel.querySelector(`option[value="${CSS.escape(val)}"]`)) {
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val;
+    filterSel.appendChild(opt);
+  }
   toast(`"${val}" added as a category`);
 }
 
@@ -9415,11 +9449,12 @@ async function openCompletePlan(groupId) {
   const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
   const eweOpts = ewes.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
 
-  function buildRow(i, lambId, aiSireId, sireText, rowType) {
+  function buildRow(i, lambId, aiSireId, sireText, rowType, semenType) {
     const lamb = allLambs.find(l => l.id === lambId);
     const sireSelectId = `cp-sire-${i}`;
     const sireVal = aiSireId ? `ai:${aiSireId}` : '';
     const bgColor = rowType==='recip' ? 'background:#eff6ff' : '';
+    const showSemenType = rowType !== 'recip' && aiSireId;
 
     // Build donor options for recip rows
     const donorOpts = donors.map((d, di) => {
@@ -9450,7 +9485,13 @@ async function openCompletePlan(groupId) {
           <input type="number" id="cp-embryos-${i}" placeholder="# embryos" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:80px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
         </td>` :
         `<td style="padding:0.5rem">
-          <select id="${sireSelectId}" data-sire="${sireVal}" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+          <div style="display:flex;flex-direction:column;gap:0.25rem">
+            <select id="${sireSelectId}" data-sire="${sireVal}" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+            ${showSemenType ? `<select id="cp-semen-type-${i}" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+              <option value="frozen" ${(semenType||'frozen')==='frozen'?'selected':''}>❄️ Frozen</option>
+              <option value="fresh" ${semenType==='fresh'?'selected':''}>🌱 Fresh</option>
+            </select>` : ''}
+          </div>
         </td>
         <td style="padding:0.5rem">
           <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
@@ -9486,7 +9527,7 @@ async function openCompletePlan(groupId) {
     </tr>`;
   }
 
-  const donorRows = donors.map((m, i) => buildRow(i, m.lamb_id, m.ai_sire_id, m.sire_text, 'donor')).join('');
+  const donorRows = donors.map((m, i) => buildRow(i, m.lamb_id, m.ai_sire_id, m.sire_text, 'donor', m.semen_type)).join('');
   const recipRows = recips.map((m, i) => buildRow(`r${i}`, m.lamb_id, null, m.recip_text, 'recip')).join('');
 
   showModal(`
@@ -9767,15 +9808,19 @@ async function confirmCompletePlanDom(groupId) {
       const { sire_id, ai_sire_id } = parseSireSelection(sireVal);
       const date = document.getElementById(`cp-date-${rowId}`)?.value;
       if (isFlush) {
+        const semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
         flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
+          semen_type: semenType,
           embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
           embryos_transferred: parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value)||null,
           _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
       } else {
         const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
+        const semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
         breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
-          breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending' });
+          breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending',
+          semen_type: semenType });
       }
     }
   }
