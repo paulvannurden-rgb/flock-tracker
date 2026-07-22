@@ -2235,6 +2235,44 @@ async function saveCostDesc(btn) {
   setTimeout(() => { btn.style.color = 'var(--text3)'; }, 1500);
 }
 
+// Populate an edit modal's cost section with existing saved costs
+// Clears the blank pre-populated row first, then adds one row per existing cost
+function populateExistingCosts(containerId, costs) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  // Clear the blank row that was pre-added on modal open
+  container.innerHTML = '';
+  if (costs.length === 0) {
+    // No existing costs — add one blank row ready to fill in
+    addCostEntryRow(containerId);
+    return;
+  }
+  costs.forEach(c => {
+    addCostEntryRow(containerId);
+    const rows = container.querySelectorAll('.cost-entry-row');
+    const row = rows[rows.length - 1];
+    if (!row) return;
+    // Set category — try to match existing option, otherwise add it
+    const catSel = row.querySelector('.cer-cat');
+    const cat = c.category || c.description || '';
+    if (catSel) {
+      // Check if option exists
+      const existing = [...catSel.options].find(o => o.value === cat);
+      if (existing) {
+        catSel.value = cat;
+      } else if (cat) {
+        // Add as option before the custom option
+        const opt = document.createElement('option');
+        opt.value = cat; opt.textContent = cat; opt.selected = true;
+        catSel.insertBefore(opt, catSel.lastChild);
+      }
+    }
+    // Set amount
+    const amountEl = row.querySelector('.cer-amount');
+    if (amountEl) amountEl.value = c.amount || '';
+  });
+}
+
 async function saveInlineCostEntryRows(containerId, table, idField, recordId) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -2246,6 +2284,9 @@ async function saveInlineCostEntryRows(containerId, table, idField, recordId) {
     const amount = parseFloat(row.querySelector('.cer-amount')?.value);
     if (cat && amount > 0) inserts.push({ [idField]: recordId, description: cat, category: cat, amount, date });
   });
+  // Delete all existing costs for this record, then re-insert current state
+  // This handles edits and deletions cleanly without needing to track row IDs
+  await db.from(table).delete().eq(idField, recordId);
   if (inserts.length > 0) await db.from(table).insert(inserts);
 }
 
@@ -3718,12 +3759,16 @@ async function saveBreedingGlobal() {
 }
 
 async function openEditBreedingGlobal(recId, lambId) {
-  const { data: rec } = await db.from('breeding_records').select('*').eq('id', recId).single();
+  const [{ data: rec }, { data: costs }] = await Promise.all([
+    db.from('breeding_records').select('*').eq('id', recId).single(),
+    db.from('breeding_costs').select('*').eq('breeding_id', recId).order('date'),
+  ]);
   if (!rec) return;
   // Temporarily set currentLambId so saveBreeding works
   const prevLambId = currentLambId;
   currentLambId = lambId;
   openAddBreeding(rec);
+  setTimeout(() => populateExistingCosts('br-costs', costs || []), 30);
   // Override save button to go back to breeding page
   setTimeout(() => {
     const modal = document.querySelector('.modal');
@@ -4024,12 +4069,16 @@ async function saveFlushGlobal() {
 }
 
 async function openEditFlushGlobal(flushId, donorId) {
-  const { data: flush } = await db.from('embryo_flushes').select('*').eq('id', flushId).single();
+  const [{ data: flush }, { data: costs }] = await Promise.all([
+    db.from('embryo_flushes').select('*').eq('id', flushId).single(),
+    db.from('flush_costs').select('*').eq('flush_id', flushId).order('date'),
+  ]);
   if (!flush) return;
   const prevLambId = currentLambId;
   currentLambId = donorId;
   showFlushModal(flush);
   setTimeout(() => {
+    populateExistingCosts('fl-costs', costs || []);
     const modal = document.querySelector('.modal');
     if (modal) {
       const btn = modal.querySelector('.btn-primary');
@@ -7104,8 +7153,15 @@ function updateBreedingSemenOpts() {
 }
 
 async function openEditBreeding(id) {
-  const { data } = await db.from('breeding_records').select('*').eq('id', id).single();
-  if (data) openAddBreeding(data);
+  const [{ data }, { data: costs }] = await Promise.all([
+    db.from('breeding_records').select('*').eq('id', id).single(),
+    db.from('breeding_costs').select('*').eq('breeding_id', id).order('date'),
+  ]);
+  if (data) {
+    openAddBreeding(data);
+    // After modal renders, populate existing costs
+    setTimeout(() => populateExistingCosts('br-costs', costs || []), 30);
+  }
 }
 async function saveBreeding(id) {
   const { sire_id, ai_sire_id } = parseSireSelection(v('br-sire-id'));
@@ -7132,8 +7188,14 @@ async function saveBreeding(id) {
 function openAddFlush() { showFlushModal(null); }
 
 async function openEditFlush(id) {
-  const { data } = await db.from('embryo_flushes').select('*').eq('id', id).single();
-  if (data) showFlushModal(data);
+  const [{ data }, { data: costs }] = await Promise.all([
+    db.from('embryo_flushes').select('*').eq('id', id).single(),
+    db.from('flush_costs').select('*').eq('flush_id', id).order('date'),
+  ]);
+  if (data) {
+    showFlushModal(data);
+    setTimeout(() => populateExistingCosts('fl-costs', costs || []), 30);
+  }
 }
 
 function showFlushModal(flush) {
