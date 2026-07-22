@@ -1495,7 +1495,7 @@ async function renderEmbryoTab(el) {
                 Flush: ${f.flush_date}
                 ${f.ai_sire_id && f.semen_type ? (f.semen_type==='frozen' ? `<span style="font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️ Frozen</span>` : `<span style="font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱 Fresh</span>`) : ''}
               </div>
-              <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.flush_type?' · '+f.flush_type:''}${f.notes?' — '+f.notes:''}</div>
+              <div style="font-size:0.82rem;color:var(--text3);margin-top:0.2rem">${f.embryos_collected||0} collected${f.embryos_transferred!=null?' · '+f.embryos_transferred+' transferred':''}${f.embryos_frozen?' · '+f.embryos_frozen+' frozen':''}${f.embryos_unfertilized?' · '+f.embryos_unfertilized+' unfert.':''}${f.embryos_degenerate?' · '+f.embryos_degenerate+' degen.':''}${f.flush_type?' · '+f.flush_type:''}${f.notes?' — '+f.notes:''}</div>
               ${(()=>{ const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null); const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||null); return sireName ? `<div style="font-size:0.82rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
             </div>
             <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
@@ -3950,6 +3950,9 @@ function renderFlushTable(allRecs, allTransfers, filters) {
               <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Type</th>
               <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Collected</th>
               <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Transferred</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Frozen</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Unfert.</th>
+              <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Degen.</th>
               <th style="padding:0.75rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Notes</th>
               <th style="padding:0.75rem 1rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)"></th>
             </tr>
@@ -3976,6 +3979,9 @@ function renderFlushTable(allRecs, allTransfers, filters) {
                   </td>
                   <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_collected ?? '—'}</td>
                   <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:var(--text)">${f.embryos_transferred ?? '—'}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center;font-weight:600;color:#1e40af">${f.embryos_frozen ?? '—'}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center;color:var(--text3)">${f.embryos_unfertilized ?? '—'}</td>
+                  <td style="padding:0.75rem 1rem;text-align:center;color:var(--text3)">${f.embryos_degenerate ?? '—'}</td>
                   <td style="padding:0.75rem 1rem;color:var(--text3);font-size:0.82rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes||''}</td>
                   <td style="padding:0.75rem 1rem;text-align:center">
                     <div style="display:flex;gap:0.35rem;justify-content:center">
@@ -4039,9 +4045,21 @@ function openAddFlushGlobal() {
       <div class="field"><label>Flush Date *</label><input type="date" id="gfl-date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Flush Type</label><select id="gfl-type"><option>MOET</option><option>IVF</option></select></div>
     </div>
-    <div class="row">
-      <div class="field"><label>Embryos Collected</label><input type="number" id="gfl-collected" placeholder="e.g. 8"></div>
-      <div class="field"><label>Embryos Transferred</label><input type="number" id="gfl-transferred" placeholder="e.g. 6"></div>
+    <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem">Embryo Results</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.35rem">
+      <div class="field" style="margin:0"><label>Collected</label><input type="number" id="gfl-collected" placeholder="0" oninput="updateGflBalance()"></div>
+      <div class="field" style="margin:0"><label>Transferred</label><input type="number" id="gfl-transferred" placeholder="0" oninput="updateGflBalance()"></div>
+      <div class="field" style="margin:0"><label>Frozen</label><input type="number" id="gfl-frozen" placeholder="0" oninput="updateGflBalance()"></div>
+      <div class="field" style="margin:0"><label>Unfertilized</label><input type="number" id="gfl-unfertilized" placeholder="0" oninput="updateGflBalance()"></div>
+      <div class="field" style="margin:0"><label>Degenerative</label><input type="number" id="gfl-degenerate" placeholder="0" oninput="updateGflBalance()"></div>
+    </div>
+    <div id="gfl-balance" style="font-size:0.78rem;margin-bottom:0.5rem"></div>
+    <div id="gfl-inventory-wrap" style="display:none;margin-bottom:0.75rem">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.84rem;color:var(--text);margin-bottom:0.4rem">
+        <input type="checkbox" id="gfl-add-inventory" checked style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+        Add frozen embryos to inventory
+      </label>
+      <div class="field" style="margin:0"><label>Storage Location <span style="font-size:0.72rem;color:var(--text3);font-weight:400">(optional)</span></label><input id="gfl-embryo-location" placeholder="e.g. Tank A, Goblet 3"></div>
     </div>
     <div class="field"><label>Sire</label><select id="gfl-sire-id" onchange="updateGflSemenOpts()">${sireOpts}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="gfl-sire-text" placeholder="Sire name or ID"></div>
@@ -4107,22 +4125,25 @@ async function saveFlushGlobal() {
   const semenType = ai_sire_id ? (document.querySelector('input[name="gfl-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('gfl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('gfl-straws-used')) || 0) : 0;
-  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, embryos_frozen: v('gfl-frozen') ? parseInt(v('gfl-frozen')) : null, embryos_unfertilized: v('gfl-unfertilized') ? parseInt(v('gfl-unfertilized')) : null, embryos_degenerate: v('gfl-degenerate') ? parseInt(v('gfl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   const { data } = await db.from('embryo_flushes').insert(payload).select().single();
   if (ai_sire_id && data?.id && semenType === 'frozen') {
     if (semenLoc && strawsUsed > 0) await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', data.id);
   }
   // Save inline costs
   if (data?.id) await saveInlineCosts('gfl-costs', 'flush_costs', 'flush_id', data.id);
+  const addToInv = document.getElementById('gfl-add-inventory')?.checked;
+  if (data?.id && payload.embryos_frozen > 0 && addToInv) await syncFrozenEmbryoInventory(data.id, payload, payload.embryos_frozen, document.getElementById('gfl-embryo-location')?.value?.trim()||null);
   toast('Flush record saved');
   closeModal();
   renderFlushes();
 }
 
 async function openEditFlushGlobal(flushId, donorId) {
-  const [{ data: flush }, { data: costs }] = await Promise.all([
+  const [{ data: flush }, { data: costs }, { data: invEntry }] = await Promise.all([
     db.from('embryo_flushes').select('*').eq('id', flushId).single(),
     db.from('flush_costs').select('*').eq('flush_id', flushId).order('date'),
+    db.from('embryo_inventory').select('location').eq('flush_id', flushId).maybeSingle(),
   ]);
   if (!flush) return;
   const prevLambId = currentLambId;
@@ -4130,6 +4151,11 @@ async function openEditFlushGlobal(flushId, donorId) {
   showFlushModal(flush);
   setTimeout(() => {
     populateExistingCosts('fl-costs', costs || []);
+    updateFlushBalance();
+    if (invEntry?.location) {
+      const locEl = document.getElementById('fl-embryo-location');
+      if (locEl) locEl.value = invEntry.location;
+    }
     const modal = document.querySelector('.modal');
     if (modal) {
       const btn = modal.querySelector('.btn-primary');
@@ -7266,13 +7292,21 @@ async function saveBreeding(id) {
 function openAddFlush() { showFlushModal(null); }
 
 async function openEditFlush(id) {
-  const [{ data }, { data: costs }] = await Promise.all([
+  const [{ data }, { data: costs }, { data: invEntry }] = await Promise.all([
     db.from('embryo_flushes').select('*').eq('id', id).single(),
     db.from('flush_costs').select('*').eq('flush_id', id).order('date'),
+    db.from('embryo_inventory').select('location').eq('flush_id', id).maybeSingle(),
   ]);
   if (data) {
     showFlushModal(data);
-    setTimeout(() => populateExistingCosts('fl-costs', costs || []), 30);
+    setTimeout(() => {
+      populateExistingCosts('fl-costs', costs || []);
+      updateFlushBalance();
+      if (invEntry?.location) {
+        const locEl = document.getElementById('fl-embryo-location');
+        if (locEl) locEl.value = invEntry.location;
+      }
+    }, 30);
   }
 }
 
@@ -7292,9 +7326,21 @@ function showFlushModal(flush) {
         <option ${flush?.flush_type==='IVF'?'selected':''}>IVF</option>
       </select></div>
     </div>
-    <div class="row">
-      <div class="field"><label>Embryos Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="e.g. 8"></div>
-      <div class="field"><label>Embryos Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="e.g. 6"></div>
+    <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem">Embryo Results</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.35rem">
+      <div class="field" style="margin:0"><label>Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+      <div class="field" style="margin:0"><label>Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+      <div class="field" style="margin:0"><label>Frozen</label><input type="number" id="fl-frozen" value="${flush?.embryos_frozen||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+      <div class="field" style="margin:0"><label>Unfertilized</label><input type="number" id="fl-unfertilized" value="${flush?.embryos_unfertilized||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+      <div class="field" style="margin:0"><label>Degenerative</label><input type="number" id="fl-degenerate" value="${flush?.embryos_degenerate||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+    </div>
+    <div id="fl-balance" style="font-size:0.78rem;color:var(--text3);margin-bottom:0.5rem"></div>
+    <div id="fl-inventory-wrap" style="display:none;margin-bottom:0.75rem">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.84rem;color:var(--text);margin-bottom:0.4rem">
+        <input type="checkbox" id="fl-add-inventory" ${flush?.embryos_frozen>0?'checked':''} style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+        Add frozen embryos to inventory
+      </label>
+      <div class="field" style="margin:0"><label>Storage Location <span style="font-size:0.72rem;color:var(--text3);font-weight:400">(optional)</span></label><input id="fl-embryo-location" value="${flush?.embryo_location||''}" placeholder="e.g. Tank A, Goblet 3"></div>
     </div>
     <div class="field"><label>Sire</label><select id="fl-sire-id" onchange="updateFlushSemenOpts()">${sireOptions(currentSire)}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="fl-sire-text" value="${flush?.sire_text||''}" placeholder="Sire name or ID"></div>
@@ -7361,7 +7407,7 @@ async function saveFlush(id) {
   const semenType = ai_sire_id ? (document.querySelector('input[name="fl-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('fl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('fl-straws-used')) || 0) : 0;
-  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   if (id) {
     const { data: old } = await db.from('embryo_flushes').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('embryo_flushes').update(payload).eq('id', id);
@@ -7371,6 +7417,8 @@ async function saveFlush(id) {
     if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
       await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', id);
     }
+    const addToInvEdit = document.getElementById('fl-add-inventory')?.checked;
+    await syncFrozenEmbryoInventory(id, payload, addToInvEdit ? (payload.embryos_frozen || 0) : 0, document.getElementById('fl-embryo-location')?.value?.trim()||null);
     await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', id);
     toast('Flush updated');
   } else {
@@ -7380,6 +7428,8 @@ async function saveFlush(id) {
       await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', savedId);
     }
     if (savedId) await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', savedId);
+    const addToInv = document.getElementById('fl-add-inventory')?.checked;
+    if (savedId && payload.embryos_frozen > 0 && addToInv) await syncFrozenEmbryoInventory(savedId, payload, payload.embryos_frozen, document.getElementById('fl-embryo-location')?.value?.trim()||null);
     toast('Flush recorded');
   }
   closeModal(); loadLambTab();
@@ -8662,6 +8712,7 @@ async function renderEmbryoInventory() {
       <td style="padding:0.65rem 0.75rem;text-align:center">
         <span style="font-size:1.1rem;font-weight:700;color:#1d4ed8">${item.quantity}</span>
       </td>
+      <td style="padding:0.65rem 0.75rem;font-size:0.82rem;color:var(--text3)">${item.location||'—'}</td>
       <td style="padding:0.65rem 0.75rem;font-size:0.82rem;color:var(--text3)">${item.grade||'—'}</td>
       <td style="padding:0.65rem 0.75rem;font-size:0.82rem;color:var(--text3)">${item.notes||''}</td>
       <td style="padding:0.65rem 0.75rem">
@@ -8701,6 +8752,7 @@ async function renderEmbryoInventory() {
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Sire</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Flush Date</th>
           <th style="padding:0.6rem 0.75rem;text-align:center;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Qty</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Location</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Grade</th>
           <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
           <th style="padding:0.6rem 0.75rem"></th>
@@ -8725,9 +8777,10 @@ function openAddInventoryItem() {
       <div class="field"><label>Quantity</label><input type="number" id="ei-qty" min="1" placeholder="e.g. 6"></div>
     </div>
     <div class="row">
+      <div class="field"><label>Location</label><input id="ei-location" placeholder="e.g. Tank A, Goblet 3"></div>
       <div class="field"><label>Grade</label><input id="ei-grade" placeholder="e.g. Excellent, Good"></div>
-      <div class="field"><label>Notes</label><input id="ei-notes" placeholder="Optional"></div>
     </div>
+    <div class="field"><label>Notes</label><input id="ei-notes" placeholder="Optional"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveInventoryItem()">Save</button>
@@ -8745,6 +8798,7 @@ async function saveInventoryItem() {
     donor_id: donorId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
     quantity: qty,
     date_frozen: document.getElementById('ei-date')?.value||null,
+    location: document.getElementById('ei-location')?.value?.trim()||null,
     grade: document.getElementById('ei-grade')?.value?.trim()||null,
     notes: document.getElementById('ei-notes')?.value?.trim()||null,
   });
@@ -8763,9 +8817,10 @@ async function openEditInventoryItem(id) {
       <div class="field"><label>Quantity</label><input type="number" id="ei-qty" value="${item.quantity||''}" min="1"></div>
     </div>
     <div class="row">
+      <div class="field"><label>Location</label><input id="ei-location" value="${item.location||''}" placeholder="e.g. Tank A, Goblet 3"></div>
       <div class="field"><label>Grade</label><input id="ei-grade" value="${item.grade||''}" placeholder="e.g. Excellent"></div>
-      <div class="field"><label>Notes</label><input id="ei-notes" value="${item.notes||''}"></div>
     </div>
+    <div class="field"><label>Notes</label><input id="ei-notes" value="${item.notes||''}"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveEditInventoryItem('${id}')">Save</button>
@@ -8778,6 +8833,7 @@ async function saveEditInventoryItem(id) {
   await db.from('embryo_inventory').update({
     quantity: qty,
     date_frozen: document.getElementById('ei-date')?.value||null,
+    location: document.getElementById('ei-location')?.value?.trim()||null,
     grade: document.getElementById('ei-grade')?.value?.trim()||null,
     notes: document.getElementById('ei-notes')?.value?.trim()||null,
   }).eq('id', id);
@@ -9799,6 +9855,14 @@ async function openCompletePlan(groupId) {
                     <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Frozen</span>
                     <input type="number" id="cp-frozen-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:62px;padding:0.25rem 0.35rem;font-size:0.82rem;background:#eff6ff;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
                   </div>
+                  <div style="display:flex;flex-direction:column;gap:0.1rem">
+                    <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Unfert.</span>
+                    <input type="number" id="cp-unfertilized-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:58px;padding:0.25rem 0.35rem;font-size:0.82rem;background:#fefce8;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:0.1rem">
+                    <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Degen.</span>
+                    <input type="number" id="cp-degenerate-${i}" min="0" placeholder="0" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:58px;padding:0.25rem 0.35rem;font-size:0.82rem;background:#fef2f2;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                  </div>
                 </div>
                 <div id="cp-balance-${i}" style="font-size:0.68rem;color:var(--text3);margin-top:0.2rem"></div>
               </div>`}
@@ -9854,6 +9918,58 @@ async function openCompletePlan(groupId) {
 }
 
 let _cpNextRow = 0;
+function updateFlushBalance() {
+  const collected = parseInt(document.getElementById('fl-count')?.value)||0;
+  const transferred = parseInt(document.getElementById('fl-transferred')?.value)||0;
+  const frozen = parseInt(document.getElementById('fl-frozen')?.value)||0;
+  const unfert = parseInt(document.getElementById('fl-unfertilized')?.value)||0;
+  const degen = parseInt(document.getElementById('fl-degenerate')?.value)||0;
+  const accounted = transferred + frozen + unfert + degen;
+  const el = document.getElementById('fl-balance');
+  const invWrap = document.getElementById('fl-inventory-wrap');
+  if (invWrap) invWrap.style.display = frozen > 0 ? '' : 'none';
+  if (!el || !collected) { if (el) el.textContent = ''; return; }
+  if (accounted > collected) { el.style.color = '#dc2626'; el.textContent = `⚠️ ${accounted} accounted > ${collected} collected`; }
+  else if (accounted < collected) { el.style.color = '#d97706'; el.textContent = `${collected - accounted} of ${collected} embryos unaccounted`; }
+  else { el.style.color = '#16a34a'; el.textContent = `✓ All ${collected} accounted`; }
+}
+
+function updateGflBalance() {
+  const collected = parseInt(document.getElementById('gfl-collected')?.value)||0;
+  const transferred = parseInt(document.getElementById('gfl-transferred')?.value)||0;
+  const frozen = parseInt(document.getElementById('gfl-frozen')?.value)||0;
+  const unfert = parseInt(document.getElementById('gfl-unfertilized')?.value)||0;
+  const degen = parseInt(document.getElementById('gfl-degenerate')?.value)||0;
+  const accounted = transferred + frozen + unfert + degen;
+  const el = document.getElementById('gfl-balance');
+  const invWrap = document.getElementById('gfl-inventory-wrap');
+  if (invWrap) invWrap.style.display = frozen > 0 ? '' : 'none';
+  if (!el || !collected) { if (el) el.textContent = ''; return; }
+  if (accounted > collected) { el.style.color = '#dc2626'; el.textContent = `⚠️ ${accounted} accounted > ${collected} collected`; }
+  else if (accounted < collected) { el.style.color = '#d97706'; el.textContent = `${collected - accounted} of ${collected} embryos unaccounted`; }
+  else { el.style.color = '#16a34a'; el.textContent = `✓ All ${collected} accounted`; }
+}
+
+// Create or update frozen embryo inventory entry when a flush record is saved with frozen > 0
+// On edit, updates the existing inventory entry linked to this flush
+async function syncFrozenEmbryoInventory(flushId, flushData, frozenCount, location) {
+  if (!flushId) return;
+  const { data: existing } = await db.from('embryo_inventory').select('id,quantity').eq('flush_id', flushId);
+  if (frozenCount > 0) {
+    if (existing && existing.length > 0) {
+      await db.from('embryo_inventory').update({ quantity: frozenCount, date_frozen: flushData.flush_date, location: location||null }).eq('flush_id', flushId);
+    } else {
+      await db.from('embryo_inventory').insert({
+        flush_id: flushId, donor_id: flushData.donor_id,
+        ai_sire_id: flushData.ai_sire_id||null, sire_id: flushData.sire_id||null,
+        quantity: frozenCount, date_frozen: flushData.flush_date, location: location||null,
+      });
+    }
+  } else if (existing && existing.length > 0) {
+    await db.from('embryo_inventory').delete().eq('flush_id', flushId);
+  }
+}
+
 function updateCpExpected(i) {
   const breedDate = document.getElementById(`cp-date-${i}`)?.value;
   const dueEl = document.getElementById(`cp-due-${i}`);
@@ -9876,6 +9992,9 @@ function validateCpEmbryos() {
     collectedByDonor[di] = parseInt(document.getElementById(`cp-collected-${rowId}`)?.value) || 0;
     transferredByDonor[di] = parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value) || 0;
     frozenByDonor[di] = parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value) || 0;
+    const unfert = parseInt(document.getElementById(`cp-unfertilized-${rowId}`)?.value) || 0;
+    const degen = parseInt(document.getElementById(`cp-degenerate-${rowId}`)?.value) || 0;
+    frozenByDonor[di] = frozenByDonor[di] + unfert + degen; // include in accounted total
   });
 
   // Sum recip embryos assigned per donor
@@ -9911,7 +10030,14 @@ function validateCpEmbryos() {
         balanceEl.textContent = `⚠️ ${unaccounted} embryo${unaccounted!==1?'s':''} unaccounted for`;
       } else if (accounted === collected) {
         balanceEl.style.color = '#16a34a';
-        balanceEl.textContent = `✓ All ${collected} accounted (${transferred} transferred, ${frozen} frozen)`;
+        const frozenOnly = parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value) || 0;
+        const unfert = parseInt(document.getElementById(`cp-unfertilized-${rowId}`)?.value) || 0;
+        const degen = parseInt(document.getElementById(`cp-degenerate-${rowId}`)?.value) || 0;
+        const parts = [`${transferred} transferred`];
+        if (frozenOnly > 0) parts.push(`${frozenOnly} frozen`);
+        if (unfert > 0) parts.push(`${unfert} unfert.`);
+        if (degen > 0) parts.push(`${degen} degen.`);
+        balanceEl.textContent = `✓ All ${collected} accounted (${parts.join(', ')})`;
       }
     } else if (balanceEl) {
       balanceEl.textContent = '';
@@ -10104,6 +10230,9 @@ async function confirmCompletePlanDom(groupId) {
           semen_type: semenType,
           embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
           embryos_transferred: parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value)||null,
+          embryos_frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||null,
+          embryos_unfertilized: parseInt(document.getElementById(`cp-unfertilized-${rowId}`)?.value)||null,
+          embryos_degenerate: parseInt(document.getElementById(`cp-degenerate-${rowId}`)?.value)||null,
           _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
       } else {
         const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
