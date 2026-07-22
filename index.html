@@ -2235,6 +2235,20 @@ async function saveCostDesc(btn) {
   setTimeout(() => { btn.style.color = 'var(--text3)'; }, 1500);
 }
 
+async function saveInlineCostEntryRows(containerId, table, idField, recordId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const date = new Date().toISOString().slice(0,10);
+  const inserts = [];
+  container.querySelectorAll('.cost-entry-row').forEach(row => {
+    const catSel = row.querySelector('.cer-cat');
+    const cat = catSel?.value === '__custom__' ? (row.querySelector('.cer-cat-custom')?.value?.trim() || null) : (catSel?.value || null);
+    const amount = parseFloat(row.querySelector('.cer-amount')?.value);
+    if (cat && amount > 0) inserts.push({ [idField]: recordId, description: cat, category: cat, amount, date });
+  });
+  if (inserts.length > 0) await db.from(table).insert(inserts);
+}
+
 async function saveInlineCosts(containerId, table, idField, recordId) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -3652,7 +3666,7 @@ function openAddBreedingGlobal() {
     <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
-        <button type="button" class="btn-icon" onclick="addCostRow('gbr-costs')">+ Add Cost</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addCostRow('gbr-costs')">+ Add Another Cost</button>
       </div>
       <div id="gbr-costs"></div>
     </div>
@@ -3661,6 +3675,8 @@ function openAddBreedingGlobal() {
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveBreedingGlobal()">Save Record</button>
     </div>`);
+  // Pre-populate one cost row so it's ready to fill in
+  addCostRow('gbr-costs');
 }
 
 function calcGbrExpected() {
@@ -3962,7 +3978,7 @@ function openAddFlushGlobal() {
     <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
-        <button type="button" class="btn-icon" onclick="addCostRow('gfl-costs')">+ Add Cost</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addCostRow('gfl-costs')">+ Add Another Cost</button>
       </div>
       <div id="gfl-costs"></div>
     </div>
@@ -3971,6 +3987,8 @@ function openAddFlushGlobal() {
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlushGlobal()">Save Record</button>
     </div>`);
+  // Pre-populate one cost row
+  addCostRow('gfl-costs');
 }
 
 function updateGflSemenOpts() {
@@ -4660,27 +4678,104 @@ async function openAddCost(type) {
   showModal(`
     <div class="modal-header"><div class="modal-title">💰 Add ${isFlush?'Flush':'Breeding'} Cost</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="field"><label>${isFlush?'Flush':'Breeding'} Record *</label><select id="cost-rec-id"><option value="">— Select —</option>${recOpts}</select></div>
-    <div class="field"><label>Description *</label><input id="cost-desc" placeholder="e.g. Semen straws, Vet fee, Lab processing"></div>
-    <div class="row">
-      <div class="field"><label>Category</label><select id="cost-cat">${COST_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Amount ($) *</label><input type="number" id="cost-amount" step="0.01" min="0" placeholder="0.00"></div>
-    </div>
     <div class="field"><label>Date</label><input type="date" id="cost-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:0.5rem 0 0.4rem">Cost Items</div>
+    <div id="cost-rows"></div>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="addCostEntryRow('cost-rows')" style="margin-bottom:0.75rem">+ Add Another Cost</button>
     <div class="field"><label>Notes</label><textarea id="cost-notes" rows="2"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveCost('${type}')">Save Cost</button>
+      <button class="btn btn-primary" onclick="saveCost('${type}')">Save Costs</button>
     </div>`);
+  // Pre-populate one row
+  addCostEntryRow();
+}
+
+function addCostEntryRow(containerId) {
+  const container = document.getElementById(containerId || 'cost-rows');
+  if (!container) return;
+  const idx = container.children.length;
+  const cats = getCostCategories();
+  const catOpts = cats.map(c=>`<option>${c}</option>`).join('') + '<option value="__custom__">+ Add category...</option>';
+  const row = document.createElement('div');
+  row.className = 'cost-entry-row';
+  row.style.cssText = 'display:flex;gap:0.4rem;margin-bottom:0.4rem;align-items:flex-start;flex-wrap:wrap';
+  row.innerHTML = `
+    <div style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:0.2rem">
+      <label style="font-size:0.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Category *</label>
+      <select class="cer-cat" onchange="handleCostCatChange(this)" style="padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">${catOpts}</select>
+      <div class="cer-custom-wrap" style="display:none;display:flex;gap:0.3rem;margin-top:0.2rem">
+        <input class="cer-cat-custom" placeholder="Custom category" style="flex:1;padding:0.3rem 0.45rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <button type="button" onclick="saveCostEntryCategory(this)" style="background:var(--accent);border:none;border-radius:var(--radius-sm);padding:0.3rem 0.55rem;cursor:pointer;color:#fff;font-size:0.78rem;font-weight:600">Add</button>
+      </div>
+    </div>
+    <div style="flex:1;min-width:100px;display:flex;flex-direction:column;gap:0.2rem">
+      <label style="font-size:0.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Amount ($) *</label>
+      <input type="number" class="cer-amount" step="0.01" min="0" placeholder="0.00" style="padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%">
+    </div>
+    <button type="button" onclick="this.closest('.cost-entry-row').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0.3rem 0.2rem;line-height:1;margin-top:1.4rem;flex-shrink:0">×</button>`;
+  container.appendChild(row);
+}
+
+function handleCostCatChange(sel) {
+  const wrap = sel.closest('.cost-entry-row')?.querySelector('.cer-custom-wrap');
+  if (wrap) wrap.style.display = sel.value === '__custom__' ? 'flex' : 'none';
+}
+
+function saveCostEntryCategory(btn) {
+  const row = btn.closest('.cost-entry-row');
+  if (!row) return;
+  const input = row.querySelector('.cer-cat-custom');
+  const val = input?.value?.trim();
+  if (!val) return;
+  const existing = JSON.parse(localStorage.getItem('flock_cost_categories') || '[]');
+  if (!existing.includes(val)) {
+    existing.push(val);
+    localStorage.setItem('flock_cost_categories', JSON.stringify(existing));
+  }
+  // Add to all category selects in this modal
+  document.querySelectorAll('#cost-rows .cer-cat').forEach(sel => {
+    if (!sel.querySelector(`option[value="${CSS.escape(val)}"]`)) {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = val;
+      sel.insertBefore(opt, sel.lastChild); // before the "+ Add category..." option
+    }
+  });
+  const sel = row.querySelector('.cer-cat');
+  if (sel) sel.value = val;
+  const wrap = row.querySelector('.cer-custom-wrap');
+  if (wrap) wrap.style.display = 'none';
+  toast(`"${val}" added as category`);
+}
+
+function getCostCategories() {
+  const custom = JSON.parse(localStorage.getItem('flock_cost_categories') || '[]');
+  return [...COST_CATEGORIES.filter(c => !custom.includes(c)), ...custom];
 }
 
 async function saveCost(type) {
-  const recId=v('cost-rec-id'), desc=v('cost-desc'), amount=parseFloat(v('cost-amount'));
-  if (!recId){toast('Select a record');return;} if(!desc){toast('Description required');return;}
-  if(!amount||amount<=0){toast('Enter a valid amount');return;}
-  const table=type==='flush'?'flush_costs':'breeding_costs';
-  const idField=type==='flush'?'flush_id':'breeding_id';
-  await db.from(table).insert({[idField]:recId,description:desc,category:v('cost-cat'),amount,date:v('cost-date')||null,notes:v('cost-notes')});
-  toast('Cost saved'); closeModal(); renderCosts();
+  const recId = v('cost-rec-id');
+  if (!recId) { toast('Select a record'); return; }
+  const date = v('cost-date') || null;
+  const notes = v('cost-notes') || null;
+  const table = type==='flush' ? 'flush_costs' : 'breeding_costs';
+  const idField = type==='flush' ? 'flush_id' : 'breeding_id';
+
+  const rows = document.querySelectorAll('#cost-rows .cost-entry-row');
+  const inserts = [];
+  for (const row of rows) {
+    const catSel = row.querySelector('.cer-cat');
+    const cat = catSel?.value === '__custom__' ? (row.querySelector('.cer-cat-custom')?.value?.trim() || null) : (catSel?.value || null);
+    const amount = parseFloat(row.querySelector('.cer-amount')?.value);
+    if (!cat || cat === '— Select —') { toast('Category required for each row'); return; }
+    if (!amount || amount <= 0) continue; // skip rows with no amount
+    inserts.push({ [idField]: recId, description: cat, category: cat, amount, date, notes });
+  }
+  if (inserts.length === 0) { toast('Enter at least one cost amount'); return; }
+  const { error } = await db.from(table).insert(inserts);
+  if (error) { toast('Save failed: ' + (error.message||'unknown')); return; }
+  toast(inserts.length === 1 ? 'Cost saved' : `${inserts.length} costs saved`);
+  closeModal(); renderCosts();
 }
 
 async function deleteCost(id, type) {
@@ -6975,10 +7070,21 @@ function openAddBreeding(rec) {
       <div class="field"></div>
     </div>
     <div class="field"><label>Notes</label><textarea id="br-notes">${rec?.notes||''}</textarea></div>
+
+    <!-- COSTS SECTION -->
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addCostEntryRow('br-costs')">+ Add Another Cost</button>
+      </div>
+      <div id="br-costs"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveBreeding('${rec?.id||''}')">${isEdit?'Save Changes':'Save Record'}</button>
     </div>`);
+  addCostEntryRow('br-costs');
 }
 
 function updateBreedingSemenOpts() {
@@ -7006,6 +7112,7 @@ async function saveBreeding(id) {
   const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes') };
   if (id) {
     await db.from('breeding_records').update(payload).eq('id', id);
+    await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', id);
     toast('Updated');
   } else {
     const { data } = await db.from('breeding_records').insert(payload).select().single();
@@ -7015,6 +7122,7 @@ async function saveBreeding(id) {
       const straws = parseFloat(v('br-straws-used')) || 0;
       if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', savedId);
     }
+    if (savedId) await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', savedId);
     toast('Breeding logged');
   }
   closeModal(); loadLambTab();
@@ -7058,10 +7166,21 @@ function showFlushModal(flush) {
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
     <div class="field"><label>Notes</label><textarea id="fl-notes" placeholder="Vet, protocol, notes…">${flush?.notes||''}</textarea></div>
+
+    <!-- COSTS SECTION -->
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">💰 Costs (optional)</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addCostEntryRow('fl-costs')">+ Add Another Cost</button>
+      </div>
+      <div id="fl-costs"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlush('${flush?.id||''}')">${isEdit ? 'Save Changes' : 'Save Flush'}</button>
     </div>`);
+  addCostEntryRow('fl-costs');
 }
 
 function updateFlushSemenOpts() {
@@ -7086,6 +7205,7 @@ async function saveFlush(id) {
   const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes') };
   if (id) {
     await db.from('embryo_flushes').update(payload).eq('id', id);
+    await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', id);
     toast('Flush updated');
   } else {
     const { data } = await db.from('embryo_flushes').insert(payload).select().single();
@@ -7095,6 +7215,7 @@ async function saveFlush(id) {
       const straws = parseFloat(v('fl-straws-used')) || 0;
       if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', savedId);
     }
+    if (savedId) await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', savedId);
     toast('Flush recorded');
   }
   closeModal(); loadLambTab();
