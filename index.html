@@ -2121,6 +2121,23 @@ async function deductSemenInventory(ramId, location, straws, referenceType, refe
   await loadSemenInventory();
 }
 
+// Reverse a previous inventory deduction — used when editing a record to change semen type or location
+async function restoreSemenInventory(ramId, location, straws, referenceType, referenceId) {
+  if (!ramId || !location || !straws || straws <= 0) return;
+  const entry = allSemenInventory.find(i => i.ai_ram_id === ramId && i.location === location);
+  if (!entry) return; // location no longer exists — skip silently
+  const newCount = entry.straws + straws;
+  await db.from('semen_inventory').update({ straws: newCount, updated_at: new Date().toISOString() }).eq('id', entry.id);
+  await db.from('semen_transactions').insert({
+    ai_ram_id: ramId, inventory_id: entry.id,
+    transaction_type: 'restore', straws,
+    reference_type: referenceType, reference_id: referenceId,
+    notes: `Restored from edited ${referenceType}`
+  });
+  entry.straws = newCount;
+  await loadSemenInventory();
+}
+
 function getSemenOptionsForRam(ramId, selectedLoc) {
   const inv = allSemenInventory.filter(i => i.ai_ram_id === ramId && i.straws > 0);
   if (inv.length === 0) return '<option value="">No inventory available</option>';
@@ -3695,10 +3712,10 @@ function openAddBreedingGlobal() {
       <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
         <div style="display:flex;gap:0.5rem">
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="gbr-semen-type" value="frozen" checked style="accent-color:var(--accent)"> ❄️ Frozen
+            <input type="radio" name="gbr-semen-type" value="frozen" checked onchange="document.getElementById('gbr-semen-section').style.display=''" style="accent-color:var(--accent)"> ❄️ Frozen
           </label>
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="gbr-semen-type" value="fresh" style="accent-color:var(--accent)"> 🌱 Fresh
+            <input type="radio" name="gbr-semen-type" value="fresh" onchange="document.getElementById('gbr-semen-section').style.display='none'" style="accent-color:var(--accent)"> 🌱 Fresh
           </label>
         </div>
       </div>
@@ -3761,11 +3778,12 @@ async function saveBreedingGlobal() {
   if (!lambId) { toast('Select a female'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('gbr-sire-id'));
   const semenType = ai_sire_id ? (document.querySelector('input[name="gbr-semen-type"]:checked')?.value || 'frozen') : null;
-  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes'), semen_type: semenType };
+  const semenLoc = semenType === 'frozen' ? v('gbr-semen-loc') : null;
+  const strawsUsed = semenType === 'frozen' ? (parseFloat(v('gbr-straws-used')) || 0) : 0;
+  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   const { data } = await db.from('breeding_records').insert(payload).select().single();
-  if (ai_sire_id && data?.id) {
-    const loc = v('gbr-semen-loc'); const straws = parseFloat(v('gbr-straws-used'))||0;
-    if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', data.id);
+  if (ai_sire_id && data?.id && semenType === 'frozen') {
+    if (semenLoc && strawsUsed > 0) await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', data.id);
   }
   // Save inline costs
   if (data?.id) await saveInlineCosts('gbr-costs', 'breeding_costs', 'breeding_id', data.id);
@@ -4037,10 +4055,10 @@ function openAddFlushGlobal() {
       <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
         <div style="display:flex;gap:0.5rem">
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="gfl-semen-type" value="frozen" checked style="accent-color:var(--accent)"> ❄️ Frozen
+            <input type="radio" name="gfl-semen-type" value="frozen" checked onchange="document.getElementById('gfl-semen-section').style.display=''" style="accent-color:var(--accent)"> ❄️ Frozen
           </label>
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="gfl-semen-type" value="fresh" style="accent-color:var(--accent)"> 🌱 Fresh
+            <input type="radio" name="gfl-semen-type" value="fresh" onchange="document.getElementById('gfl-semen-section').style.display='none'" style="accent-color:var(--accent)"> 🌱 Fresh
           </label>
         </div>
       </div>
@@ -4087,11 +4105,12 @@ async function saveFlushGlobal() {
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('gfl-sire-id'));
   const semenType = ai_sire_id ? (document.querySelector('input[name="gfl-semen-type"]:checked')?.value || 'frozen') : null;
-  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType };
+  const semenLoc = semenType === 'frozen' ? v('gfl-semen-loc') : null;
+  const strawsUsed = semenType === 'frozen' ? (parseFloat(v('gfl-straws-used')) || 0) : 0;
+  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   const { data } = await db.from('embryo_flushes').insert(payload).select().single();
-  if (ai_sire_id && data?.id) {
-    const loc = v('gfl-semen-loc'); const straws = parseFloat(v('gfl-straws-used'))||0;
-    if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', data.id);
+  if (ai_sire_id && data?.id && semenType === 'frozen') {
+    if (semenLoc && strawsUsed > 0) await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', data.id);
   }
   // Save inline costs
   if (data?.id) await saveInlineCosts('gfl-costs', 'flush_costs', 'flush_id', data.id);
@@ -7133,7 +7152,7 @@ function openAddBreeding(rec) {
     <div class="modal-header"><div class="modal-title">${isEdit?'Edit Breeding':'Log Breeding'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="field"><label>Sire</label><select id="br-sire-id" onchange="updateBreedingSemenOpts()">${sireOptions(currentSire)}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="br-sire-text" value="${rec?.sire_text||''}" placeholder="Sire name or ID"></div>
-    <div id="br-semen-section" style="${hasSemenInv||!aiSireId?'':'display:none'}">
+    <div id="br-semen-section" style="${(hasSemenInv && (rec?.semen_type||'frozen')==='frozen') ? '' : 'display:none'}">
       <div class="row">
         <div class="field"><label>Semen Location</label><select id="br-semen-loc">${semenOpts}</select></div>
         <div class="field"><label>Straws Used</label><input type="number" id="br-straws-used" value="${rec?.straws_used||1}" min="0" step="0.5" placeholder="e.g. 1"></div>
@@ -7144,10 +7163,10 @@ function openAddBreeding(rec) {
       <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
         <div style="display:flex;gap:0.5rem">
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="br-semen-type" value="frozen" ${(rec?.semen_type||'frozen')==='frozen'?'checked':''} style="accent-color:var(--accent)"> ❄️ Frozen
+            <input type="radio" name="br-semen-type" value="frozen" ${(rec?.semen_type||'frozen')==='frozen'?'checked':''} onchange="updateBreedingSemenOpts()" style="accent-color:var(--accent)"> ❄️ Frozen
           </label>
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="br-semen-type" value="fresh" ${rec?.semen_type==='fresh'?'checked':''} style="accent-color:var(--accent)"> 🌱 Fresh
+            <input type="radio" name="br-semen-type" value="fresh" ${rec?.semen_type==='fresh'?'checked':''} onchange="updateBreedingSemenOpts()" style="accent-color:var(--accent)"> 🌱 Fresh
           </label>
         </div>
       </div>
@@ -7187,9 +7206,10 @@ function updateBreedingSemenOpts() {
   const typeSection = document.getElementById('br-semen-type-section');
   const locSel = document.getElementById('br-semen-loc');
   const isAi = val.startsWith('ai:');
+  const isFresh = document.querySelector('input[name="br-semen-type"]:checked')?.value === 'fresh';
   if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (isAi) {
+  if (isAi && !isFresh) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -7213,18 +7233,28 @@ async function openEditBreeding(id) {
 async function saveBreeding(id) {
   const { sire_id, ai_sire_id } = parseSireSelection(v('br-sire-id'));
   const semenType = ai_sire_id ? (document.querySelector('input[name="br-semen-type"]:checked')?.value || 'frozen') : null;
-  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes'), semen_type: semenType };
+  const semenLoc = semenType === 'frozen' ? v('br-semen-loc') : null;
+  const strawsUsed = semenType === 'frozen' ? (parseFloat(v('br-straws-used')) || 0) : 0;
+  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   if (id) {
+    // Load old record to determine if we need to reverse a previous deduction
+    const { data: old } = await db.from('breeding_records').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('breeding_records').update(payload).eq('id', id);
+    // Reverse old inventory deduction if it was frozen with a location
+    if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
+      await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'breeding', id);
+    }
+    // Apply new deduction if now frozen
+    if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', id);
+    }
     await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', id);
     toast('Updated');
   } else {
     const { data } = await db.from('breeding_records').insert(payload).select().single();
     const savedId = data?.id;
-    if (ai_sire_id && savedId) {
-      const loc = v('br-semen-loc');
-      const straws = parseFloat(v('br-straws-used')) || 0;
-      if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'breeding', savedId);
+    if (ai_sire_id && savedId && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', savedId);
     }
     if (savedId) await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', savedId);
     toast('Breeding logged');
@@ -7268,10 +7298,10 @@ function showFlushModal(flush) {
     </div>
     <div class="field"><label>Sire</label><select id="fl-sire-id" onchange="updateFlushSemenOpts()">${sireOptions(currentSire)}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="fl-sire-text" value="${flush?.sire_text||''}" placeholder="Sire name or ID"></div>
-    <div id="fl-semen-section" style="${hasSemenInv?'':'display:none'}">
+    <div id="fl-semen-section" style="${(hasSemenInv && (flush?.semen_type||'frozen')==='frozen') ? '' : 'display:none'}">
       <div class="row">
         <div class="field"><label>Semen Location</label><select id="fl-semen-loc">${semenOpts}</select></div>
-        <div class="field"><label>Straws Used</label><input type="number" id="fl-straws-used" value="1" min="0" step="0.5" placeholder="e.g. 1"></div>
+        <div class="field"><label>Straws Used</label><input type="number" id="fl-straws-used" value="${flush?.straws_used||1}" min="0" step="0.5" placeholder="e.g. 1"></div>
       </div>
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
@@ -7279,10 +7309,10 @@ function showFlushModal(flush) {
       <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
         <div style="display:flex;gap:0.5rem">
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="fl-semen-type" value="frozen" ${(flush?.semen_type||'frozen')==='frozen'?'checked':''} style="accent-color:var(--accent)"> ❄️ Frozen
+            <input type="radio" name="fl-semen-type" value="frozen" ${(flush?.semen_type||'frozen')==='frozen'?'checked':''} onchange="updateFlushSemenOpts()" style="accent-color:var(--accent)"> ❄️ Frozen
           </label>
           <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
-            <input type="radio" name="fl-semen-type" value="fresh" ${flush?.semen_type==='fresh'?'checked':''} style="accent-color:var(--accent)"> 🌱 Fresh
+            <input type="radio" name="fl-semen-type" value="fresh" ${flush?.semen_type==='fresh'?'checked':''} onchange="updateFlushSemenOpts()" style="accent-color:var(--accent)"> 🌱 Fresh
           </label>
         </div>
       </div>
@@ -7311,9 +7341,10 @@ function updateFlushSemenOpts() {
   const typeSection = document.getElementById('fl-semen-type-section');
   const locSel = document.getElementById('fl-semen-loc');
   const isAi = val.startsWith('ai:');
+  const isFresh = document.querySelector('input[name="fl-semen-type"]:checked')?.value === 'fresh';
   if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (isAi) {
+  if (isAi && !isFresh) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -7328,18 +7359,25 @@ async function saveFlush(id) {
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('fl-sire-id'));
   const semenType = ai_sire_id ? (document.querySelector('input[name="fl-semen-type"]:checked')?.value || 'frozen') : null;
-  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType };
+  const semenLoc = semenType === 'frozen' ? v('fl-semen-loc') : null;
+  const strawsUsed = semenType === 'frozen' ? (parseFloat(v('fl-straws-used')) || 0) : 0;
+  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   if (id) {
+    const { data: old } = await db.from('embryo_flushes').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('embryo_flushes').update(payload).eq('id', id);
+    if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
+      await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'flush', id);
+    }
+    if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', id);
+    }
     await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', id);
     toast('Flush updated');
   } else {
     const { data } = await db.from('embryo_flushes').insert(payload).select().single();
     const savedId = data?.id;
-    if (ai_sire_id && savedId) {
-      const loc = v('fl-semen-loc');
-      const straws = parseFloat(v('fl-straws-used')) || 0;
-      if (loc && straws > 0) await deductSemenInventory(ai_sire_id, loc, straws, 'flush', savedId);
+    if (ai_sire_id && savedId && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', savedId);
     }
     if (savedId) await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', savedId);
     toast('Flush recorded');
