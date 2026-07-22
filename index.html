@@ -3691,6 +3691,18 @@ function openAddBreedingGlobal() {
         <div class="field"><label>Straws Used</label><input type="number" id="gbr-straws-used" value="1" min="0" step="0.5"></div>
       </div>
     </div>
+    <div id="gbr-semen-type-section" style="display:none">
+      <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
+        <div style="display:flex;gap:0.5rem">
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="gbr-semen-type" value="frozen" checked style="accent-color:var(--accent)"> ❄️ Frozen
+          </label>
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="gbr-semen-type" value="fresh" style="accent-color:var(--accent)"> 🌱 Fresh
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="row">
       <div class="field"><label>Breeding Date</label><input type="date" id="gbr-date" value="${new Date().toISOString().slice(0,10)}" onchange="calcGbrExpected()"></div>
       <div class="field"><label>Expected Lamb Date</label><input type="date" id="gbr-expected" value="${new Date(new Date().getTime()+147*24*60*60*1000).toISOString().slice(0,10)}"></div>
@@ -3731,9 +3743,12 @@ function calcGbrExpected() {
 function updateGbrSemenOpts() {
   const val = document.getElementById('gbr-sire-id')?.value || '';
   const section = document.getElementById('gbr-semen-section');
+  const typeSection = document.getElementById('gbr-semen-type-section');
   const locSel = document.getElementById('gbr-semen-loc');
+  const isAi = val.startsWith('ai:');
+  if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (val.startsWith('ai:')) {
+  if (isAi) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -3745,7 +3760,8 @@ async function saveBreedingGlobal() {
   const lambId = v('gbr-lamb-id');
   if (!lambId) { toast('Select a female'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('gbr-sire-id'));
-  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes') };
+  const semenType = ai_sire_id ? (document.querySelector('input[name="gbr-semen-type"]:checked')?.value || 'frozen') : null;
+  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes'), semen_type: semenType };
   const { data } = await db.from('breeding_records').insert(payload).select().single();
   if (ai_sire_id && data?.id) {
     const loc = v('gbr-semen-loc'); const straws = parseFloat(v('gbr-straws-used'))||0;
@@ -4017,6 +4033,18 @@ function openAddFlushGlobal() {
         <div class="field"><label>Straws Used</label><input type="number" id="gfl-straws-used" value="1" min="0" step="0.5"></div>
       </div>
     </div>
+    <div id="gfl-semen-type-section" style="display:none">
+      <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
+        <div style="display:flex;gap:0.5rem">
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="gfl-semen-type" value="frozen" checked style="accent-color:var(--accent)"> ❄️ Frozen
+          </label>
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="gfl-semen-type" value="fresh" style="accent-color:var(--accent)"> 🌱 Fresh
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="field"><label>Notes</label><textarea id="gfl-notes" rows="2"></textarea></div>
 
     <!-- COSTS SECTION -->
@@ -4039,9 +4067,12 @@ function openAddFlushGlobal() {
 function updateGflSemenOpts() {
   const val = document.getElementById('gfl-sire-id')?.value || '';
   const section = document.getElementById('gfl-semen-section');
+  const typeSection = document.getElementById('gfl-semen-type-section');
   const locSel = document.getElementById('gfl-semen-loc');
+  const isAi = val.startsWith('ai:');
+  if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (val.startsWith('ai:')) {
+  if (isAi) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -4055,7 +4086,8 @@ async function saveFlushGlobal() {
   if (!donorId) { toast('Select a donor'); return; }
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('gfl-sire-id'));
-  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes') };
+  const semenType = ai_sire_id ? (document.querySelector('input[name="gfl-semen-type"]:checked')?.value || 'frozen') : null;
+  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType };
   const { data } = await db.from('embryo_flushes').insert(payload).select().single();
   if (ai_sire_id && data?.id) {
     const loc = v('gfl-semen-loc'); const straws = parseFloat(v('gfl-straws-used'))||0;
@@ -7108,6 +7140,18 @@ function openAddBreeding(rec) {
       </div>
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
+    <div id="br-semen-type-section" style="${aiSireId?'':'display:none'}">
+      <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
+        <div style="display:flex;gap:0.5rem">
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="br-semen-type" value="frozen" ${(rec?.semen_type||'frozen')==='frozen'?'checked':''} style="accent-color:var(--accent)"> ❄️ Frozen
+          </label>
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="br-semen-type" value="fresh" ${rec?.semen_type==='fresh'?'checked':''} style="accent-color:var(--accent)"> 🌱 Fresh
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="row">
       <div class="field"><label>Breeding Date</label><input type="date" id="br-date" value="${rec?.breeding_date||''}" oninput="calcExpectedLamb()"></div>
       <div class="field"><label>Expected Lamb Date <span style="color:var(--text3);font-size:0.75rem">(auto +147 days)</span></label><input type="date" id="br-expected" value="${rec?.expected_lamb_date||''}"></div>
@@ -7140,9 +7184,12 @@ function updateBreedingSemenOpts() {
   const sel = document.getElementById('br-sire-id');
   const val = sel?.value || '';
   const section = document.getElementById('br-semen-section');
+  const typeSection = document.getElementById('br-semen-type-section');
   const locSel = document.getElementById('br-semen-loc');
+  const isAi = val.startsWith('ai:');
+  if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (val.startsWith('ai:')) {
+  if (isAi) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -7165,7 +7212,8 @@ async function openEditBreeding(id) {
 }
 async function saveBreeding(id) {
   const { sire_id, ai_sire_id } = parseSireSelection(v('br-sire-id'));
-  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes') };
+  const semenType = ai_sire_id ? (document.querySelector('input[name="br-semen-type"]:checked')?.value || 'frozen') : null;
+  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes'), semen_type: semenType };
   if (id) {
     await db.from('breeding_records').update(payload).eq('id', id);
     await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', id);
@@ -7227,6 +7275,18 @@ function showFlushModal(flush) {
       </div>
       <div style="font-size:0.72rem;color:var(--text3);margin-top:-0.5rem;margin-bottom:0.75rem">Leave straws at 0 to skip deduction</div>
     </div>
+    <div id="fl-semen-type-section" style="${aiSireId?'':'display:none'}">
+      <div class="field" style="margin-bottom:0.75rem"><label>Semen Type</label>
+        <div style="display:flex;gap:0.5rem">
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="fl-semen-type" value="frozen" ${(flush?.semen_type||'frozen')==='frozen'?'checked':''} style="accent-color:var(--accent)"> ❄️ Frozen
+          </label>
+          <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;padding:0.35rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;justify-content:center">
+            <input type="radio" name="fl-semen-type" value="fresh" ${flush?.semen_type==='fresh'?'checked':''} style="accent-color:var(--accent)"> 🌱 Fresh
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="field"><label>Notes</label><textarea id="fl-notes" placeholder="Vet, protocol, notes…">${flush?.notes||''}</textarea></div>
 
     <!-- COSTS SECTION -->
@@ -7248,9 +7308,12 @@ function showFlushModal(flush) {
 function updateFlushSemenOpts() {
   const val = document.getElementById('fl-sire-id')?.value || '';
   const section = document.getElementById('fl-semen-section');
+  const typeSection = document.getElementById('fl-semen-type-section');
   const locSel = document.getElementById('fl-semen-loc');
+  const isAi = val.startsWith('ai:');
+  if (typeSection) typeSection.style.display = isAi ? '' : 'none';
   if (!section || !locSel) return;
-  if (val.startsWith('ai:')) {
+  if (isAi) {
     const aiId = val.replace('ai:', '');
     const hasInv = allSemenInventory.some(i => i.ai_ram_id === aiId && i.straws > 0);
     section.style.display = hasInv ? '' : 'none';
@@ -7264,7 +7327,8 @@ async function saveFlush(id) {
   const date = v('fl-date');
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('fl-sire-id'));
-  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes') };
+  const semenType = ai_sire_id ? (document.querySelector('input[name="fl-semen-type"]:checked')?.value || 'frozen') : null;
+  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType };
   if (id) {
     await db.from('embryo_flushes').update(payload).eq('id', id);
     await saveInlineCostEntryRows('fl-costs', 'flush_costs', 'flush_id', id);
@@ -9952,6 +10016,10 @@ function addCpRecipRow() {
 }
 
 async function confirmCompletePlanDom(groupId) {
+  // Guard against double-submit
+  const saveBtn = document.querySelector('[onclick*="confirmCompletePlanDom"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
   const isFlush = window._cpIsFlush;
   const tbody = document.getElementById('cp-tbody');
   if (!tbody) return;
@@ -9991,7 +10059,8 @@ async function confirmCompletePlanDom(groupId) {
       const { sire_id, ai_sire_id } = parseSireSelection(sireVal);
       const date = document.getElementById(`cp-date-${rowId}`)?.value;
       if (isFlush) {
-        const semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
+        let semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
+        if (!semenType && ai_sire_id) semenType = 'frozen';
         flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
           semen_type: semenType,
@@ -10000,7 +10069,10 @@ async function confirmCompletePlanDom(groupId) {
           _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
       } else {
         const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
-        const semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
+        // Read semen type from dropdown; if no dropdown (non-AI sire), null
+        // If AI sire has inventory (tank), default to frozen if not explicitly set
+        let semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
+        if (!semenType && ai_sire_id) semenType = 'frozen'; // AI sire without type = frozen by default
         breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending',
           semen_type: semenType });
