@@ -10280,19 +10280,20 @@ async function confirmCompletePlanDom(groupId) {
 
   if (flushInserts.length > 0) {
     for (const flush of flushInserts) {
-      const { data: f, error: flushErr } = await db.from('embryo_flushes').insert(flush).select().single();
-      if (flushErr) { toast('Flush insert failed: ' + (flushErr.message||'unknown')); console.error('Flush insert error:', flushErr, flush); return; }
+      const { _frozen, ...flushData } = flush; // strip internal _frozen field before DB insert
+      const { data: f, error: flushErr } = await db.from('embryo_flushes').insert(flushData).select().single();
+      if (flushErr) { toast('Flush insert failed: ' + (flushErr.message||'unknown')); console.error('Flush insert error:', flushErr, flushData); return; }
       createdFlushIds.push(f?.id || null);
       totalCreated++;
       // Create embryo inventory record if frozen > 0
-      if (f?.id && flush._frozen > 0) {
+      if (f?.id && _frozen > 0) {
         await db.from('embryo_inventory').insert({
           flush_id: f.id,
-          donor_id: flush.donor_id,
-          ai_sire_id: flush.ai_sire_id||null,
-          sire_id: flush.sire_id||null,
-          quantity: flush._frozen,
-          date_frozen: flush.flush_date,
+          donor_id: flushData.donor_id,
+          ai_sire_id: flushData.ai_sire_id||null,
+          sire_id: flushData.sire_id||null,
+          quantity: _frozen,
+          date_frozen: flushData.flush_date,
         });
       }
     }
