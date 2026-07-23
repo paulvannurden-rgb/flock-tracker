@@ -10184,6 +10184,7 @@ async function confirmCompletePlanDom(groupId) {
   // Guard against double-submit
   const saveBtn = document.querySelector('[onclick*="confirmCompletePlanDom"]');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  try {
 
   const isFlush = window._cpIsFlush;
   const tbody = document.getElementById('cp-tbody');
@@ -10312,6 +10313,12 @@ async function confirmCompletePlanDom(groupId) {
   toast(`${totalCreated} record${totalCreated!==1?'s':''} created! <a href="#" onclick="showPage('${isFlush?'flushes':'breeding'}')" style="color:#fff;text-decoration:underline">View ${isFlush?'Flushes':'Breeding'} →</a>`);
   closeModal();
   renderPlanningHTML();
+  } catch(err) {
+    console.error('Complete plan error:', err);
+    toast('Error: ' + (err.message || 'unknown error'));
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Create Records'; }
+  }
 }
 
 function openNewGroupInline() {
