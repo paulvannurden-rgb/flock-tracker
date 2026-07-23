@@ -10229,7 +10229,7 @@ async function confirmCompletePlanDom(groupId) {
         if (!semenType && ai_sire_id) semenType = 'frozen';
         flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
-          semen_type: semenType,
+          semen_type: semenType, group_id: groupId,
           embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
           embryos_transferred: parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value)||null,
           embryos_frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||null,
@@ -10244,7 +10244,7 @@ async function confirmCompletePlanDom(groupId) {
         if (!semenType && ai_sire_id) semenType = 'frozen'; // AI sire without type = frozen by default
         breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending',
-          semen_type: semenType });
+          semen_type: semenType, group_id: groupId });
       }
     }
   }
@@ -10268,6 +10268,11 @@ async function confirmCompletePlanDom(groupId) {
   if (overAssigned) { toast('⚠️ Some donors have more embryos assigned to recips than were collected — please fix before saving'); return; }
 
   if (flushInserts.length === 0 && breedInserts.length === 0) { toast('No records to create'); return; }
+
+  // Delete any records previously created by this plan (handles re-run without duplication)
+  // Uses group_id column to identify records from this specific plan
+  await db.from('embryo_flushes').delete().eq('group_id', groupId);
+  await db.from('breeding_records').delete().eq('group_id', groupId);
 
   // Insert flush records and capture IDs for transfer linking
   let totalCreated = 0;
