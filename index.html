@@ -3858,7 +3858,11 @@ function renderFlushTable(allRecs, allTransfers, filters) {
   const totalEmbryosXferred = relatedTransfers.reduce((s,t) => s+(t.num_transferred||1), 0);
   const embryoRetention = totalEmbryosXferred > 0 ? Math.round(totalBorn/totalEmbryosXferred*100)+'%' : '—';
   const totalTransferred = recs.reduce((s,f) => s + (f.embryos_transferred||0), 0);
+  const totalFrozen = recs.reduce((s,f) => s + (f.embryos_frozen||0), 0);
+  const totalUnfertilized = recs.reduce((s,f) => s + (f.embryos_unfertilized||0), 0);
+  const totalDegenerate = recs.reduce((s,f) => s + (f.embryos_degenerate||0), 0);
   const avgCollected = recs.length ? (totalCollected/recs.length).toFixed(1) : '—';
+  const avgTransferred = recs.length ? (totalTransferred/recs.length).toFixed(1) : '—';
   const ivfCount = recs.filter(f => f.flush_type === 'IVF').length;
   const moetCount = recs.filter(f => f.flush_type === 'MOET' || !f.flush_type).length;
 
@@ -3921,8 +3925,24 @@ function renderFlushTable(allRecs, allTransfers, filters) {
         <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Transferred</div>
       </div>
       <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#1d4ed8">${totalFrozen}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Frozen</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#d97706">${totalUnfertilized}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Unfertilized</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#dc2626">${totalDegenerate}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Degenerative</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
         <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${avgCollected}</div>
         <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Avg Collected</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--blue)">${avgTransferred}</div>
+        <div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Avg Transferred</div>
       </div>
       <div class="card" style="padding:0.85rem;text-align:center">
         <div style="font-size:1.5rem;font-weight:700;color:var(--purple)">${moetCount} / ${ivfCount}</div>
