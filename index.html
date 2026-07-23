@@ -9544,7 +9544,8 @@ function renderPlanningHTML() {
             <div style="display:flex;gap:0.35rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
               ${!isComplete?`
               <button class="btn btn-secondary btn-sm" onclick="cancelPlan('${g.id}')" style="color:var(--danger);border-color:var(--danger)">✕ Cancel</button>
-              <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`:''}
+              <button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--accent);border-color:var(--accent)">✅ Complete Plan</button>`
+              : g.status === 'Complete' ? `<button class="btn btn-secondary btn-sm" onclick="openCompletePlan('${g.id}')" style="color:var(--text3);border-color:var(--border);font-size:0.75rem">↺ Re-run Complete</button>` : ''}
               <button class="btn-icon btn-sm" onclick="printPlan('${g.id}')" title="Print / Export">🖨️</button>
               <button class="btn-icon btn-sm" onclick="printMaterialsReport('${g.id}')" title="Materials Needed">📦</button>
               <button class="btn-icon btn-sm" onclick="duplicateGroupPlan('${g.id}')" title="Duplicate Plan">⧉</button>
@@ -10273,7 +10274,8 @@ async function confirmCompletePlanDom(groupId) {
 
   if (flushInserts.length > 0) {
     for (const flush of flushInserts) {
-      const { data: f } = await db.from('embryo_flushes').insert(flush).select().single();
+      const { data: f, error: flushErr } = await db.from('embryo_flushes').insert(flush).select().single();
+      if (flushErr) { toast('Flush insert failed: ' + (flushErr.message||'unknown')); console.error('Flush insert error:', flushErr, flush); return; }
       createdFlushIds.push(f?.id || null);
       totalCreated++;
       // Create embryo inventory record if frozen > 0
@@ -10298,7 +10300,9 @@ async function confirmCompletePlanDom(groupId) {
     }
   }
   if (breedInserts.length > 0) {
-    await Promise.all(breedInserts.map(b => db.from('breeding_records').insert(b)));
+    const results = await Promise.all(breedInserts.map(b => db.from('breeding_records').insert(b)));
+    const errs = results.filter(r => r.error);
+    if (errs.length) { toast('Breeding insert failed: ' + (errs[0].error?.message||'unknown')); console.error('Breeding insert errors:', errs); return; }
     totalCreated += breedInserts.length;
   }
 
