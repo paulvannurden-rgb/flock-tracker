@@ -10270,8 +10270,16 @@ async function confirmCompletePlanDom(groupId) {
   if (flushInserts.length === 0 && breedInserts.length === 0) { toast('No records to create'); return; }
 
   // Delete any records previously created by this plan (handles re-run without duplication)
-  // Uses group_id column to identify records from this specific plan
-  await db.from('embryo_flushes').delete().eq('group_id', groupId);
+  // Must delete transfers first (they reference flush IDs via FK)
+  const existingFlushes = await db.from('embryo_flushes').select('id').eq('group_id', groupId);
+  if (existingFlushes.data?.length > 0) {
+    const flushIds = existingFlushes.data.map(f => f.id);
+    for (const fid of flushIds) {
+      await db.from('embryo_transfers').delete().eq('flush_id', fid);
+      await db.from('embryo_inventory').delete().eq('flush_id', fid);
+    }
+    await db.from('embryo_flushes').delete().eq('group_id', groupId);
+  }
   await db.from('breeding_records').delete().eq('group_id', groupId);
 
   // Insert flush records and capture IDs for transfer linking
@@ -10282,7 +10290,12 @@ async function confirmCompletePlanDom(groupId) {
     for (const flush of flushInserts) {
       const { _frozen, ...flushData } = flush; // strip internal _frozen field before DB insert
       const { data: f, error: flushErr } = await db.from('embryo_flushes').insert(flushData).select().single();
-      if (flushErr) { toast('Flush insert failed: ' + (flushErr.message||'unknown')); console.error('Flush insert error:', flushErr, flushData); return; }
+      if (flushErr) { 
+        const msg = flushErr.message || flushErr.details || JSON.stringify(flushErr);
+        toast('Flush insert failed: ' + msg); 
+        console.error('Flush insert error:', msg, flushData); 
+        return; 
+      }
       createdFlushIds.push(f?.id || null);
       totalCreated++;
       // Create embryo inventory record if frozen > 0
