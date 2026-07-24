@@ -4166,7 +4166,7 @@ async function openEditFlushGlobal(flushId, donorId) {
   const [{ data: flush }, { data: costs }, { data: invEntry }] = await Promise.all([
     db.from('embryo_flushes').select('*').eq('id', flushId).single(),
     db.from('flush_costs').select('*').eq('flush_id', flushId).order('date'),
-    db.from('embryo_inventory').select('location').eq('flush_id', flushId).maybeSingle(),
+    db.from('embryo_inventory').select('location').eq('flush_id', flushId).limit(1).then(r => ({data: r.data?.[0]||null, error: r.error})),
   ]);
   if (!flush) return;
   const prevLambId = currentLambId;
@@ -4788,30 +4788,54 @@ function renderCostTable(costs, type, records) {
   if (costs.length === 0) return `<div class="empty"><div class="empty-icon">💰</div><h3>No ${type} costs yet</h3></div>`;
   const idField = type === 'flush' ? 'flush_id' : 'breeding_id';
   const total = costs.reduce((s,c)=>s+(c.amount||0),0);
+
+  // Group costs by record ID
+  const groups = {};
+  const groupOrder = [];
+  costs.forEach(c => {
+    const rid = c[idField];
+    if (!groups[rid]) { groups[rid] = []; groupOrder.push(rid); }
+    groups[rid].push(c);
+  });
+
+  const rows = groupOrder.map(rid => {
+    const rec = records.find(r => r.id === rid);
+    const groupCosts = groups[rid];
+    const groupTotal = groupCosts.reduce((s,c)=>s+(c.amount||0),0);
+    const label = type==='flush'
+      ? (()=>{ const d=allLambs.find(l=>l.id===rec?.donor_id); return (d?`<span style="font-weight:700;color:var(--accent)">${d.name}</span>` : '?')+` <span style="color:var(--text3);font-size:0.78rem">${rec?.flush_date||''} ${rec?.flush_type?'· '+rec.flush_type:''}</span>`; })()
+      : (()=>{ const l=allLambs.find(x=>x.id===rec?.lamb_id); const s=rec?.ai_sire_id?allAiRams.find(r=>r.id===rec.ai_sire_id):null; return (l?`<span style="font-weight:700;color:var(--accent)">${l.name}</span>`:'?')+` <span style="color:var(--text3);font-size:0.78rem">× ${s?.name||rec?.sire_text||'?'} · ${rec?.breeding_date||''}</span>`; })();
+
+    return `
+      <!-- Group header row -->
+      <tr style="background:var(--surface2);cursor:pointer;border-top:2px solid var(--border)" onclick="openEditFromCost('${rid}','${type}')">
+        <td colspan="4" style="padding:0.5rem 1rem">${label}</td>
+        <td style="padding:0.5rem 1rem;text-align:right;font-weight:700;color:var(--text)">$${groupTotal.toFixed(2)}</td>
+        <td style="padding:0.5rem 0.5rem;text-align:center;font-size:0.72rem;color:var(--text3)">✏️</td>
+      </tr>
+      <!-- Individual cost lines -->
+      ${groupCosts.map(c => `
+        <tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+          <td style="padding:0.45rem 1rem 0.45rem 2rem;color:var(--text2);font-size:0.8rem">${c.category||'Other'}</td>
+          <td style="padding:0.45rem 1rem;color:var(--text);font-size:0.82rem">${c.description||c.category||''}</td>
+          <td style="padding:0.45rem 1rem;color:var(--text3);font-size:0.78rem;white-space:nowrap">${c.date||'—'}</td>
+          <td></td>
+          <td style="padding:0.45rem 1rem;text-align:right;color:var(--accent);font-weight:600;font-size:0.82rem">$${(c.amount||0).toFixed(2)}</td>
+          <td style="padding:0.45rem 0.5rem;text-align:center" onclick="event.stopPropagation()"><button class="btn-icon btn-sm" onclick="deleteCost('${c.id}','${type}')" style="color:var(--danger);font-size:0.8rem">🗑</button></td>
+        </tr>`).join('')}`;
+  }).join('');
+
   return `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.85rem">
     <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
-      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">${type==='flush'?'Flush':'Breeding'}</th>
+      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">${type==='flush'?'Donor / Flush':'Animal / Breeding'}</th>
       <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Description</th>
-      <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Category</th>
       <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Date</th>
+      <th></th>
       <th style="padding:0.65rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3)">Amount</th>
-      <th style="padding:0.65rem 1rem"></th>
+      <th></th>
     </tr></thead>
     <tbody>
-      ${costs.map(c => {
-        const rec = records.find(r => r.id === c[idField]);
-        const label = type==='flush'
-          ? (()=>{ const d=allLambs.find(l=>l.id===rec?.donor_id); return (d?d.name:'')+' '+(rec?.flush_date||''); })()
-          : (()=>{ const l=allLambs.find(x=>x.id===rec?.lamb_id); return (l?l.name:'')+' '+(rec?.breeding_date||''); })();
-        return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditFromCost('${c[idField]}','${type}','${c[idField]}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
-          <td style="padding:0.65rem 1rem;color:var(--text2);font-size:0.82rem;white-space:nowrap">${label.trim()||'—'}</td>
-          <td style="padding:0.65rem 1rem;color:var(--text);font-weight:500">${c.description}</td>
-          <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${c.category||'Other'}</span></td>
-          <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${c.date||'—'}</td>
-          <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${(c.amount||0).toFixed(2)}</td>
-          <td style="padding:0.65rem 1rem;text-align:center" onclick="event.stopPropagation()"><button class="btn-icon btn-sm" onclick="deleteCost('${c.id}','${type}')" style="color:var(--danger)">🗑</button></td>
-        </tr>`;
-      }).join('')}
+      ${rows}
       <tr style="background:var(--surface2);border-top:2px solid var(--border)">
         <td colspan="4" style="padding:0.65rem 1rem;font-weight:700">Total</td>
         <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${total.toFixed(2)}</td>
@@ -7374,7 +7398,7 @@ async function openEditFlush(id) {
   const [{ data }, { data: costs }, { data: invEntry }] = await Promise.all([
     db.from('embryo_flushes').select('*').eq('id', id).single(),
     db.from('flush_costs').select('*').eq('flush_id', id).order('date'),
-    db.from('embryo_inventory').select('location').eq('flush_id', id).maybeSingle(),
+    db.from('embryo_inventory').select('location').eq('flush_id', id).limit(1).then(r => ({data: r.data?.[0]||null, error: r.error})),
   ]);
   if (data) {
     showFlushModal(data);
