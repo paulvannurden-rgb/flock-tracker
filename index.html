@@ -4662,7 +4662,7 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
   // Filter flush records and transfers to match filtered costs
   const filteredFlushIds = new Set(fc.map(c => c.flush_id));
   const filteredFlushRecs = flushRecs.filter(f => filteredFlushIds.has(f.id));
-  const totalEmbryos = filteredFlushRecs.reduce((s,f) => s+(f.embryos_collected||0), 0);
+  const totalEmbryos = filteredFlushRecs.reduce((s,f) => s+(f.embryos_transferred||0)+(f.embryos_frozen||0), 0);
   const filteredTransfers = transfers.filter(t => filteredFlushIds.has(t.flush_id));
   const totalLambs = filteredTransfers.filter(t=>t.lamb_born).reduce((s,t)=>s+(t.lamb_count||0),0);
 
@@ -4734,7 +4734,7 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
       <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$${totalCost.toFixed(2)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Total</div></div>
       <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--purple)">$${flushTotal.toFixed(2)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Flush</div></div>
       <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--blue)">$${breedTotal.toFixed(2)}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Breeding</div></div>
-      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$${costPerEmbryo}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Per Embryo</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$${costPerEmbryo}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Per Viable Embryo</div></div>
       <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--green)">$${costPerLamb}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Per Live Lamb</div></div>
     </div>
 
@@ -4803,13 +4803,13 @@ function renderCostTable(costs, type, records) {
         const label = type==='flush'
           ? (()=>{ const d=allLambs.find(l=>l.id===rec?.donor_id); return (d?d.name:'')+' '+(rec?.flush_date||''); })()
           : (()=>{ const l=allLambs.find(x=>x.id===rec?.lamb_id); return (l?l.name:'')+' '+(rec?.breeding_date||''); })();
-        return `<tr style="border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditFromCost('${c[idField]}','${type}','${c[idField]}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
           <td style="padding:0.65rem 1rem;color:var(--text2);font-size:0.82rem;white-space:nowrap">${label.trim()||'—'}</td>
           <td style="padding:0.65rem 1rem;color:var(--text);font-weight:500">${c.description}</td>
           <td style="padding:0.65rem 1rem"><span style="background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${c.category||'Other'}</span></td>
           <td style="padding:0.65rem 1rem;color:var(--text2);white-space:nowrap">${c.date||'—'}</td>
           <td style="padding:0.65rem 1rem;text-align:right;font-weight:700;color:var(--accent)">$${(c.amount||0).toFixed(2)}</td>
-          <td style="padding:0.65rem 1rem;text-align:center"><button class="btn-icon btn-sm" onclick="deleteCost('${c.id}','${type}')" style="color:var(--danger)">🗑</button></td>
+          <td style="padding:0.65rem 1rem;text-align:center" onclick="event.stopPropagation()"><button class="btn-icon btn-sm" onclick="deleteCost('${c.id}','${type}')" style="color:var(--danger)">🗑</button></td>
         </tr>`;
       }).join('')}
       <tr style="background:var(--surface2);border-top:2px solid var(--border)">
@@ -4969,6 +4969,18 @@ async function saveCost(type) {
   if (error) { toast('Save failed: ' + (error.message||'unknown')); return; }
   toast(inserts.length === 1 ? 'Cost saved' : `${inserts.length} costs saved`);
   closeModal(); renderCosts();
+}
+
+async function openEditFromCost(recId, type) {
+  if (type === 'flush') {
+    const rec = (window._costsFlushRecs||[]).find(r => r.id === recId);
+    const donorId = rec?.donor_id || null;
+    openEditFlushGlobal(recId, donorId);
+  } else {
+    const rec = (window._costsBreedRecs||[]).find(r => r.id === recId);
+    const lambId = rec?.lamb_id || null;
+    openEditBreedingGlobal(recId, lambId);
+  }
 }
 
 async function deleteCost(id, type) {
