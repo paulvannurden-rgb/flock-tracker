@@ -319,6 +319,8 @@
         <button class="sidebar-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span>AI Rams</button>
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
+        <button class="sidebar-btn" onclick="showPage('transfers')" data-page="transfers"><span>🔀</span>Transfers</button>
+        <button class="sidebar-btn" onclick="showPage('lambing')" data-page="lambing"><span>🐣</span>Lambing</button>
         <button class="sidebar-btn" onclick="showPage('weights')" data-page="weights"><span>⚖️</span>Weights</button>
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
         <button class="sidebar-btn" onclick="showPage('shows')" data-page="shows"><span>🏆</span>Shows</button>
@@ -686,6 +688,8 @@ function showPage(page) {
   else if (page === 'airams') renderAiRams();
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
+  else if (page === 'transfers') renderTransfersPage();
+  else if (page === 'lambing') renderLambingPage();
   else if (page === 'weights') renderWeightsPage();
   else if (page === 'analytics') renderAnalytics();
   else if (page === 'shows') renderShows();
@@ -3993,6 +3997,13 @@ function renderFlushTable(allRecs, allTransfers, filters) {
                   <td style="padding:0.75rem 1rem" onclick="event.stopPropagation();showLamb('${f.donor_id}')">
                     <span style="font-weight:600;color:var(--accent)">${donor?.name||'Unknown'}</span>
                     ${donor?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${donor.ear_tag}</span>`:''}
+                    ${(()=>{
+                      const viable = (f.embryos_transferred||0) + (f.embryos_frozen||0);
+                      const actualTransfers = allTransfers.filter(t=>t.flush_id===f.id).reduce((s,t)=>s+(t.num_transferred||1),0);
+                      if (viable > 0 && actualTransfers < viable) return `<span title="${actualTransfers}/${viable} transfers recorded" style="margin-left:0.4rem;font-size:0.68rem;background:#fef3cd;color:#92560a;border-radius:0.2rem;padding:0.05rem 0.4rem;font-weight:600">⚠️ ${actualTransfers}/${viable}</span>`;
+                      if (viable > 0 && actualTransfers > viable) return `<span title="More transfers than viable embryos" style="margin-left:0.4rem;font-size:0.68rem;background:#fee2e2;color:#dc2626;border-radius:0.2rem;padding:0.05rem 0.4rem;font-weight:600">❌ ${actualTransfers}/${viable}</span>`;
+                      return '';
+                    })()}
                   </td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}</td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${f.flush_date||'—'}</td>
@@ -4191,10 +4202,454 @@ async function openEditFlushGlobal(flushId, donorId) {
   }, 50);
 }
 
+async function openEditFlushGlobal(flushId, donorId) {
+  const [{ data: flush }, { data: costs }, { data: invEntry }] = await Promise.all([
+    db.from('embryo_flushes').select('*').eq('id', flushId).single(),
+    db.from('flush_costs').select('*').eq('flush_id', flushId).order('date'),
+    db.from('embryo_inventory').select('location').eq('flush_id', flushId).limit(1).then(r => ({data: r.data?.[0]||null, error: r.error})),
+  ]);
+  if (!flush) return;
+  const prevLambId = currentLambId;
+  currentLambId = donorId;
+  showFlushModal(flush);
+  setTimeout(() => {
+    populateExistingCosts('fl-costs', costs || []);
+    updateFlushBalance();
+    if (invEntry?.location) {
+      const locEl = document.getElementById('fl-embryo-location');
+      if (locEl) locEl.value = invEntry.location;
+    }
+    // Load transfers inline
+    if (flush?.id) loadInlineTransfers(flush.id);
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveFlush(flushId);
+        currentLambId = prevLambId;
+        renderFlushes();
+      };
+    }
+  }, 50);
+}
+
+// ── TRANSFERS PAGE ─────────────────────────────────────
+async function renderTransfersPage(filterFlushId) {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = '<div style="padding:2rem;color:var(--text3)">Loading transfers…</div>';
+
+  const [{ data: transfers }, { data: flushes }] = await Promise.all([
+    db.from('embryo_transfers').select('*').order('implant_date', {ascending:false}),
+    db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
+  ]);
+
+  window._allTransfers = transfers || [];
+  window._transferFlushes = flushes || [];
+
+  renderTransfersHTML(filterFlushId || null);
+}
+
+function openTransfersForFlush(flushId) {
+  window._transferFlushFilter = flushId;
+  renderTransfersHTML(flushId);
+}
+
+function renderTransfersHTML(filterFlushId) {
+  const transfers = window._allTransfers || [];
+  const flushes = window._transferFlushes || [];
+
+  const filtered = filterFlushId ? transfers.filter(t => t.flush_id === filterFlushId) : transfers;
+
+  // Summary stats
+  const total = filtered.length;
+  const pregnant = filtered.filter(t => t.outcome === 'Confirmed Pregnant' || t.outcome === 'Lamb Born').length;
+  const lambBorn = filtered.filter(t => t.outcome === 'Lamb Born').length;
+  const lambCount = filtered.reduce((s,t) => s + (t.lamb_count||0), 0);
+  const decided = filtered.filter(t => t.outcome && t.outcome !== 'Pending').length;
+  const conceptionRate = decided > 0 ? Math.round(pregnant/decided*100) : null;
+
+  // Filter selector flush options
+  const flushOpts = flushes.map(f => {
+    const donor = allLambs.find(l => l.id === f.donor_id);
+    return `<option value="${f.id}" ${f.id === filterFlushId ? 'selected' : ''}>${donor?.name||'?'} — ${f.flush_date} (${f.flush_type||'MOET'})</option>`;
+  }).join('');
+
+  // Group transfers by flush
+  const groups = {};
+  const groupOrder = [];
+  filtered.forEach(t => {
+    if (!groups[t.flush_id]) { groups[t.flush_id] = []; groupOrder.push(t.flush_id); }
+    groups[t.flush_id].push(t);
+  });
+
+  const groupHTML = groupOrder.map(fid => {
+    const flush = flushes.find(f => f.id === fid);
+    const donor = allLambs.find(l => l.id === flush?.donor_id);
+    const sire = flush?.ai_sire_id ? allAiRams.find(r => r.id === flush.ai_sire_id) : null;
+    const groupTs = groups[fid];
+    const groupPreg = groupTs.filter(t => t.outcome === 'Confirmed Pregnant' || t.outcome === 'Lamb Born').length;
+    const groupDecided = groupTs.filter(t => t.outcome && t.outcome !== 'Pending').length;
+
+    const rows = groupTs.map(t => {
+      const recip = allLambs.find(l => l.id === t.recipient_id);
+      const recipName = recip ? recip.name + (recip.ear_tag ? ' #'+recip.ear_tag : '') : (t.recip_text || t.recipient_text || '—');
+      const outBg = t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born' ? '#dcfce7' : t.outcome==='Not Pregnant'||t.outcome==='Failed' ? '#fee2e2' : 'var(--surface2)';
+      const outColor = t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born' ? '#15803d' : t.outcome==='Not Pregnant'||t.outcome==='Failed' ? '#dc2626' : 'var(--text3)';
+      return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditTransferGlobal('${fid}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:0.6rem 1rem;font-weight:600;color:var(--text)">${recipName}</td>
+        <td style="padding:0.6rem 1rem;color:var(--text2);font-size:0.82rem">${t.implant_date||'—'}</td>
+        <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.num_transferred||'—'}</td>
+        <td style="padding:0.6rem 1rem"><span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.2rem 0.6rem;font-size:0.75rem;font-weight:600">${t.outcome||'Pending'}</span></td>
+        <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.lamb_count||'—'}</td>
+        <td style="padding:0.6rem 1rem;color:var(--text3);font-size:0.78rem">${t.notes||''}</td>
+        <td style="padding:0.6rem 0.5rem;text-align:center" onclick="event.stopPropagation()"><button class="btn-icon btn-sm" onclick="deleteTransfer('${t.id}')" style="color:var(--danger)">🗑</button></td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem">
+        <div style="padding:0.75rem 1rem;background:var(--surface2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-weight:700;color:var(--accent)">${donor?.name||'?'}</span>
+            <span style="color:var(--text3);font-size:0.82rem"> × ${sire?.name||flush?.sire_text||'?'} · ${flush?.flush_date||''} · ${flush?.flush_type||'MOET'}</span>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            ${groupDecided>0 ? `<span style="font-size:0.78rem;color:var(--text3)">${groupPreg}/${groupDecided} conceived</span>` : ''}
+            <button class="btn btn-secondary btn-sm" onclick="openAddTransferForFlush('${fid}')">+ Add Transfer</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead><tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Recipient</th>
+            <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Date</th>
+            <th style="padding:0.5rem 1rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)"># Embryos</th>
+            <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Outcome</th>
+            <th style="padding:0.5rem 1rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Lambs</th>
+            <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
+            <th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('main-content').innerHTML = `
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🔀 Embryo Transfers</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddTransferForFlush(null)">+ Add Transfer</button>
+    </div>
+
+    <!-- Flush filter -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap">Filter by Flush</label>
+      <select onchange="window._transferFlushFilter=this.value||null;renderTransfersHTML(window._transferFlushFilter)" style="flex:1;padding:0.35rem 0.6rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All flushes</option>
+        ${flushOpts}
+      </select>
+      ${filterFlushId ? `<button onclick="window._transferFlushFilter=null;renderTransfersHTML(null)" style="background:none;border:none;color:var(--text3);font-size:0.78rem;cursor:pointer;text-decoration:underline">Clear</button>` : ''}
+    </div>
+
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--text)">${total}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Transfers</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--green)">${pregnant}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Pregnant</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${conceptionRate !== null ? conceptionRate+'%' : '—'}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Conception Rate</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--blue)">${lambBorn}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Lamb Born</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--blue)">${lambCount}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Total Lambs</div></div>
+    </div>
+
+    <!-- Transfer groups -->
+    ${groupHTML || `<div class="empty"><div class="empty-icon">🔀</div><h3>No transfers yet</h3><p>Add transfers from a flush record</p></div>`}`;
+}
+
+function openAddTransferForFlush(flushId) {
+  showTransferModal(flushId, null);
+  // Override save to refresh transfers page
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) {
+        const origOnclick = btn.onclick;
+        btn.onclick = async function() {
+          await saveTransfer(flushId, '');
+          await renderTransfersPage(window._transferFlushFilter);
+        };
+      }
+    }
+  }, 50);
+}
+
+async function openEditTransferGlobal(flushId, transferId) {
+  const { data } = await db.from('embryo_transfers').select('*').eq('id', transferId).single();
+  if (!data) return;
+  showTransferModal(flushId, data);
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveTransfer(flushId, transferId);
+        await renderTransfersPage(window._transferFlushFilter);
+      };
+    }
+  }, 50);
+}
+
+async function deleteTransfer(id) {
+  if (!confirm('Delete this transfer record?')) return;
+  await db.from('embryo_transfers').delete().eq('id', id);
+  const idx = (window._allTransfers||[]).findIndex(t => t.id === id);
+  if (idx >= 0) window._allTransfers.splice(idx, 1);
+  renderTransfersHTML(window._transferFlushFilter || null);
+}
+
 document.addEventListener('click', function(e) {
   const wrap = document.getElementById('flush-filter-dropdown-wrap');
   if (wrap && !wrap.contains(e.target)) closeFlushFilterMenu();
 });
+
+// ── LAMBING PAGE ─────────────────────────────────────
+async function renderLambingPage() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = '<div style="padding:2rem;color:var(--text3)">Loading…</div>';
+
+  const [{ data: breedRecs }, { data: transfers }, { data: flushes }] = await Promise.all([
+    db.from('breeding_records').select('*').eq('outcome', 'Confirmed Pregnant').order('expected_lamb_date'),
+    db.from('embryo_transfers').select('*').eq('outcome', 'Confirmed Pregnant').order('implant_date'),
+    db.from('embryo_flushes').select('*'),
+  ]);
+
+  window._lambingBreedRecs = breedRecs || [];
+  window._lambingTransfers = transfers || [];
+  window._lambingFlushes = flushes || [];
+
+  renderLambingHTML();
+}
+
+function renderLambingHTML() {
+  const today = new Date().toISOString().slice(0,10);
+  const breedRecs = window._lambingBreedRecs || [];
+  const transfers = window._lambingTransfers || [];
+  const flushes = window._lambingFlushes || [];
+
+  const totalPending = breedRecs.length + transfers.length;
+  const overdue = [
+    ...breedRecs.filter(r => r.expected_lamb_date && r.expected_lamb_date < today),
+    ...transfers.filter(t => {
+      const f = flushes.find(fl => fl.id === t.flush_id);
+      const implant = t.implant_date;
+      if (!implant) return false;
+      const expected = new Date(new Date(implant+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+      return expected < today;
+    })
+  ].length;
+
+  // Build breed record cards
+  const breedCards = breedRecs.map(r => {
+    const ewe = allLambs.find(l => l.id === r.lamb_id);
+    const sire = r.ai_sire_id ? allAiRams.find(x => x.id === r.ai_sire_id) : (r.sire_id ? allLambs.find(l => l.id === r.sire_id) : null);
+    const isOverdue = r.expected_lamb_date && r.expected_lamb_date < today;
+    const badge = isOverdue ? `<span style="background:#fee2e2;color:#dc2626;border-radius:1rem;padding:0.15rem 0.5rem;font-size:0.7rem;font-weight:600">⚠️ Overdue</span>` : '';
+    return `<div class="card" style="padding:1rem;border-left:3px solid ${isOverdue?'#dc2626':'var(--accent)'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;color:var(--text);font-size:0.95rem">${ewe?.name||'?'} ${ewe?.ear_tag?'<span style="color:var(--text3);font-size:0.78rem">#'+ewe.ear_tag+'</span>':''}</div>
+          <div style="font-size:0.8rem;color:var(--text3);margin-top:0.15rem">× ${sire?.name||r.sire_text||'?'} · Bred ${r.breeding_date||'?'}</div>
+          <div style="font-size:0.8rem;color:var(--text2);margin-top:0.15rem">📅 Expected: <span style="font-weight:600;color:${isOverdue?'#dc2626':'var(--text)'}">${r.expected_lamb_date||'—'}</span> ${badge}</div>
+          ${r.semen_type ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${r.semen_type==='frozen'?'❄️ Frozen':'🌱 Fresh'} semen</div>` : ''}
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openRecordLambing('breeding','${r.id}')">🐑 Record Lambing</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Build transfer cards
+  const transferCards = transfers.map(t => {
+    const flush = flushes.find(f => f.id === t.flush_id);
+    const donor = allLambs.find(l => l.id === flush?.donor_id);
+    const recip = allLambs.find(l => l.id === t.recipient_id);
+    const recipName = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recip_text||t.recipient_text||'Unknown recipient');
+    const implant = t.implant_date;
+    const expected = implant ? new Date(new Date(implant+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
+    const isOverdue = expected && expected < today;
+    const badge = isOverdue ? `<span style="background:#fee2e2;color:#dc2626;border-radius:1rem;padding:0.15rem 0.5rem;font-size:0.7rem;font-weight:600">⚠️ Overdue</span>` : '';
+    return `<div class="card" style="padding:1rem;border-left:3px solid ${isOverdue?'#dc2626':'#7c3aed'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;color:var(--text);font-size:0.95rem">${recipName}</div>
+          <div style="font-size:0.8rem;color:var(--text3);margin-top:0.15rem">Embryo from <span style="font-weight:600">${donor?.name||'?'}</span> flush · ${flush?.flush_date||'?'}</div>
+          <div style="font-size:0.8rem;color:var(--text3);margin-top:0.1rem">Implanted ${t.implant_date||'?'} · ${t.num_transferred||1} embryo${(t.num_transferred||1)!==1?'s':''}</div>
+          ${expected ? `<div style="font-size:0.8rem;color:var(--text2);margin-top:0.15rem">📅 Expected: <span style="font-weight:600;color:${isOverdue?'#dc2626':'var(--text)'}">${expected}</span> ${badge}</div>` : ''}
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openRecordLambing('transfer','${t.id}')">🐑 Record Lambing</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('main-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">🐣 Lambing — Confirmed Pregnancies</div>
+    </div>
+
+    <!-- Summary -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${totalPending}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Awaiting Lambing</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${breedRecs.length}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Natural / AI</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#7c3aed">${transfers.length}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Embryo Transfer</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#dc2626">${overdue}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Overdue</div></div>
+    </div>
+
+    ${totalPending === 0 ? `<div class="empty"><div class="empty-icon">🐣</div><h3>No confirmed pregnancies pending lambing</h3><p>Set a breeding or transfer outcome to "Confirmed Pregnant" to see it here</p></div>` : `
+      ${breedCards ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Natural / AI Breeding</div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.25rem">${breedCards}</div>` : ''}
+      ${transferCards ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Embryo Transfers</div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem">${transferCards}</div>` : ''}
+    `}`;
+}
+
+async function openRecordLambing(sourceType, sourceId) {
+  // Load current record
+  const table = sourceType === 'breeding' ? 'breeding_records' : 'embryo_transfers';
+  const { data: rec } = await db.from(table).select('*').eq('id', sourceId).single();
+  if (!rec) return;
+
+  const flockOptions = allLambs.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}${l.alt_id?' ['+l.alt_id+']':''}</option>`).join('');
+
+  const eweId = sourceType === 'breeding' ? rec.lamb_id : rec.recipient_id;
+  const ewe = allLambs.find(l => l.id === eweId);
+  const eweName = ewe ? ewe.name+(ewe.ear_tag?' #'+ewe.ear_tag:'') : (rec.recip_text||rec.recipient_text||'Unknown');
+
+  window._lambingSource = { type: sourceType, id: sourceId, rec };
+  window._newLambs = [{ ear_tag:'', sex:'', birth_weight:'', link_id:'' }];
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🐑 Record Lambing — ${eweName}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+
+    <div class="row">
+      <div class="field"><label>Birth Date *</label><input type="date" id="lb-birth-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Lambs Born *</label><input type="number" id="lb-count" min="1" placeholder="e.g. 2" oninput="updateLambRows()"></div>
+    </div>
+
+    <div class="field"><label>Birth Notes</label><textarea id="lb-notes" rows="2" placeholder="Birth weights, complications, etc."></textarea></div>
+
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Individual Lambs (optional)</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addLambRow()">+ Add Lamb</button>
+      </div>
+      <div id="lb-lamb-rows">${renderLambingRows(flockOptions)}</div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.84rem">
+        <input type="checkbox" id="lb-add-to-flock" style="accent-color:var(--accent);width:15px;height:15px"> Add new lambs to flock
+      </label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLambing()">Save Lambing Record</button>
+    </div>`);
+}
+
+function renderLambingRows(flockOptions) {
+  if (!window._newLambs || window._newLambs.length === 0) return '<div style="font-size:0.82rem;color:var(--text3)">Enter # lambs above to add individual details</div>';
+  const fo = flockOptions || allLambs.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
+  return window._newLambs.map((lb, i) => `
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:0.6rem;margin-bottom:0.4rem">
+      <div style="font-size:0.72rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:0.4rem">Lamb ${i+1}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem">
+        <div class="field" style="margin:0"><label>Ear Tag</label><input value="${lb.ear_tag||''}" oninput="window._newLambs[${i}].ear_tag=this.value" placeholder="#tag" style="width:100%"></div>
+        <div class="field" style="margin:0"><label>Sex</label>
+          <select oninput="window._newLambs[${i}].sex=this.value" style="width:100%">
+            <option value="">—</option><option ${lb.sex==='Ewe'?'selected':''}>Ewe</option><option ${lb.sex==='Ram'?'selected':''}>Ram</option><option ${lb.sex==='Wether'?'selected':''}>Wether</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0"><label>Birth Weight (lbs)</label><input type="number" step="0.1" value="${lb.birth_weight||''}" oninput="window._newLambs[${i}].birth_weight=this.value" placeholder="e.g. 8.5" style="width:100%"></div>
+        <div class="field" style="margin:0"><label>Link to existing lamb</label>
+          <select oninput="window._newLambs[${i}].link_id=this.value" style="width:100%">
+            <option value="">— or link to flock —</option>${fo}
+          </select>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function updateLambRows() {
+  const count = parseInt(document.getElementById('lb-count')?.value) || 0;
+  while (window._newLambs.length < count) window._newLambs.push({ ear_tag:'', sex:'', birth_weight:'', link_id:'' });
+  while (window._newLambs.length > count) window._newLambs.pop();
+  const el = document.getElementById('lb-lamb-rows');
+  if (el) el.innerHTML = renderLambingRows();
+}
+
+function addLambRow() {
+  window._newLambs = window._newLambs || [];
+  window._newLambs.push({ ear_tag:'', sex:'', birth_weight:'', link_id:'' });
+  const count = document.getElementById('lb-count');
+  if (count) count.value = window._newLambs.length;
+  const el = document.getElementById('lb-lamb-rows');
+  if (el) el.innerHTML = renderLambingRows();
+}
+
+async function saveLambing() {
+  const birthDate = document.getElementById('lb-birth-date')?.value;
+  const count = parseInt(document.getElementById('lb-count')?.value) || 0;
+  const notes = document.getElementById('lb-notes')?.value || null;
+  const addToFlock = document.getElementById('lb-add-to-flock')?.checked;
+  const src = window._lambingSource;
+  if (!birthDate) { toast('Birth date required'); return; }
+  if (!count || count < 1) { toast('Enter number of lambs born'); return; }
+  if (!src) return;
+
+  // Update source record to Lamb Born
+  const updatePayload = { outcome: 'Lamb Born', lamb_born: true, lamb_count: count, lamb_birth_date: birthDate, lamb_notes: notes };
+  if (src.type === 'breeding') {
+    await db.from('breeding_records').update({ outcome: 'Lamb Born' }).eq('id', src.id);
+  } else {
+    await db.from('embryo_transfers').update(updatePayload).eq('id', src.id);
+    // Also save individual transfer lambs
+    await db.from('embryo_transfer_lambs').delete().eq('transfer_id', src.id);
+    const lambRows = (window._newLambs||[]).filter(lb => lb.ear_tag || lb.sex || lb.link_id);
+    if (lambRows.length > 0) {
+      await db.from('embryo_transfer_lambs').insert(lambRows.map(lb => ({
+        transfer_id: src.id,
+        ear_tag: lb.ear_tag||null,
+        sex: lb.sex||null,
+        birth_weight: lb.birth_weight ? parseFloat(lb.birth_weight) : null,
+        existing_lamb_id: lb.link_id||null,
+      })));
+    }
+  }
+
+  // Optionally add lambs to flock
+  if (addToFlock) {
+    const eweId = src.type === 'breeding' ? src.rec.lamb_id : src.rec.recipient_id;
+    const sireId = src.type === 'breeding' ? (src.rec.ai_sire_id||src.rec.sire_id||null) : null;
+    const lambsToAdd = (window._newLambs||[]).filter(lb => !lb.link_id && (lb.ear_tag || lb.sex));
+    for (const lb of lambsToAdd) {
+      const ewe = allLambs.find(l => l.id === eweId);
+      await db.from('lambs').insert({
+        name: lb.ear_tag ? `Lamb ${lb.ear_tag}` : `Lamb from ${ewe?.name||'?'}`,
+        ear_tag: lb.ear_tag||null,
+        sex: lb.sex||null,
+        dob: birthDate,
+        birth_weight: lb.birth_weight ? parseFloat(lb.birth_weight) : null,
+        dam_id: eweId||null,
+        sire_id: sireId||null,
+        status: 'Active',
+        flock_type: 'Show',
+      });
+    }
+    if (lambsToAdd.length > 0) await loadLambs();
+  }
+
+  toast(`🐑 ${count} lamb${count!==1?'s':''} recorded!`);
+  closeModal();
+  renderLambingPage();
+}
 
 // ── ANALYTICS PAGE ────────────────────────────────────
 async function renderAnalytics() {
@@ -7432,8 +7887,8 @@ function showFlushModal(flush) {
     <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem">Embryo Results</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.35rem">
       <div class="field" style="margin:0"><label>Collected</label><input type="number" id="fl-count" value="${flush?.embryos_collected||''}" placeholder="0" oninput="updateFlushBalance()"></div>
-      <div class="field" style="margin:0"><label>Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="0" oninput="updateFlushBalance()"></div>
-      <div class="field" style="margin:0"><label>Frozen</label><input type="number" id="fl-frozen" value="${flush?.embryos_frozen||''}" placeholder="0" oninput="updateFlushBalance()"></div>
+      <div class="field" style="margin:0"><label>Transferred</label><input type="number" id="fl-transferred" value="${flush?.embryos_transferred||''}" placeholder="0" oninput="updateFlushBalance();if(window._currentFlushId)loadInlineTransfers(window._currentFlushId)"></div>
+      <div class="field" style="margin:0"><label>Frozen</label><input type="number" id="fl-frozen" value="${flush?.embryos_frozen||''}" placeholder="0" oninput="updateFlushBalance();if(window._currentFlushId)loadInlineTransfers(window._currentFlushId)"></div>
       <div class="field" style="margin:0"><label>Unfertilized</label><input type="number" id="fl-unfertilized" value="${flush?.embryos_unfertilized||''}" placeholder="0" oninput="updateFlushBalance()"></div>
       <div class="field" style="margin:0"><label>Degenerative</label><input type="number" id="fl-degenerate" value="${flush?.embryos_degenerate||''}" placeholder="0" oninput="updateFlushBalance()"></div>
     </div>
@@ -7477,11 +7932,110 @@ function showFlushModal(flush) {
       <div id="fl-costs"></div>
     </div>
 
+    <!-- TRANSFERS SECTION (edit only) -->
+    ${isEdit ? `<div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">🔀 Transfers</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addInlineTransfer('${flush?.id}')">+ Add Transfer</button>
+      </div>
+      <div id="fl-transfers-list"><div style="font-size:0.82rem;color:var(--text3);padding:0.25rem 0">Loading…</div></div>
+    </div>` : ''}
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlush('${flush?.id||''}')">${isEdit ? 'Save Changes' : 'Save Flush'}</button>
     </div>`);
   addCostEntryRow('fl-costs');
+  // Store flush ID for inline cross-checks
+  window._currentFlushId = flush?.id || null;
+  // Load transfers if editing
+  if (isEdit && flush?.id) loadInlineTransfers(flush.id);
+}
+
+async function loadInlineTransfers(flushId) {
+  const el = document.getElementById('fl-transfers-list');
+  if (!el) return;
+  const { data: ts } = await db.from('embryo_transfers').select('*').eq('flush_id', flushId).order('implant_date');
+
+  // Get current viable embryo counts from modal fields
+  const viable = (parseInt(document.getElementById('fl-transferred')?.value)||0) + (parseInt(document.getElementById('fl-frozen')?.value)||0);
+  const actualTotal = (ts||[]).reduce((s,t) => s+(t.num_transferred||1), 0);
+
+  let statusBanner = '';
+  if (viable > 0) {
+    if (actualTotal > viable) {
+      statusBanner = `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:0.4rem 0.75rem;font-size:0.78rem;color:#dc2626;font-weight:600;margin-bottom:0.5rem">❌ ${actualTotal} transfers exceed ${viable} viable embryos — fix before saving</div>`;
+    } else if (actualTotal < viable) {
+      statusBanner = `<div style="background:#fef3cd;border:1px solid #fcd68a;border-radius:var(--radius-sm);padding:0.4rem 0.75rem;font-size:0.78rem;color:#92560a;font-weight:600;margin-bottom:0.5rem">⚠️ ${actualTotal} of ${viable} viable embryos have transfers recorded</div>`;
+    } else {
+      statusBanner = `<div style="background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius-sm);padding:0.4rem 0.75rem;font-size:0.78rem;color:#15803d;font-weight:600;margin-bottom:0.5rem">✓ All ${viable} viable embryos accounted for</div>`;
+    }
+  }
+
+  if (!ts || ts.length === 0) {
+    el.innerHTML = statusBanner + '<div style="font-size:0.82rem;color:var(--text3);padding:0.25rem 0">No transfers yet — click + Add Transfer above</div>';
+    return;
+  }
+  el.innerHTML = statusBanner + ts.map(t => {
+    const recip = allLambs.find(l => l.id === t.recipient_id);
+    const name = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recip_text||t.recipient_text||'Unknown');
+    const outBg = t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born' ? '#dcfce7' : t.outcome==='Not Pregnant'||t.outcome==='Failed' ? '#fee2e2' : '#fef3cd';
+    const outColor = t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born' ? '#15803d' : t.outcome==='Not Pregnant'||t.outcome==='Failed' ? '#dc2626' : '#92560a';
+    const lambInfo = t.outcome==='Lamb Born' && t.lamb_count ? `<span style="font-size:0.75rem;color:#1d4ed8;flex-shrink:0;font-weight:600">🐑 ${t.lamb_count} lamb${t.lamb_count!==1?'s':''} ${t.lamb_birth_date?'('+t.lamb_birth_date+')':''}</span>` : '';
+    const pendingHint = (!t.outcome || t.outcome==='Pending') ? `<span style="font-size:0.7rem;color:var(--text3);font-style:italic">tap ✏️ to record outcome</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <span style="font-weight:600;font-size:0.85rem;color:var(--text)">${name}</span>
+        <span style="font-size:0.75rem;color:var(--text3);margin-left:0.4rem">${t.implant_date||''} · ${t.num_transferred||'?'} embryo${(t.num_transferred||1)!==1?'s':''}</span>
+      </div>
+      <span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.15rem 0.5rem;font-size:0.72rem;font-weight:600;flex-shrink:0">${t.outcome||'Pending'}</span>
+      ${lambInfo}
+      ${pendingHint}
+      <div style="display:flex;gap:0.25rem;flex-shrink:0">
+        <button class="btn-icon btn-sm" onclick="editInlineTransfer('${flushId}','${t.id}')" title="Edit / record outcome">✏️</button>
+        <button class="btn-icon btn-sm" onclick="deleteInlineTransfer('${flushId}','${t.id}')" style="color:var(--danger)" title="Delete">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addInlineTransfer(flushId) {
+  showTransferModal(flushId, null);
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveTransfer(flushId, '');
+        closeModal();
+        // Reopen the flush edit modal
+        openEditFlushGlobal(flushId, currentLambId);
+      };
+    }
+  }, 50);
+}
+
+async function editInlineTransfer(flushId, transferId) {
+  const { data } = await db.from('embryo_transfers').select('*').eq('id', transferId).single();
+  if (!data) return;
+  showTransferModal(flushId, data);
+  setTimeout(() => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveTransfer(flushId, transferId);
+        closeModal();
+        openEditFlushGlobal(flushId, currentLambId);
+      };
+    }
+  }, 50);
+}
+
+async function deleteInlineTransfer(flushId, transferId) {
+  if (!confirm('Delete this transfer?')) return;
+  await db.from('embryo_transfers').delete().eq('id', transferId);
+  loadInlineTransfers(flushId);
 }
 
 function updateFlushSemenOpts() {
@@ -7511,6 +8065,19 @@ async function saveFlush(id) {
   const semenLoc = semenType === 'frozen' ? v('fl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('fl-straws-used')) || 0) : 0;
   const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+
+  // Cross-check: transfer records must not exceed viable embryos (transferred + frozen)
+  if (id) {
+    const viable = (payload.embryos_transferred||0) + (payload.embryos_frozen||0);
+    if (viable > 0) {
+      const { data: existingTs } = await db.from('embryo_transfers').select('num_transferred').eq('flush_id', id);
+      const actualTotal = (existingTs||[]).reduce((s,t) => s+(t.num_transferred||1), 0);
+      if (actualTotal > viable) {
+        toast(`⚠️ ${actualTotal} transfers recorded but only ${viable} viable embryos (transferred + frozen). Remove transfers or increase embryo counts before saving.`);
+        return;
+      }
+    }
+  }
   if (id) {
     const { data: old } = await db.from('embryo_flushes').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('embryo_flushes').update(payload).eq('id', id);
