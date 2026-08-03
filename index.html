@@ -9178,9 +9178,30 @@ function layoutAndDrawPed(animals) {
   const placed = new Set();
   let xCursor = 20;
 
-  function placeNode(id, depth, visited = new Set()) {
+  // Compute proper generation depth for each node: max(parent depths) + 1
+  const genDepth = {};
+  function computeDepth(id, visited = new Set()) {
+    if (visited.has(id)) return 0;
+    visited.add(id);
+    if (genDepth[id] !== undefined) return genDepth[id];
+    const a = byId[id];
+    if (!a) return 0;
+    const parentIds = [a.sire_id, a.dam_id, a.ai_sire_id,
+      a._type==='airam' ? a.sire_ai_id : null,
+      a._type==='airam' ? a.dam_lamb_id : null
+    ].filter(pid => pid && byId[pid]);
+    const maxParentDepth = parentIds.length > 0
+      ? Math.max(...parentIds.map(pid => computeDepth(pid, new Set(visited))))
+      : -1;
+    genDepth[id] = maxParentDepth + 1;
+    return genDepth[id];
+  }
+  animals.forEach(a => computeDepth(a.id));
+
+  function placeNode(id, visited = new Set()) {
     if (placed.has(id) || visited.has(id)) return;
     visited.add(id); placed.add(id);
+    const depth = genDepth[id] || 0;
     const kids = (childrenOf[id] || []).filter(c => !placed.has(c));
     const y = 20 + depth * (NODE_H + VGAP);
     if (kids.length === 0) {
@@ -9189,7 +9210,7 @@ function layoutAndDrawPed(animals) {
       return;
     }
     const startX = xCursor;
-    kids.forEach(kid => placeNode(kid, depth + 1, new Set(visited)));
+    kids.forEach(kid => placeNode(kid, new Set(visited)));
     const firstKid = positions[kids[0]];
     const lastKid = positions[kids[kids.length - 1]];
     if (firstKid && lastKid) {
@@ -9201,9 +9222,9 @@ function layoutAndDrawPed(animals) {
   }
 
   // Only place real connected trees
-  realRoots.forEach(a => { placeNode(a.id, 0); xCursor += HGAP; });
+  realRoots.forEach(a => { placeNode(a.id); xCursor += HGAP; });
   // Place any remaining connected but missed animals
-  animals.filter(a => !placed.has(a.id) && !isolated.includes(a)).forEach(a => placeNode(a.id, 0));
+  animals.filter(a => !placed.has(a.id) && !isolated.includes(a)).forEach(a => placeNode(a.id));
 
   // Place isolated animals in a grid below
   const treeMaxY = Object.values(positions).length > 0 ? Math.max(...Object.values(positions).map(p => p.y + NODE_H)) : 0;
