@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flock Health Ledger</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script>
-window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){return {};},book_append_sheet:function(){}},writeFile:function(){alert("Export not available in preview");}};
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #f0f2f5;
@@ -373,446 +372,10 @@ window.XLSX={utils:{json_to_sheet:function(d){return d;},book_new:function(){ret
 <div id="toast"></div>
 
 <script>
+const SUPABASE_URL = 'https://fmdnazihkanqflnabkcy.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZG5hemloa2FucWZsbmFia2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTUzMzMsImV4cCI6MjA5MTg3MTMzM30.tzR7CNxZ9RtZgtKkRNC3UUp1_hTjgoI8kL5rt_tRPyk';
 const FLOCK_PASSWORD = 'flock2024';
-
-const MOCK_DATA = {
-  lambs: [
-    { id: 'l1', name: 'Gigi', ear_tag: '20055', alt_id: 'NSIP-4421', genetic_code: 'FD', dob: '2019-12-19', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e85e38', ai_sire_id: 'ar3' },
-    { id: 'l2', name: 'Betty', ear_tag: '25309', genetic_code: 'FF', dob: '2024-12-25', sex: 'Ewe', breed: 'Natural', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838', ai_sire_id: 'ar1' },
-    { id: 'l3', name: 'Daphnie', ear_tag: '5568', genetic_code: 'FF', dob: '2023-02-10', sex: 'Ewe', breed: 'Dorset', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#e838a0' },
-    { id: 'l4', name: 'Frankie', ear_tag: '21428', genetic_code: 'FD', dob: '2020-12-10', sex: 'Ewe', breed: 'Cross', role: 'Embryo Donor', status: 'Active', flock_type: 'Breeding', tag_color: '#38a8e8' },
-    { id: 'l5', name: 'Dee37', ear_tag: '26037', genetic_code: 'RRFF', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Both', tag_color: '#e85e38' },
-    { id: 'l6', name: 'Ivy', ear_tag: '26013', genetic_code: 'RRFD', dob: '2025-12-10', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8' },
-    { id: 'l7', name: 'Italy', ear_tag: '62', dob: '2026-01-19', sex: 'Ewe', breed: 'Speck', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38e8d4', dam_id: 'l3', ai_sire_id: 'ar3' },
-    { id: 'l8', name: 'Posie', ear_tag: '61', dob: '2025-12-15', sex: 'Ewe', breed: 'Natural', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e838a0', dam_id: 'l1', ai_sire_id: 'ar2' },
-    { id: 'l9', name: 'Blaze', ear_tag: 'K089', dob: '2025-12-27', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#38a8e8', ai_sire_id: 'ar3' },
-    { id: 'l10', name: 'Eddie', ear_tag: '6042', dob: '2026-01-15', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Show', tag_color: '#e85e38', ai_sire_id: 'ar4' },
-    { id: 'l11', name: 'Kaht1', ear_tag: '1', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#6e8fe8' },
-    { id: 'l12', name: 'Kaht2', ear_tag: '168', sex: 'Ewe', breed: 'Kahtadin', role: 'Embryo Recipient', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
-    { id: 'l13', name: 'Ezzy', ear_tag: '14', genetic_code: 'FF', dob: '2018-12-20', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#e8a838' },
-    { id: 'l14', name: 'Sissy', ear_tag: '2209', genetic_code: 'FF', dob: '2021-12-17', sex: 'Ewe', breed: 'Cross', role: 'Standard', status: 'Active', flock_type: 'Breeding', tag_color: '#38e86e', ai_sire_id: 'ar5' },
-    { id: 'l15', name: 'Thor', ear_tag: '26084', dob: '2025-12-14', sex: 'Wether', breed: 'Cross', role: 'Standard', status: 'Sold', flock_type: 'Show', tag_color: '#6e8fe8' },
-  ],
-  ai_rams: [
-    { id: 'ar1', name: 'Truce', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
-    { id: 'ar2', name: 'Ceasefire', breed: 'Cross', genetic_code: 'FF', sire_ai_id: 'ar1' },
-    { id: 'ar3', name: 'Italian Stallion', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar6' },
-    { id: 'ar4', name: 'Unfiltered', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar7' },
-    { id: 'ar5', name: 'Manifest', breed: 'Cross', genetic_code: 'FD' },
-    { id: 'ar6', name: 'Bombshell', breed: 'Cross', genetic_code: 'FD' },
-    { id: 'ar7', name: 'Tres Amigos', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
-    { id: 'ar8', name: 'Alliance', breed: 'Cross', genetic_code: 'FD', sire_ai_id: 'ar2' },
-  ],
-  health_records: [
-    { id: 'h1', lamb_id: 'l1', type: 'medication', product: 'Dectomax', date: '2026-03-08', route: 'Intramuscular (IM)', dose: '1 ml' },
-    { id: 'h2', lamb_id: 'l1', type: 'vaccine', product: 'CDT (Clostridium/Tetanus)', date: '2026-02-15', route: 'Subcutaneous (SQ)' },
-    { id: 'h3', lamb_id: 'l2', type: 'medication', product: 'Dectomax', date: '2026-04-15', route: 'Intramuscular (IM)', dose: '1 ml' },
-    { id: 'h4', lamb_id: 'l9', type: 'medication', product: 'Vitamin B12', date: '2026-04-19', route: 'Subcutaneous (SQ)', dose: '5ml' },
-  ],
-  weight_records: [
-    { id: 'w1', lamb_id: 'l9', weight_lbs: 98, date: '2026-03-15' },
-    { id: 'w2', lamb_id: 'l9', weight_lbs: 112, date: '2026-04-01' },
-    { id: 'w3', lamb_id: 'l9', weight_lbs: 119, date: '2026-04-19' },
-    { id: 'w4', lamb_id: 'l10', weight_lbs: 121, date: '2026-04-19' },
-  ],
-  breeding_records: [
-    { id: 'b1',  lamb_id: 'l1',  ai_sire_id: 'ar2', breeding_date: '2025-07-24', expected_lamb_date: '2025-12-18', outcome: 'Lamb Born' },
-    { id: 'b2',  lamb_id: 'l2',  ai_sire_id: 'ar1', breeding_date: '2025-07-30', expected_lamb_date: '2025-12-26', outcome: 'Confirmed Pregnant' },
-    { id: 'b3',  lamb_id: 'l13', sire_text: 'Boozie', breeding_date: '2023-07-24', expected_lamb_date: '2023-12-26', outcome: 'Lamb Born', notes: 'Twins' },
-    { id: 'b4',  lamb_id: 'l4',  ai_sire_id: 'ar8', breeding_date: '2025-09-03', expected_lamb_date: '2026-01-28', outcome: 'Not Pregnant' },
-    { id: 'b5',  lamb_id: 'l14', ai_sire_id: 'ar5', breeding_date: '2025-09-01', expected_lamb_date: '2026-01-26', outcome: 'Pending' },
-    { id: 'b6',  lamb_id: 'l3',  ai_sire_id: 'ar3', breeding_date: '2024-07-20', expected_lamb_date: '2024-12-14', outcome: 'Pending' },
-    { id: 'b7',  lamb_id: 'l1',  ai_sire_id: 'ar3', breeding_date: '2024-08-10', expected_lamb_date: '2025-01-04', outcome: 'Confirmed Pregnant', notes: 'Second cycle' },
-    { id: 'b8',  lamb_id: 'l4',  ai_sire_id: 'ar1', breeding_date: '2024-09-15', expected_lamb_date: '2025-02-08', outcome: 'Lamb Born', notes: '3 lambs born' },
-    { id: 'b9',  lamb_id: 'l13', ai_sire_id: 'ar2', breeding_date: '2025-08-05', expected_lamb_date: '2025-12-30', outcome: 'Not Pregnant' },
-    { id: 'b10', lamb_id: 'l2',  ai_sire_id: 'ar8', breeding_date: '2024-10-01', expected_lamb_date: '2025-02-24', outcome: 'Lamb Born' },
-    { id: 'b11', lamb_id: 'l5',  ai_sire_id: 'ar2', breeding_date: '2025-09-10', expected_lamb_date: '2026-02-04', outcome: 'Confirmed Pregnant' },
-    { id: 'b12', lamb_id: 'l14', ai_sire_id: 'ar3', breeding_date: '2024-08-20', expected_lamb_date: '2025-01-14', outcome: 'Not Pregnant', notes: 'Retry scheduled' },
-    { id: 'b13', lamb_id: 'l3',  ai_sire_id: 'ar1', breeding_date: '2025-10-01', expected_lamb_date: '2026-02-25', outcome: 'Pending' },
-    { id: 'b14', lamb_id: 'l1',  ai_sire_id: 'ar8', breeding_date: '2025-10-15', expected_lamb_date: '2026-03-11', outcome: 'Pending' },
-    { id: 'b15', lamb_id: 'l4',  ai_sire_id: 'ar2', breeding_date: '2025-11-01', expected_lamb_date: '2026-03-28', outcome: 'Pending' },
-  ],
-  breeding_results: [
-    { id: 'br1', breeding_id: 'b1', lamb_id: 'l1', birth_date: '2025-12-14', num_born: 3, num_alive: 3, num_male: 2, num_female: 1 },
-    { id: 'br2', breeding_id: 'b3', lamb_id: 'l13', birth_date: '2023-12-26', num_born: 2, num_alive: 2, num_male: 2 },
-  ],
-  breeding_result_lambs: [
-    { id: 'brl1', result_id: 'br1', ear_tag: '57', sex: 'Wether' },
-    { id: 'brl2', result_id: 'br1', ear_tag: '56', sex: 'Wether' },
-    { id: 'brl3', result_id: 'br1', ear_tag: '58', sex: 'Ewe' },
-  ],
-  embryo_flushes: [
-    { id: 'ef1', donor_id: 'l1', flush_date: '2025-07-24', embryos_collected: 14, embryos_transferred: 4, ai_sire_id: 'ar2', flush_type: 'MOET' },
-    { id: 'ef2', donor_id: 'l1', flush_date: '2025-08-27', embryos_collected: 8, embryos_transferred: 2, ai_sire_id: 'ar2', flush_type: 'IVF' },
-    { id: 'ef3', donor_id: 'l3', flush_date: '2025-07-24', embryos_collected: 6, embryos_transferred: 4, ai_sire_id: 'ar6', flush_type: 'MOET' },
-    { id: 'ef4', donor_id: 'l2', flush_date: '2025-09-10', embryos_collected: 10, embryos_transferred: 5, ai_sire_id: 'ar1', flush_type: 'IVF' },
-  ],
-  embryo_transfers: [
-    { id: 'et1', flush_id: 'ef1', donor_id: 'l1', recipient_id: 'l11', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
-    { id: 'et2', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2019', implant_date: '2025-07-30', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 1 },
-    { id: 'et3', flush_id: 'ef1', donor_id: 'l1', recipient_text: 'Schoenfeld2347', implant_date: '2025-07-30', outcome: 'Lamb Born', lamb_born: true, lamb_count: 1, num_transferred: 1 },
-    { id: 'et4', flush_id: 'ef2', donor_id: 'l1', recipient_id: 'l12', implant_date: '2025-09-03', outcome: 'Not Pregnant', lamb_born: false, num_transferred: 2 },
-    { id: 'et5', flush_id: 'ef3', donor_id: 'l3', recipient_text: 'Schoenfeld2125', implant_date: '2026-04-19', outcome: 'Pending', lamb_born: false, num_transferred: 2 },
-    { id: 'et6', flush_id: 'ef4', donor_id: 'l2', recipient_id: 'l11', implant_date: '2025-09-15', outcome: 'Confirmed Pregnant', lamb_born: false, num_transferred: 1 },
-    { id: 'et7', flush_id: 'ef4', donor_id: 'l2', recipient_text: 'Schoenfeld3001', implant_date: '2025-09-15', outcome: 'Pending', lamb_born: false, num_transferred: 1 },
-  ],
-  embryo_transfer_lambs: [
-    { id: 'etl1', transfer_id: 'et1', ear_tag: '51', sex: 'Ewe', lamb_id: 'l8' },
-  ],
-  lamb_notes: [
-    { id: 'ln1', lamb_id: 'l1', note: 'Top donor, consistently produces 10+ embryos per flush', date: '2025-08-01' },
-  ],
-  custom_products: [
-    { id: 'cp1', type: 'medication', name: 'Dectomax' },
-    { id: 'cp2', type: 'medication', name: 'Draxin' },
-    { id: 'cp3', type: 'medication', name: 'Nuflor' },
-    { id: 'cp4', type: 'cost', name: 'Semen straws' },
-    { id: 'cp5', type: 'cost', name: 'Vet flush fee' },
-    { id: 'cp6', type: 'cost', name: 'Lab processing' },
-    { id: 'cp7', type: 'cost', name: 'AI procedure' },
-    { id: 'cp8', type: 'cost', name: 'Progesterone' },
-  ],
-  semen_inventory: [
-    { id: 'si1', ai_ram_id: 'ar1', location: 'Tank', straws: 12, cost_per_straw: 25 },
-    { id: 'si2', ai_ram_id: 'ar1', location: 'RSG', straws: 4, cost_per_straw: 25 },
-    { id: 'si3', ai_ram_id: 'ar2', location: 'Tank', straws: 8, cost_per_straw: 30 },
-    { id: 'si4', ai_ram_id: 'ar3', location: 'Tank', straws: 6, cost_per_straw: 35 },
-    { id: 'si5', ai_ram_id: 'ar8', location: 'Tank', straws: 15, cost_per_straw: 20 },
-  ],
-  semen_transactions: [],
-  breeding_protocols: [
-    { id: 'bp1', name: 'Standard MOET', type: 'flush', notes: '14 day protocol' },
-    { id: 'bp2', name: 'AI Breeding', type: 'breeding', notes: 'Basic AI protocol' },
-  ],
-  protocol_steps: [
-    { id: 'ps1', protocol_id: 'bp1', step_name: 'CIDR Insert', day_offset: 14, sort_order: 0, time_of_day: 'AM', step_time: '08:00', product: 'CIDR', qty_per_head: 1, unit: 'doses' },
-    { id: 'ps2', protocol_id: 'bp1', step_name: 'FSH Injections', day_offset: 7, sort_order: 1, time_of_day: 'Both', step_time: '07:00', product: 'FSH', qty_per_head: 2.5, unit: 'cc' },
-    { id: 'ps3', protocol_id: 'bp1', step_name: 'Lutalyse + CIDR Remove', day_offset: 2, sort_order: 2, time_of_day: 'AM', step_time: '14:00', product: 'Lutalyse', qty_per_head: 2, unit: 'cc', product2: 'Estrumate', qty_per_head2: 1, unit2: 'cc' },
-    { id: 'ps4', protocol_id: 'bp1', step_name: 'Flush Day', day_offset: 0, sort_order: 3, time_of_day: 'AM', step_time: '08:00' },
-    { id: 'ps5', protocol_id: 'bp2', step_name: 'CIDR Insert', day_offset: 13, sort_order: 0, time_of_day: 'AM', step_time: '08:00', product: 'CIDR', qty_per_head: 1, unit: 'doses' },
-    { id: 'ps6', protocol_id: 'bp2', step_name: 'CIDR Remove + Lutalyse', day_offset: 2, sort_order: 1, time_of_day: 'PM', step_time: '14:00', product: 'Lutalyse', qty_per_head: 2, unit: 'cc' },
-    { id: 'ps7', protocol_id: 'bp2', step_name: 'AI Breeding', day_offset: 0, sort_order: 2, time_of_day: 'AM', step_time: '07:30' },
-  ],
-  breeding_groups: [
-    { id: 'bg1', name: 'Fall 2026 Flush', type: 'flush', target_date: '2026-06-01', protocol_id: 'bp1', recip_protocol_id: 'bp2', status: 'Planned', notes: 'Main donor group' },
-    { id: 'bg2', name: 'Summer AI Round', type: 'breeding', target_date: '2026-07-15', protocol_id: 'bp2', status: 'Planned' },
-  ],
-  shows: [
-    { id: 'show1', archived: false, name: 'Kandiyohi County Fair', show_date: '2026-08-10', end_date: '2026-08-13', location: 'Willmar, MN', address: '411 W Litchfield Ave, Willmar, MN 56201', notes: '', created_at: '2026-05-01T00:00:00Z' },
-    { id: 'show2', archived: false, name: 'Minnesota State Fair', show_date: '2026-08-27', end_date: '2026-09-07', location: 'Falcon Heights, MN', address: '1265 Snelling Ave N, St Paul, MN 55108', notes: '', created_at: '2026-05-01T00:00:00Z' },
-  ],
-  show_entries: [
-    { id: 'se1', show_id: 'show1', lamb_id: 'l2', 'class': 'Market Lamb', place: '1st', division_place: 'Grand Champion', overall_place: 'Reserve Champion Overall', showman: 'Emma Smith', entry_weight: 112, entry_weight_date: '2026-08-10', notes: '' },
-    { id: 'se2', show_id: 'show1', lamb_id: 'l5', 'class': 'Senior Ewe', place: '2nd', division_place: null, overall_place: null, showman: null, entry_weight: null, entry_weight_date: null, notes: '' },
-  ],
-  invoices: [
-    { id: 'inv1', invoice_number: 'INV-001', invoice_date: '2026-05-01', buyer_name: 'John Smith', buyer_address: '123 Farm Rd, Willmar MN', buyer_email: 'john@example.com', buyer_phone: '(320) 555-1234', status: 'Paid', subtotal: 450, tax_rate: 0, tax_amount: 0, total: 450, notes: 'Deposit received', created_at: '2026-05-01T00:00:00Z' },
-    { id: 'inv2', invoice_number: 'INV-002', invoice_date: '2026-05-10', buyer_name: 'Sarah Johnson', buyer_address: '456 Ranch Ln, St Cloud MN', buyer_email: 'sarah@example.com', buyer_phone: '', status: 'Sent', subtotal: 800, tax_rate: 0, tax_amount: 0, total: 800, notes: '', created_at: '2026-05-10T00:00:00Z' },
-  ],
-  invoice_items: [
-    { id: 'ii1', invoice_id: 'inv1', lamb_id: 'l4', description: 'Frankie — Ewe, Cross, DOB 2020-12-10, #21428', quantity: 1, unit_price: 450, total: 450 },
-    { id: 'ii2', invoice_id: 'inv2', lamb_id: 'l6', description: 'Kaht1 — Ewe, Katahdin, DOB 2021-03-15, #26013', quantity: 1, unit_price: 600, total: 600 },
-    { id: 'ii3', invoice_id: 'inv2', lamb_id: null, description: 'Shipping/Delivery Fee', quantity: 1, unit_price: 200, total: 200 },
-  ],
-  embryo_inventory: [
-    { id: 'ei1', flush_id: null, donor_id: 'l1', ai_sire_id: 'ar2', quantity: 4, date_frozen: '2025-11-15', grade: 'Excellent', notes: 'Spring flush' },
-    { id: 'ei2', flush_id: null, donor_id: 'l3', ai_sire_id: 'ar3', quantity: 2, date_frozen: '2025-11-15', grade: 'Good', notes: null },
-  ],
-  breeding_group_members: [
-    { id: 'bgm1', group_id: 'bg1', lamb_id: 'l1', ai_sire_id: 'ar2', role: 'donor' },
-    { id: 'bgm2', group_id: 'bg1', lamb_id: 'l3', ai_sire_id: 'ar3', role: 'donor' },
-    { id: 'bgm5', group_id: 'bg1', lamb_id: 'l11', role: 'recip' },
-    { id: 'bgm6', group_id: 'bg1', lamb_id: 'l12', role: 'recip' },
-    { id: 'bgm7', group_id: 'bg1', recip_text: 'Schoenfeld Farm 1', role: 'recip' },
-    { id: 'bgm8', group_id: 'bg1', recip_text: 'Schoenfeld Farm 2', role: 'recip' },
-    { id: 'bgm3', group_id: 'bg2', lamb_id: 'l4', ai_sire_id: 'ar1', role: 'donor' },
-    { id: 'bgm4', group_id: 'bg2', lamb_id: 'l14', ai_sire_id: 'ar5', role: 'donor' },
-  ],
-  flush_costs: [
-    { id: 'fc1', flush_id: 'ef1', description: 'Semen straws (5)', category: 'Semen', amount: 250, date: '2025-07-24' },
-    { id: 'fc2', flush_id: 'ef1', description: 'Vet fee - flush procedure', category: 'Vet', amount: 180, date: '2025-07-24' },
-    { id: 'fc3', flush_id: 'ef1', description: 'Lab processing', category: 'Lab', amount: 120, date: '2025-07-25' },
-    { id: 'fc4', flush_id: 'ef2', description: 'Semen straws (3)', category: 'Semen', amount: 150, date: '2025-08-27' },
-    { id: 'fc5', flush_id: 'ef2', description: 'IVF lab fees', category: 'Lab', amount: 320, date: '2025-08-27' },
-  ],
-  breeding_costs: [
-    { id: 'bc1', breeding_id: 'b1', description: 'AI procedure', category: 'Vet', amount: 45, date: '2025-07-24' },
-    { id: 'bc2', breeding_id: 'b2', description: 'AI procedure', category: 'Vet', amount: 45, date: '2025-07-30' },
-  ],
-  supply_log: [
-    { id: 'sl1', item: 'Calf Manna', category: 'Feed', date: '2025-10-01', quantity: 10, unit: 'bags', cost: 180, supplier: 'Farm Supply Co' },
-    { id: 'sl2', item: 'Timothy Hay', category: 'Hay', date: '2025-10-05', quantity: 20, unit: 'bales', cost: 140, supplier: 'Local Farm' },
-    { id: 'sl3', item: 'Calf Manna', category: 'Feed', date: '2025-12-15', quantity: 10, unit: 'bags', cost: 185, supplier: 'Farm Supply Co' },
-    { id: 'sl4', item: 'Timothy Hay', category: 'Hay', date: '2025-12-20', quantity: 25, unit: 'bales', cost: 175, supplier: 'Local Farm' },
-    { id: 'sl5', item: 'Shavings', category: 'Bedding', date: '2026-01-10', quantity: 8, unit: 'bags', cost: 64, supplier: 'Farm Supply Co' },
-    { id: 'sl6', item: 'Calf Manna', category: 'Feed', date: '2026-02-20', quantity: 10, unit: 'bags', cost: 185, supplier: 'Farm Supply Co' },
-    { id: 'sl7', item: 'Timothy Hay', category: 'Hay', date: '2026-03-01', quantity: 20, unit: 'bales', cost: 160, supplier: 'Local Farm' },
-    { id: 'sl8', item: 'Shavings', category: 'Bedding', date: '2026-03-15', quantity: 8, unit: 'bags', cost: 64, supplier: 'Farm Supply Co' },
-  ],
-};
-
-let _mockStore = JSON.parse(JSON.stringify(MOCK_DATA));
-
-function mockQuery(table) {
-  const store = _mockStore;
-  let _filters = {}, _orderCol = null, _orderAsc = true, _isSingle = false, _selectCols = '*';
-  function getRows() {
-    let rows = JSON.parse(JSON.stringify(store[table] || []));
-    rows = rows.filter(function(r) { return Object.keys(_filters).every(function(k) { return r[k] === _filters[k]; }); });
-    if (_selectCols && _selectCols.indexOf('(') !== -1) {
-      var fkMap = { breeding_results:{fk:'breeding_id',parentKey:'id'}, breeding_result_lambs:{fk:'result_id',parentKey:'id'}, embryo_transfers:{fk:'flush_id',parentKey:'id'}, embryo_transfer_lambs:{fk:'transfer_id',parentKey:'id'} };
-      Object.keys(fkMap).forEach(function(rel) { if (_selectCols.indexOf(rel)!==-1) { var r2=fkMap[rel]; rows=rows.map(function(r){r[rel]=(store[rel]||[]).filter(function(c){return c[r2.fk]===r[r2.parentKey];});return r;}); } });
-      if (_selectCols.indexOf('embryo_flushes')!==-1) rows=rows.map(function(r){r.embryo_flushes=(store.embryo_flushes||[]).find(function(f){return f.id===r.flush_id;})||null;return r;});
-    }
-    if (_orderCol) { var col=_orderCol,asc=_orderAsc; rows.sort(function(a,b){var av=a[col]||'',bv=b[col]||'';return asc?(av>bv?1:-1):(av<bv?1:-1);}); }
-    return rows;
-  }
-  var q = {
-    select:function(c){_selectCols=c;return q;},
-    eq:function(k,v){_filters[k]=v;return q;},
-    order:function(c,o){_orderCol=c;_orderAsc=o?o.ascending!==false:true;return q;},
-    single:function(){_isSingle=true;return q;},
-    limit:function(){return q;},
-    insert:function(data){
-      var items=Array.isArray(data)?data:[data];
-      var ins=items.map(function(item){var r=JSON.parse(JSON.stringify(item));r.id='mock_'+Math.random().toString(36).slice(2);if(!store[table])store[table]=[];store[table].push(r);return r;});
-      var result=Array.isArray(data)?ins:ins[0];
-      // Return chainable object so .select().single() works
-      var insertResult={data:result,error:null};
-      var chainable={
-        select:function(){return chainable;},
-        single:function(){return Promise.resolve({data:Array.isArray(result)?result[0]:result,error:null});},
-        then:function(res,rej){return Promise.resolve(insertResult).then(res,rej);}
-      };
-      return chainable;
-    },
-    update:function(data){
-      var pendingData=data;
-      var chainable={
-        eq:function(k,val){
-          store[table]=(store[table]||[]).map(function(r){return r[k]===val?Object.assign({},r,pendingData):r;});
-          return Promise.resolve({data:null,error:null});
-        },
-        then:function(res,rej){
-          // eq not called yet — apply filters
-          var key=Object.keys(_filters)[0],val=_filters[key];
-          if(key) store[table]=(store[table]||[]).map(function(r){return r[key]===val?Object.assign({},r,pendingData):r;});
-          return Promise.resolve({data:null,error:null}).then(res,rej);
-        }
-      };
-      return chainable;
-    },
-    delete:function(){
-      var chainable={
-        eq:function(k,val){
-          store[table]=(store[table]||[]).filter(function(r){return r[k]!==val;});
-          return Promise.resolve({data:null,error:null});
-        },
-        then:function(res,rej){
-          var key=Object.keys(_filters)[0],val=_filters[key];
-          if(key) store[table]=(store[table]||[]).filter(function(r){return r[key]!==val;});
-          return Promise.resolve({data:null,error:null}).then(res,rej);
-        }
-      };
-      return chainable;
-    },
-    then:function(res,rej){var rows=getRows(),result=_isSingle?(rows[0]||null):rows;return Promise.resolve({data:result,error:null}).then(res,rej);}
-  };
-  return q;
-}
-
-var db = { from: function(table) { return mockQuery(table); } };
-
-// Diagnostic: surface any uncaught error as a toast + console so we can see what fails
-window.addEventListener('error', function(e) {
-  try { if (typeof toast === 'function') toast('JS error: ' + (e.message || 'unknown')); } catch(_){}
-  console.error('Uncaught error:', e.message, e.filename, e.lineno, e.error);
-});
-window.addEventListener('unhandledrejection', function(e) {
-  try { if (typeof toast === 'function') toast('Async error: ' + (e.reason?.message || e.reason || 'unknown')); } catch(_){}
-  console.error('Unhandled rejection:', e.reason);
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const BASE_VACCINES = ['CDT (Clostridium/Tetanus)','Overeating Disease','Foot Rot','Caseous Lymphadenitis (CL)','Rabies'];
 const BASE_MEDS = ['Ivermectin (Dewormer)','Fenbendazole','Coccidiostat','Penicillin','LA-200 (Oxytetracycline)','Banamine','Vitamin B12','Selenium/Vit E'];
@@ -9678,33 +9241,41 @@ function layoutAndDrawPed(animals) {
     const damPos = a.dam_id && positions[a.dam_id] ? positions[a.dam_id] : null;
     const aiPos = a.ai_sire_id && positions[a.ai_sire_id] ? positions[a.ai_sire_id] : null;
 
-    // When two parents are both present, draw a joining horizontal bar at mid-height
-    // and a single vertical line down to the child
+    // Two-parent routing: sire exits right side, dam exits left side, curves to child top
     if ((sirePos || aiPos) && damPos) {
       const p1 = aiPos || sirePos;
       const p1Color = aiPos ? lineColors.ai : lineColors.sire;
-      const p2 = damPos;
-      const p1x = p1.x + NODE_W/2, p1y = p1.y + NODE_H;
-      const p2x = p2.x + NODE_W/2, p2y = p2.y + NODE_H;
-      const midY = Math.max(p1y, p2y) + 20;
-      const junctionX = (p1x + p2x) / 2;
 
-      // Line from sire/AI down to horizontal bar
-      lines += `<path d="M${p1x},${p1y} L${p1x},${midY}" fill="none" stroke="${p1Color}" stroke-width="2"/>`;
-      // Line from dam down to horizontal bar
-      lines += `<path d="M${p2x},${p2y} L${p2x},${midY}" fill="none" stroke="${lineColors.dam}" stroke-width="2"/>`;
-      // Horizontal bar connecting both parents
-      lines += `<path d="M${Math.min(p1x,p2x)},${midY} L${Math.max(p1x,p2x)},${midY}" fill="none" stroke="#888" stroke-width="2"/>`;
-      // Single vertical line from junction down to child
-      lines += `<path d="M${junctionX},${midY} L${junctionX},${cy - 10} L${cx},${cy - 10} L${cx},${cy}" fill="none" stroke="#888" stroke-width="2"/>`;
+      // Determine which parent is left vs right
+      const leftPar = p1.x < damPos.x ? p1 : damPos;
+      const rightPar = p1.x < damPos.x ? damPos : p1;
+      const leftColor = p1.x < damPos.x ? p1Color : lineColors.dam;
+      const rightColor = p1.x < damPos.x ? lineColors.dam : p1Color;
+
+      // Left parent exits from its right side
+      const lx = leftPar.x + NODE_W, ly = leftPar.y + NODE_H/2;
+      // Right parent exits from its left side
+      const rx = rightPar.x, ry = rightPar.y + NODE_H/2;
+      // Child enters from top center
+      const childTopX = cx, childTopY = cy;
+
+      // Midpoint between the two exit points
+      const midX = (lx + rx) / 2;
+      const midY = (ly + ry) / 2;
+
+      // Left parent → bezier curve to child top
+      lines += `<path d="M${lx},${ly} C${lx+50},${ly} ${childTopX-30},${childTopY-40} ${childTopX},${childTopY}" fill="none" stroke="${leftColor}" stroke-width="2"/>`;
+      // Right parent → bezier curve to child top
+      lines += `<path d="M${rx},${ry} C${rx-50},${ry} ${childTopX+30},${childTopY-40} ${childTopX},${childTopY}" fill="none" stroke="${rightColor}" stroke-width="2"/>`;
+
     } else {
-      // Single parent lines
+      // Single parent: straight line from bottom center of parent to top center of child
       function svgLine(parentId, color) {
         const par = positions[parentId];
         if (!par) return;
         const px = par.x + NODE_W/2, py = par.y + NODE_H;
-        const midY = py + (cy - py)/2;
-        lines += `<path d="M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}" fill="none" stroke="${color}" stroke-width="2"/>`;
+        const midY = py + (cy - py) / 2;
+        lines += `<path d="M${px},${py} C${px},${midY} ${cx},${midY} ${cx},${cy}" fill="none" stroke="${color}" stroke-width="2"/>`;
       }
       if (a.sire_id && positions[a.sire_id]) svgLine(a.sire_id, lineColors.sire);
       if (a.dam_id && positions[a.dam_id]) svgLine(a.dam_id, lineColors.dam);
@@ -9715,8 +9286,8 @@ function layoutAndDrawPed(animals) {
         const par = positions[parentId];
         if (!par) return;
         const px = par.x + NODE_W/2, py = par.y + NODE_H;
-        const midY = py + (cy - py)/2;
-        lines += `<path d="M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}" fill="none" stroke="${color}" stroke-width="2"/>`;
+        const midY = py + (cy - py) / 2;
+        lines += `<path d="M${px},${py} C${px},${midY} ${cx},${midY} ${cx},${cy}" fill="none" stroke="${color}" stroke-width="2"/>`;
       }
       if (a.sire_ai_id && positions[a.sire_ai_id]) aiSvgLine(a.sire_ai_id, lineColors.ai);
       if (a.dam_lamb_id && positions[a.dam_lamb_id]) aiSvgLine(a.dam_lamb_id, lineColors.dam);
