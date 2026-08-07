@@ -4441,7 +4441,7 @@ function renderLambingHTML() {
       const f = flushes.find(fl => fl.id === t.flush_id);
       const implant = t.implant_date;
       if (!implant) return false;
-      const expected = new Date(new Date(implant+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+      const expected = new Date(new Date(implant+'T12:00:00').getTime() + 140*24*60*60*1000).toISOString().slice(0,10);
       return expected < today;
     })
   ].length;
@@ -4472,7 +4472,7 @@ function renderLambingHTML() {
     const recip = allLambs.find(l => l.id === t.recipient_id);
     const recipName = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recip_text||t.recipient_text||'Unknown recipient');
     const implant = t.implant_date;
-    const expected = implant ? new Date(new Date(implant+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
+    const expected = implant ? new Date(new Date(implant+'T12:00:00').getTime() + 140*24*60*60*1000).toISOString().slice(0,10) : null;
     const isOverdue = expected && expected < today;
     const badge = isOverdue ? `<span style="background:#fee2e2;color:#dc2626;border-radius:1rem;padding:0.15rem 0.5rem;font-size:0.7rem;font-weight:600">⚠️ Overdue</span>` : '';
     return `<div class="card" style="padding:1rem;border-left:3px solid ${isOverdue?'#dc2626':'#7c3aed'}">
@@ -10183,6 +10183,164 @@ function fmtStepTime(t) {
   } catch(e) { return t; }
 }
 
+async function openFromLambingCalendar(source, id) {
+  if (source === 'breeding') {
+    const { data: rec } = await db.from('breeding_records').select('*').eq('id', id).single();
+    if (!rec) return;
+    const lambId = rec.lamb_id;
+    openEditBreedingGlobal(id, lambId);
+  } else {
+    const { data: t } = await db.from('embryo_transfers').select('*').eq('id', id).single();
+    if (!t) return;
+    const { data: flush } = await db.from('embryo_flushes').select('*').eq('id', t.flush_id).single();
+    const donorId = flush?.donor_id || null;
+    openEditFlushGlobal(t.flush_id, donorId);
+  }
+}
+
+async function buildLambingCalendarHtml() {
+  const today = new Date().toISOString().slice(0,10);
+
+  // Fetch all confirmed/pending pregnancies with expected dates
+  const [{ data: breedRecs }, { data: transfers }] = await Promise.all([
+    db.from('breeding_records').select('*').order('expected_lamb_date'),
+    db.from('embryo_transfers').select('*').order('implant_date'),
+  ]);
+
+  const pendingOutcomes = new Set(['Confirmed Pregnant', 'Pending']);
+  const filteredBreed = (breedRecs||[]).filter(r => r.expected_lamb_date && (pendingOutcomes.has(r.outcome) || !r.outcome));
+  const filteredTransfers = (transfers||[]).filter(t => pendingOutcomes.has(t.outcome) || !t.outcome);
+
+  // Build unified event list
+  const events = [];
+
+  filteredBreed.forEach(r => {
+    if (!r.expected_lamb_date) return;
+    const ewe = allLambs.find(l => l.id === r.lamb_id);
+    const sire = r.ai_sire_id ? allAiRams.find(x => x.id === r.ai_sire_id) : (r.sire_id ? allLambs.find(l => l.id === r.sire_id) : null);
+    events.push({
+      date: r.expected_lamb_date,
+      ewe: ewe?.name || '?',
+      ewetag: ewe?.ear_tag || '',
+      sire: sire?.name || r.sire_text || '?',
+      type: r.ai_sire_id ? 'AI' : 'Natural',
+      outcome: r.outcome,
+      semen_type: r.semen_type,
+      source: 'breeding',
+      id: r.id,
+    });
+  });
+
+  filteredTransfers.forEach(t => {
+    if (!t.implant_date) return;
+    const expected = new Date(new Date(t.implant_date+'T12:00:00').getTime() + 140*24*60*60*1000).toISOString().slice(0,10);
+    const recip = allLambs.find(l => l.id === t.recipient_id);
+    const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
+    events.push({
+      date: expected,
+      ewe: recipName,
+      ewetag: recip?.ear_tag || '',
+      sire: '(Embryo Transfer)',
+      type: 'ET',
+      outcome: t.outcome,
+      source: 'transfer',
+      id: t.id,
+    });
+  });
+
+  events.sort((a,b) => a.date.localeCompare(b.date));
+
+  if (events.length === 0) {
+    return `<div class="empty"><div class="empty-icon">🐣</div><h3>No anticipated lambings</h3><p>Add expected lamb dates to breeding records or confirmed pregnancies to see them here</p></div>`;
+  }
+
+  // Summary counts
+  const overdue = events.filter(e => e.date < today).length;
+  const thisMonth = events.filter(e => e.date >= today && e.date <= new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).toISOString().slice(0,10)).length;
+  const next30 = events.filter(e => { const d = new Date(e.date+'T12:00:00'); const n = new Date(); n.setDate(n.getDate()+30); return d >= new Date() && d <= n; }).length;
+  const confirmed = events.filter(e => e.outcome === 'Confirmed Pregnant').length;
+
+  // Group events by month
+  const byMonth = {};
+  events.forEach(e => {
+    const key = e.date.slice(0,7); // YYYY-MM
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(e);
+  });
+
+  const monthRows = Object.entries(byMonth).map(([month, evts]) => {
+    const [yr, mo] = month.split('-');
+    const monthName = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleString('default', { month:'long', year:'numeric' });
+    const isPast = month < today.slice(0,7);
+    const isCurrent = month === today.slice(0,7);
+
+    const rows = evts.map(e => {
+      const daysAway = Math.round((new Date(e.date+'T12:00:00') - new Date()) / (1000*60*60*24));
+      const isOverdue = e.date < today;
+      const rowBg = isOverdue ? '#fff5f5' : '';
+      const dateBg = isOverdue ? '#dc2626' : daysAway <= 7 ? '#d97706' : daysAway <= 30 ? '#2563eb' : 'var(--text3)';
+
+      const typeBadge = e.type === 'ET'
+        ? `<span style="background:#ede9fe;color:#7c3aed;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">ET</span>`
+        : e.type === 'AI'
+        ? `<span style="background:#dbeafe;color:#1d4ed8;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">AI${e.semen_type==='frozen'?' ❄️':e.semen_type==='fresh'?' 🌱':''}</span>`
+        : `<span style="background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">Natural</span>`;
+
+      const outcomeColor = e.outcome==='Confirmed Pregnant' ? '#15803d' : 'var(--text3)';
+      const daysLabel = isOverdue ? `<span style="color:#dc2626;font-weight:600">${Math.abs(daysAway)}d overdue</span>`
+        : daysAway === 0 ? `<span style="color:#d97706;font-weight:600">Today!</span>`
+        : `<span style="color:${dateBg}">${daysAway}d away</span>`;
+
+      return `<tr style="border-bottom:1px solid var(--border);background:${rowBg};cursor:pointer" onclick="openFromLambingCalendar('${e.source}','${e.id}')" onmouseenter="this.style.background='${isOverdue?'#fee2e2':'var(--surface2)'}'" onmouseleave="this.style.background='${rowBg}'">
+        <td style="padding:0.6rem 1rem;white-space:nowrap">
+          <div style="font-weight:700;color:white;background:${dateBg};border-radius:0.3rem;padding:0.15rem 0.5rem;display:inline-block;font-size:0.82rem">${e.date}</div>
+          <div style="margin-top:0.2rem;font-size:0.75rem">${daysLabel}</div>
+        </td>
+        <td style="padding:0.6rem 1rem">
+          <div style="font-weight:600;color:var(--text)">${e.ewe}${e.ewetag ? ' <span style="color:var(--text3);font-size:0.78rem">#'+e.ewetag+'</span>' : ''}</div>
+        </td>
+        <td style="padding:0.6rem 1rem;color:var(--text2);font-size:0.82rem">${e.sire}</td>
+        <td style="padding:0.6rem 1rem">${typeBadge}</td>
+        <td style="padding:0.6rem 1rem;font-size:0.78rem;color:${outcomeColor};font-weight:600">${e.outcome}</td>
+        <td style="padding:0.6rem 0.5rem;text-align:center;color:var(--text3);font-size:0.85rem">✏️</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:0.78rem;font-weight:700;color:${isCurrent?'var(--accent)':isPast?'var(--text3)':'var(--text)'};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem">
+          ${monthName} ${isCurrent?'<span style="background:var(--accent);color:#fff;border-radius:1rem;padding:0.1rem 0.5rem;font-size:0.68rem">THIS MONTH</span>':''}
+          ${isPast?'<span style="color:#dc2626;font-size:0.68rem">(past)</span>':''}
+          <span style="color:var(--text3);font-weight:400">${evts.length} due</span>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+            <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+              <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Expected Date</th>
+              <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Ewe / Recip</th>
+              <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Sire</th>
+              <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Type</th>
+              <th style="padding:0.5rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+              <th style="padding:0.5rem 0.5rem"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--text)">${events.length}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Total Expected</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--green)">${confirmed}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Confirmed</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#2563eb">${next30}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Next 30 Days</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#d97706">${thisMonth}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">This Month</div></div>
+      ${overdue > 0 ? `<div class="card" style="padding:0.85rem;text-align:center;border-color:#fca5a5"><div style="font-size:1.5rem;font-weight:700;color:#dc2626">${overdue}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Overdue</div></div>` : ''}
+    </div>
+    ${monthRows}`;
+}
+
 function renderPlanningHTML() {
   const allGroups = window._planGroups || [];
   const protocols = window._planProtocols || [];
@@ -10270,6 +10428,17 @@ function renderPlanningHTML() {
                 <span class="badge ${g.type==='ivf'?'badge-purple':g.type==='flush'?'badge-purple':'badge-green'}">${g.type==='ivf'?'🧬 IVF':g.type==='flush'?'🔬 Flush':'🐏 Breeding'}</span>
                 <span style="background:${bg};color:${col};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${g.status}</span>
                 ${g.target_date?`<span class="badge badge-blue">🎯 ${g.target_date}</span>`:''}
+                ${g.target_date ? (() => {
+                  const lambDate = new Date(new Date(g.target_date+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+                  const today = new Date().toISOString().slice(0,10);
+                  const daysAway = Math.round((new Date(lambDate+'T12:00:00') - new Date()) / (1000*60*60*24));
+                  const isOverdue = lambDate < today;
+                  const isSoon = !isOverdue && daysAway <= 30;
+                  const color = isOverdue ? '#dc2626' : isSoon ? '#d97706' : '#6d28d9';
+                  const bg = isOverdue ? '#fee2e2' : isSoon ? '#fef3cd' : '#ede9fe';
+                  const label = isOverdue ? `🐣 ${lambDate} (overdue)` : `🐣 ${lambDate}${isSoon ? ' ('+daysAway+'d)' : ''}`;
+                  return `<span style="background:${bg};color:${color};padding:0.15rem 0.5rem;border-radius:1rem;font-size:0.72rem;font-weight:600">${label}</span>`;
+                })() : ''}
                 ${prot?`<span class="badge badge-gray">${prot.name}</span>`:''}
                 ${recipProt?`<span class="badge badge-gray">Recip: ${recipProt.name}</span>`:''}
                 ${g.type==='ivf'?`<span class="badge badge-blue">🧬 ${donors.length} ewe${donors.length!==1?'s':''}</span>`:''}
@@ -12322,15 +12491,15 @@ async function loadCalendarEvents() {
   // Breeding dates & expected lamb dates
   const { data: breeding } = await db.from('breeding_records').select('*');
   (breeding||[]).forEach(r => {
-    if (r.breeding_date) calEvents.push({ date: r.breeding_date, type: 'breeding', label: `🐏 Bred`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
-    if (r.expected_lamb_date) calEvents.push({ date: r.expected_lamb_date, type: 'lambing', label: `📅 Due`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
-    if (r.actual_lamb_date) calEvents.push({ date: r.actual_lamb_date, type: 'lambing', label: `🐑 Lambed`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text });
+    if (r.breeding_date) calEvents.push({ date: r.breeding_date, type: 'breeding', label: `🐏 Bred`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
+    if (r.expected_lamb_date) calEvents.push({ date: r.expected_lamb_date, type: 'lambing', label: `📅 Due`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
+    if (r.actual_lamb_date) calEvents.push({ date: r.actual_lamb_date, type: 'lambing', label: `🐑 Lambed`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
   });
 
   // Health records (treatments)
   const { data: health } = await db.from('health_records').select('*');
   (health||[]).forEach(r => {
-    calEvents.push({ date: r.date, type: 'treatment', label: r.type === 'vaccine' ? `💉 ${r.product}` : `💊 ${r.product}`, lamb_id: r.lamb_id });
+    calEvents.push({ date: r.date, type: 'treatment', label: r.type === 'vaccine' ? `💉 ${r.product}` : `💊 ${r.product}`, lamb_id: r.lamb_id, record_id: r.id });
   });
 
   // Embryo flushes
@@ -12339,15 +12508,21 @@ async function loadCalendarEvents() {
     if (f.flush_date) {
       const sire = f.sire_id ? allLambs.find(l=>l.id===f.sire_id) : (f.ai_sire_id ? allAiRams.find(r=>r.id===f.ai_sire_id) : null);
       const sireName = sire ? sire.name+(f.ai_sire_id?' 🧬':'') : (f.sire_text||'');
-      calEvents.push({ date: f.flush_date, type: 'embryo', label: `🔬 Flush`, lamb_id: f.donor_id, sire_text: sireName, extra: `${f.embryos_collected||0} embryos` });
+      calEvents.push({ date: f.flush_date, type: 'embryo', label: `🔬 Flush`, lamb_id: f.donor_id, sire_text: sireName, extra: `${f.embryos_collected||0} embryos`, flush_id: f.id, donor_id: f.donor_id });
     }
   });
 
-  // Embryo transfers
+  // Embryo transfers — add implant date AND projected lambing (+140 days, embryos ~7 days old at transfer)
   const { data: transfers } = await db.from('embryo_transfers').select('*');
   (transfers||[]).forEach(t => {
     if (t.implant_date) {
-      calEvents.push({ date: t.implant_date, type: 'embryo', label: `🐑 Transfer`, lamb_id: t.recipient_id||t.donor_id, extra: t.outcome||'Pending' });
+      const recip = allLambs.find(l => l.id === t.recipient_id);
+      const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
+      calEvents.push({ date: t.implant_date, type: 'embryo', label: `🔀 Transfer`, lamb_id: t.recipient_id||t.donor_id, extra: `${recipName} · ${t.outcome||'Pending'}`, flush_id: t.flush_id, donor_id: t.donor_id });
+      if (t.outcome !== 'Lamb Born' && t.outcome !== 'Not Pregnant' && t.outcome !== 'Failed') {
+        const lambDate = new Date(new Date(t.implant_date+'T12:00:00').getTime() + 140*24*60*60*1000).toISOString().slice(0,10);
+        calEvents.push({ date: lambDate, type: 'lambing', label: `📅 Due (ET)`, lamb_id: t.recipient_id, extra: recipName, flush_id: t.flush_id, donor_id: t.donor_id, source: 'transfer' });
+      }
     }
   });
 
@@ -12517,7 +12692,8 @@ function drawCalendar() {
       const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
       const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
       const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?(e.isRecip?'badge-blue':'badge-yellow'):'badge-yellow';
-      html += `<div class="record-row" style="cursor:pointer" onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : (lamb?`showLamb('${lamb.id}')`:``)}">
+      const clickFn = `calendarEventClick('${e.type}','${e.record_id||''}','${e.lamb_id||''}','${e.flush_id||''}','${e.donor_id||''}','${e.source||''}','${e.group_id||''}')`;
+      html += `<div class="record-row" style="cursor:pointer" onclick="${clickFn}">
         <div style="display:flex;gap:0.75rem;align-items:center;flex:1">
           <div style="text-align:center;min-width:40px">
             <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--accent);font-weight:700">${parseInt(e.date.split('-')[2])}</div>
@@ -12533,7 +12709,7 @@ function drawCalendar() {
             </div>
           </div>
         </div>
-        ${lamb?`<span style="color:var(--text3);font-size:0.8rem">→</span>`:''}
+        <span style="color:var(--text3);font-size:0.8rem">→</span>
       </div>`;
     });
     html += `</div>`;
@@ -12546,9 +12722,27 @@ function drawCalendar() {
   if (sel) sel.value = calLambFilter;
 }
 
+async function calendarEventClick(type, recordId, lambId, flushId, donorId, source, groupId) {
+  closeModal();
+  await new Promise(r => setTimeout(r, 50));
+  if (groupId) { showPlanGroupDetail(groupId); return; }
+  if (type === 'breeding' && recordId) { openEditBreedingGlobal(recordId, lambId); return; }
+  if (type === 'lambing' && source === 'transfer' && flushId) { openEditFlushGlobal(flushId, donorId); return; }
+  if (type === 'lambing' && recordId) { openEditBreedingGlobal(recordId, lambId); return; }
+  if (type === 'embryo' && flushId) { openEditFlushGlobal(flushId, donorId||lambId); return; }
+  if (type === 'treatment' && recordId) { openEditRecord(recordId); return; }
+  if (lambId) { showPage('flock'); setTimeout(() => showLamb(lambId), 200); return; }
+}
+
 function showCalEventDetail(dateStr) {
   const dayEvents = calEvents.filter(e => e.date === dateStr && (calFilter==='all'||e.type===calFilter) && (!calLambFilter||e.lamb_id===calLambFilter));
   if (dayEvents.length === 0) return;
+  // Single event — go straight to record, skip the modal
+  if (dayEvents.length === 1) {
+    const e = dayEvents[0];
+    calendarEventClick(e.type, e.record_id||'', e.lamb_id||'', e.flush_id||'', e.donor_id||'', e.source||'', e.group_id||'');
+    return;
+  }
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const [y,m,d] = dateStr.split('-');
   let html = `
@@ -12561,7 +12755,8 @@ function showCalEventDetail(dateStr) {
     const sire = e.sire_id ? allLambs.find(l=>l.id===e.sire_id) : (e.ai_sire_id ? allAiRams.find(r=>r.id===e.ai_sire_id) : null);
     const sireName = sire ? sire.name+(e.ai_sire_id?' 🧬':'') : (e.sire_text||'');
     const typeBadge = e.type==='breeding'?'badge-green':e.type==='lambing'?'badge-blue':e.type==='embryo'?'badge-purple':e.type==='planned'?(e.isRecip?'badge-blue':'badge-yellow'):'badge-yellow';
-    html += `<div class="record-row" style="${lamb?'cursor:pointer':''}" onclick="${lamb?`closeModal();showLamb('${lamb.id}')`:``}">
+    const clickFn = `calendarEventClick('${e.type}','${e.record_id||''}','${e.lamb_id||''}','${e.flush_id||''}','${e.donor_id||''}','${e.source||''}','${e.group_id||''}')`;
+    html += `<div class="record-row" style="cursor:pointer" onclick="${clickFn}">
       <div style="flex:1">
         <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
           <span style="font-weight:600;color:var(--text)">${e.label}</span>
@@ -12571,7 +12766,7 @@ function showCalEventDetail(dateStr) {
           ${e.group_name?`<span style="color:var(--accent);font-weight:500">${e.group_name}</span>`:''}${lamb?`<span style="color:var(--text2)">${lamb.name}</span>${lamb.ear_tag?' #'+lamb.ear_tag:''}`:''} ${sireName?'× '+sireName:''} ${e.extra && !e.group_name?`<span style="color:var(--text3)">· ${e.extra}</span>`:''}
         </div>
       </div>
-      ${lamb?`<span style="color:var(--text3)">→</span>`:''}
+      <span style="color:var(--text3)">→</span>
     </div>`;
   });
   showModal(html);
