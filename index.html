@@ -4713,9 +4713,11 @@ async function renderLambingReport() {
   window._lrBreed = breedRecs || [];
   window._lrTransfers = transfers || [];
   window._lrFlushes = flushes || [];
-  window._lrFilter = window._lrFilter || 'all';
+  window._lrFilter = 'all';
   window._lrFrom = window._lrFrom || '';
   window._lrTo = window._lrTo || '';
+  window._lrStatus = window._lrStatus || '';
+  window._lrType = window._lrType || '';
 
   refreshLambingReport();
 }
@@ -4738,8 +4740,8 @@ function refreshLambingReport() {
     const ewe = allLambs.find(l => l.id === r.lamb_id);
     const sire = r.ai_sire_id ? allAiRams.find(x => x.id === r.ai_sire_id) : (r.sire_id ? allLambs.find(l => l.id === r.sire_id) : null);
     const expectedDate = r.expected_lamb_date || null;
-    const actualDate = r.actual_lamb_date || null;
     const isPast = r.outcome === 'Lamb Born';
+    const actualDate = r.actual_lamb_date || (isPast ? r.expected_lamb_date : null);
     rows.push({
       ewe: ewe?.name || '?',
       ewetag: ewe?.ear_tag || '',
