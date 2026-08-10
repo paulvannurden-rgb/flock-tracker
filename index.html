@@ -1467,7 +1467,16 @@ async function saveBreedingResult(breedingId, id) {
   window._brLambs = [];
   // Auto-update breeding record outcome to Lamb Born
   await db.from('breeding_records').update({ outcome: 'Lamb Born' }).eq('id', breedingId);
-  closeModal(); loadLambTab();
+  if (window._brResultCallback) {
+    const cb = window._brResultCallback;
+    window._brResultCallback = null;
+    closeModal();
+    cb();
+    // Reopen the breeding edit modal
+    openEditBreedingGlobal(breedingId, currentLambId);
+  } else {
+    closeModal(); loadLambTab();
+  }
 }
 
 function confirmDeleteBreedingResult(id) {
@@ -3806,6 +3815,7 @@ async function openEditBreedingGlobal(recId, lambId) {
     db.from('breeding_costs').select('*').eq('breeding_id', recId).order('date'),
   ]);
   if (!rec) return;
+  window._currentBreedingId = recId;
   // Temporarily set currentLambId so saveBreeding works
   const prevLambId = currentLambId;
   currentLambId = lambId;
@@ -4704,15 +4714,17 @@ async function renderLambingReport() {
     </div>
     <div id="lr-content"><div class="loading"><span class="spinner"></span>Loading…</div></div>`;
 
-  const [{ data: breedRecs }, { data: transfers }, { data: flushes }] = await Promise.all([
+  const [{ data: breedRecs }, { data: transfers }, { data: flushes }, { data: breedResults }] = await Promise.all([
     db.from('breeding_records').select('*').order('expected_lamb_date'),
     db.from('embryo_transfers').select('*').order('implant_date'),
     db.from('embryo_flushes').select('*'),
+    db.from('breeding_results').select('*'),
   ]);
 
   window._lrBreed = breedRecs || [];
   window._lrTransfers = transfers || [];
   window._lrFlushes = flushes || [];
+  window._lrBreedResults = breedResults || [];
   window._lrFilter = 'all';
   window._lrFrom = window._lrFrom || '';
   window._lrTo = window._lrTo || '';
@@ -4741,7 +4753,12 @@ function refreshLambingReport() {
     const sire = r.ai_sire_id ? allAiRams.find(x => x.id === r.ai_sire_id) : (r.sire_id ? allLambs.find(l => l.id === r.sire_id) : null);
     const expectedDate = r.expected_lamb_date || null;
     const isPast = r.outcome === 'Lamb Born';
-    const actualDate = r.actual_lamb_date || (isPast ? r.expected_lamb_date : null);
+    // Get lambing results from breeding_results table
+    const brResults = (window._lrBreedResults||[]).filter(res => res.breeding_id === r.id);
+    const totalLambCount = brResults.reduce((s, res) => s + (res.num_born || 0), 0);
+    const lambCount = r.lamb_count || totalLambCount || null;
+    const brResultDate = brResults.length > 0 ? brResults[0].birth_date : null;
+    const actualDate = r.actual_lamb_date || brResultDate || (isPast ? r.expected_lamb_date : null);
     rows.push({
       ewe: ewe?.name || '?',
       ewetag: ewe?.ear_tag || '',
@@ -4751,7 +4768,7 @@ function refreshLambingReport() {
       expectedDate,
       actualDate,
       outcome: r.outcome || 'Pending',
-      lambCount: r.lamb_count || null,
+      lambCount: lambCount,
       fetalCount: r.fetal_count || null,
       isPast,
       source: 'breeding',
@@ -7953,6 +7970,7 @@ function openAddBreeding(rec) {
   const hasSemenInv = aiSireId && allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0);
 
   const eweName = (() => { const l = allLambs.find(x => x.id === currentLambId); return l ? `${l.name}${l.ear_tag?' #'+l.ear_tag:''}` : ''; })();
+  window._currentBreedingId = rec?.id || null;
 
   showModal(`
     <div class="modal-header"><div class="modal-title">${isEdit?'Edit Breeding':'Log Breeding'}${eweName?` — <span style="color:var(--accent)">${eweName}</span>`:''}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -7989,6 +8007,15 @@ function openAddBreeding(rec) {
     </div>
     <div class="field"><label>Notes</label><textarea id="br-notes">${rec?.notes||''}</textarea></div>
 
+    <!-- LAMBING RESULTS SECTION (edit only, shown when Lamb Born) -->
+    ${isEdit ? `<div id="br-lambing-wrap" style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem;display:${rec?.outcome==='Lamb Born'?'':'none'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">🐑 Lambing Results</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="openBreedingResultFromModal('${rec?.id||''}')">+ Add Result</button>
+      </div>
+      <div id="br-lambing-list"><div style="font-size:0.82rem;color:var(--text3)">Loading…</div></div>
+    </div>` : ''}
+
     <!-- COSTS SECTION -->
     <div style="border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.75rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
@@ -8003,6 +8030,10 @@ function openAddBreeding(rec) {
       <button class="btn btn-primary" onclick="saveBreeding('${rec?.id||''}')">${isEdit?'Save Changes':'Save Record'}</button>
     </div>`);
   addCostEntryRow('br-costs');
+  // Load lambing results if editing a Lamb Born record
+  if (isEdit && rec?.id && rec?.outcome === 'Lamb Born') {
+    loadInlineBreedingResults(rec.id);
+  }
 }
 
 function updateBreedingSemenOpts() {
@@ -8260,10 +8291,56 @@ async function deleteInlineTransfer(flushId, transferId) {
   loadInlineTransfers(flushId);
 }
 
+async function loadInlineBreedingResults(breedingId) {
+  const el = document.getElementById('br-lambing-list');
+  if (!el) return;
+  const { data: results } = await db.from('breeding_results').select('*').eq('breeding_id', breedingId).order('birth_date');
+  if (!results || results.length === 0) {
+    el.innerHTML = '<div style="font-size:0.82rem;color:var(--text3);padding:0.25rem 0">No lambing results yet — click + Add Result above</div>';
+    return;
+  }
+  el.innerHTML = results.map(r => `
+    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:150px;font-size:0.84rem">
+        <span style="color:var(--text3)">${r.birth_date||'—'}</span>
+        <span style="font-weight:600;color:var(--text);margin-left:0.5rem">${r.num_born||0} born</span>
+        ${r.num_alive!=null?`<span style="color:#15803d;margin-left:0.35rem">${r.num_alive} alive</span>`:''}
+        ${r.num_male!=null?`<span style="color:var(--text3);font-size:0.75rem;margin-left:0.35rem">${r.num_male}♂ ${r.num_female||0}♀</span>`:''}
+        ${r.notes?`<div style="font-size:0.75rem;color:var(--text3);font-style:italic">${r.notes}</div>`:''}
+      </div>
+      <div style="display:flex;gap:0.25rem;flex-shrink:0">
+        <button class="btn-icon btn-sm" onclick="openBreedingResultFromModal('${breedingId}','${r.id}')" title="Edit">✏️</button>
+        <button class="btn-icon btn-sm" onclick="deleteBreedResultInline('${r.id}','${breedingId}')" style="color:var(--danger)" title="Delete">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteBreedResultInline(resultId, breedingId) {
+  if (!confirm('Delete this lambing result?')) return;
+  await db.from('breeding_result_lambs').delete().eq('result_id', resultId);
+  await db.from('breeding_results').delete().eq('id', resultId);
+  loadInlineBreedingResults(breedingId);
+}
+
+async function openBreedingResultFromModal(breedingId, resultId) {
+  window._brResultCallback = () => loadInlineBreedingResults(breedingId);
+  if (resultId) {
+    const { data: result } = await db.from('breeding_results').select('*').eq('id', resultId).single();
+    const { data: lambs } = await db.from('breeding_result_lambs').select('*').eq('result_id', resultId);
+    showBreedingResultModal(breedingId, result, lambs||[]);
+  } else {
+    showBreedingResultModal(breedingId, null, []);
+  }
+}
+
 function toggleFetalCount(prefix) {
   const outcome = document.getElementById(`${prefix}-outcome`)?.value;
   const wrap = document.getElementById(`${prefix}-fetal-wrap`);
-  if (wrap) wrap.style.display = outcome === 'Confirmed Pregnant' ? '' : 'none';
+  if (wrap) wrap.style.display = outcome === 'Confirmed Pregnant' || outcome === 'Lamb Born' ? '' : 'none';
+  const lambingWrap = document.getElementById(`${prefix}-lambing-wrap`);
+  if (lambingWrap) lambingWrap.style.display = outcome === 'Lamb Born' ? '' : 'none';
+  // Load lambing results when switching to Lamb Born
+  if (outcome === 'Lamb Born' && window._currentBreedingId) loadInlineBreedingResults(window._currentBreedingId);
 }
 
 function updateFlushSemenOpts() {
