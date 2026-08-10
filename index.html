@@ -320,7 +320,7 @@
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
         <button class="sidebar-btn" onclick="showPage('transfers')" data-page="transfers"><span>🔀</span>Transfers</button>
-        <button class="sidebar-btn" onclick="showPage('lambing')" data-page="lambing"><span>🐣</span>Lambing</button>
+        <button class="sidebar-btn" onclick="showPage('lambing-report')" data-page="lambing-report"><span>🐣</span>Lambing</button>
         <button class="sidebar-btn" onclick="showPage('weights')" data-page="weights"><span>⚖️</span>Weights</button>
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
         <button class="sidebar-btn" onclick="showPage('shows')" data-page="shows"><span>🏆</span>Shows</button>
@@ -689,7 +689,8 @@ function showPage(page) {
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
   else if (page === 'transfers') renderTransfersPage();
-  else if (page === 'lambing') renderLambingPage();
+  else if (page === 'lambing') renderLambingReport();
+  else if (page === 'lambing-report') renderLambingReport();
   else if (page === 'weights') renderWeightsPage();
   else if (page === 'analytics') renderAnalytics();
   else if (page === 'shows') renderShows();
@@ -3732,10 +3733,10 @@ function openAddBreedingGlobal() {
       <div class="field"><label>Expected Lamb Date</label><input type="date" id="gbr-expected" value="${new Date(new Date().getTime()+147*24*60*60*1000).toISOString().slice(0,10)}"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Outcome</label><select id="gbr-outcome">
+      <div class="field"><label>Outcome</label><select id="gbr-outcome" onchange="toggleFetalCount('gbr')">
         <option>Pending</option><option>Confirmed Pregnant</option><option>Not Pregnant</option><option>Lamb Born</option><option>Failed</option>
       </select></div>
-      <div class="field"></div>
+      <div class="field" id="gbr-fetal-wrap" style="display:none"><label>Fetal Count <span style="font-size:0.72rem;color:var(--text3);font-weight:400">(optional)</span></label><input type="number" id="gbr-fetal-count" min="1" max="6" placeholder="e.g. 2"></div>
     </div>
     <div class="field"><label>Notes</label><textarea id="gbr-notes" rows="2"></textarea></div>
 
@@ -3787,7 +3788,7 @@ async function saveBreedingGlobal() {
   const semenType = ai_sire_id ? (document.querySelector('input[name="gbr-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('gbr-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('gbr-straws-used')) || 0) : 0;
-  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', notes: v('gbr-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { lamb_id: lambId, sire_id, ai_sire_id, sire_text: v('gbr-sire-text'), breeding_date: v('gbr-date')||null, expected_lamb_date: v('gbr-expected')||null, outcome: v('gbr-outcome')||'Pending', fetal_count: v('gbr-fetal-count') ? parseInt(v('gbr-fetal-count')) : null, notes: v('gbr-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   const { data } = await db.from('breeding_records').insert(payload).select().single();
   if (ai_sire_id && data?.id && semenType === 'frozen') {
     if (semenLoc && strawsUsed > 0) await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', data.id);
@@ -3809,7 +3810,14 @@ async function openEditBreedingGlobal(recId, lambId) {
   const prevLambId = currentLambId;
   currentLambId = lambId;
   openAddBreeding(rec);
-  setTimeout(() => populateExistingCosts('br-costs', costs || []), 30);
+  setTimeout(() => {
+    populateExistingCosts('br-costs', costs || []);
+    // Pre-fill outcome and fetal count from record
+    const outcomeEl = document.getElementById('gbr-outcome') || document.getElementById('br-outcome');
+    if (outcomeEl && rec.outcome) { outcomeEl.value = rec.outcome; toggleFetalCount(outcomeEl.id.replace('-outcome','')); }
+    const fetalEl = document.getElementById('gbr-fetal-count') || document.getElementById('br-fetal-count');
+    if (fetalEl && rec.fetal_count) fetalEl.value = rec.fetal_count;
+  }, 30);
   // Override save button to go back to breeding page
   setTimeout(() => {
     const modal = document.querySelector('.modal');
@@ -4605,11 +4613,17 @@ async function saveLambing() {
   if (!src) return;
 
   // Update source record to Lamb Born
-  const updatePayload = { outcome: 'Lamb Born', lamb_born: true, lamb_count: count, lamb_birth_date: birthDate, lamb_notes: notes };
   if (src.type === 'breeding') {
-    await db.from('breeding_records').update({ outcome: 'Lamb Born' }).eq('id', src.id);
+    await db.from('breeding_records').update({
+      outcome: 'Lamb Born',
+      lamb_count: count,
+      actual_lamb_date: birthDate,
+      lamb_notes: notes,
+    }).eq('id', src.id);
   } else {
-    await db.from('embryo_transfers').update(updatePayload).eq('id', src.id);
+    await db.from('embryo_transfers').update({
+      outcome: 'Lamb Born', lamb_born: true, lamb_count: count, lamb_birth_date: birthDate, lamb_notes: notes
+    }).eq('id', src.id);
     // Also save individual transfer lambs
     await db.from('embryo_transfer_lambs').delete().eq('transfer_id', src.id);
     const lambRows = (window._newLambs||[]).filter(lb => lb.ear_tag || lb.sex || lb.link_id);
@@ -4648,12 +4662,233 @@ async function saveLambing() {
 
   toast(`🐑 ${count} lamb${count!==1?'s':''} recorded!`);
   closeModal();
-  renderLambingPage();
+  // Reload data and refresh
+  renderLambingReport();
+}
+
+// ── LAMBING REPORT ──────────────────────────────────────
+async function renderLambingReport() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">📋 Lambing Report</div>
+    </div>
+    <!-- Static filter bar — not re-rendered -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden" id="lr-toggle">
+        <button id="lr-btn-all" onclick="window._lrFilter='all';refreshLambingReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff">All</button>
+        <button id="lr-btn-anticipated" onclick="window._lrFilter='anticipated';refreshLambingReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--surface2);color:var(--text)">🐣 Anticipated</button>
+        <button id="lr-btn-past" onclick="window._lrFilter='past';refreshLambingReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--surface2);color:var(--text)">✅ Past Lambings</button>
+      </div>
+      <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <label style="font-size:0.75rem;color:var(--text3)">From</label>
+        <input type="date" id="lr-from" onchange="window._lrFrom=this.value;refreshLambingReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <label style="font-size:0.75rem;color:var(--text3)">To</label>
+        <input type="date" id="lr-to" onchange="window._lrTo=this.value;refreshLambingReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <select id="lr-status" onchange="window._lrStatus=this.value;refreshLambingReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Confirmed Pregnant">Confirmed Pregnant</option>
+          <option value="Lamb Born">Lamb Born</option>
+          <option value="Not Pregnant">Not Pregnant</option>
+          <option value="Failed">Failed</option>
+        </select>
+        <select id="lr-type" onchange="window._lrType=this.value;refreshLambingReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">All Types</option>
+          <option value="AI">🧬 AI</option>
+          <option value="Natural">🐏 Natural</option>
+          <option value="ET">🔬 ET</option>
+        </select>
+        <button onclick="window._lrFrom='';window._lrTo='';window._lrStatus='';window._lrType='';document.getElementById('lr-from').value='';document.getElementById('lr-to').value='';document.getElementById('lr-status').value='';document.getElementById('lr-type').value='';refreshLambingReport()" style="background:none;border:none;color:var(--text3);font-size:0.78rem;cursor:pointer;text-decoration:underline">Clear</button>
+      </div>
+    </div>
+    <div id="lr-content"><div class="loading"><span class="spinner"></span>Loading…</div></div>`;
+
+  const [{ data: breedRecs }, { data: transfers }, { data: flushes }] = await Promise.all([
+    db.from('breeding_records').select('*').order('expected_lamb_date'),
+    db.from('embryo_transfers').select('*').order('implant_date'),
+    db.from('embryo_flushes').select('*'),
+  ]);
+
+  window._lrBreed = breedRecs || [];
+  window._lrTransfers = transfers || [];
+  window._lrFlushes = flushes || [];
+  window._lrFilter = window._lrFilter || 'all';
+  window._lrFrom = window._lrFrom || '';
+  window._lrTo = window._lrTo || '';
+
+  refreshLambingReport();
+}
+
+function refreshLambingReport() {
+  // Update toggle button styles
+  ['all','anticipated','past'].forEach(f => {
+    const btn = document.getElementById(`lr-btn-${f}`);
+    if (btn) { btn.style.background = window._lrFilter===f?'var(--accent)':'var(--surface2)'; btn.style.color = window._lrFilter===f?'#fff':'var(--text)'; }
+  });
+
+  const today = new Date().toISOString().slice(0,10);
+  const filter = window._lrFilter || 'all';
+  const fromDate = window._lrFrom || '';
+  const toDate = window._lrTo || '';
+
+  const rows = [];
+
+  (window._lrBreed||[]).forEach(r => {
+    const ewe = allLambs.find(l => l.id === r.lamb_id);
+    const sire = r.ai_sire_id ? allAiRams.find(x => x.id === r.ai_sire_id) : (r.sire_id ? allLambs.find(l => l.id === r.sire_id) : null);
+    const expectedDate = r.expected_lamb_date || null;
+    const actualDate = r.actual_lamb_date || null;
+    const isPast = r.outcome === 'Lamb Born';
+    rows.push({
+      ewe: ewe?.name || '?',
+      ewetag: ewe?.ear_tag || '',
+      eweId: r.lamb_id,
+      sire: sire?.name || r.sire_text || '?',
+      type: r.ai_sire_id ? 'AI' : 'Natural',
+      expectedDate,
+      actualDate,
+      outcome: r.outcome || 'Pending',
+      lambCount: r.lamb_count || null,
+      fetalCount: r.fetal_count || null,
+      isPast,
+      source: 'breeding',
+      id: r.id,
+      breedDate: r.breeding_date,
+    });
+  });
+
+  (window._lrTransfers||[]).forEach(t => {
+    const flush = (window._lrFlushes||[]).find(f => f.id === t.flush_id);
+    const donor = flush ? allLambs.find(l => l.id === flush.donor_id) : null;
+    const recip = allLambs.find(l => l.id === t.recipient_id);
+    const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
+    const expectedDate = t.implant_date ? new Date(new Date(t.implant_date+'T12:00:00').getTime() + 140*24*60*60*1000).toISOString().slice(0,10) : null;
+    const isPast = t.outcome === 'Lamb Born';
+    rows.push({
+      ewe: recipName,
+      ewetag: recip?.ear_tag || '',
+      eweId: t.recipient_id,
+      sire: donor ? `${donor.name} (ET)` : '(ET)',
+      type: 'ET',
+      expectedDate,
+      actualDate: t.lamb_birth_date || null,
+      outcome: t.outcome || 'Pending',
+      lambCount: t.lamb_count || null,
+      fetalCount: t.fetal_count || null,
+      isPast,
+      source: 'transfer',
+      id: t.id,
+      breedDate: t.implant_date,
+    });
+  });
+
+  const statusFilter = window._lrStatus || '';
+  const typeFilter = window._lrType || '';
+
+  // Apply filters
+  let filtered = rows.filter(r => {
+    if (filter === 'anticipated') return !r.isPast && r.outcome !== 'Not Pregnant' && r.outcome !== 'Failed';
+    if (filter === 'past') return r.isPast;
+    return r.outcome !== 'Not Pregnant' && r.outcome !== 'Failed';
+  });
+  if (statusFilter) filtered = filtered.filter(r => r.outcome === statusFilter);
+  if (typeFilter) filtered = filtered.filter(r => r.type === typeFilter);
+  const refDate = r => r.actualDate || r.expectedDate || r.breedDate || '';
+  if (fromDate) filtered = filtered.filter(r => refDate(r) >= fromDate);
+  if (toDate) filtered = filtered.filter(r => refDate(r) <= toDate);
+  filtered.sort((a,b) => (a.expectedDate||'9999').localeCompare(b.expectedDate||'9999'));
+
+  // Summary
+  const totalAnticipated = filtered.filter(r => !r.isPast).length;
+  const totalPast = filtered.filter(r => r.isPast).length;
+  const totalLambs = filtered.filter(r => r.isPast).reduce((s,r) => s+(r.lambCount||0), 0);
+  const overdue = filtered.filter(r => !r.isPast && r.expectedDate && r.expectedDate < today).length;
+
+  const rows_html = filtered.length === 0
+    ? `<tr><td colspan="8" style="padding:1.5rem;text-align:center;color:var(--text3)">No records match the current filters</td></tr>`
+    : filtered.map(r => {
+        const isOverdue = !r.isPast && r.expectedDate && r.expectedDate < today;
+        const daysAway = r.expectedDate ? Math.round((new Date(r.expectedDate+'T12:00:00') - new Date()) / (1000*60*60*24)) : null;
+        const dateColor = r.isPast ? '#15803d' : isOverdue ? '#dc2626' : daysAway !== null && daysAway <= 14 ? '#d97706' : 'var(--text2)';
+        const typeBadge = r.type === 'ET'
+          ? `<span style="background:#ede9fe;color:#7c3aed;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">ET</span>`
+          : r.type === 'AI'
+          ? `<span style="background:#dbeafe;color:#1d4ed8;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">AI</span>`
+          : `<span style="background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:600">Nat</span>`;
+        const outBg = r.isPast ? '#dcfce7' : r.outcome==='Confirmed Pregnant' ? '#dbeafe' : r.outcome==='Not Pregnant'||r.outcome==='Failed' ? '#fee2e2' : '#fef3cd';
+        const outColor = r.isPast ? '#15803d' : r.outcome==='Confirmed Pregnant' ? '#1d4ed8' : r.outcome==='Not Pregnant'||r.outcome==='Failed' ? '#dc2626' : '#92560a';
+
+        return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openFromLambingCalendar('${r.source}','${r.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+          <td style="padding:0.6rem 0.75rem;font-weight:600;color:var(--accent)">${r.ewe}${r.ewetag?`<span style="font-weight:400;color:var(--text3);font-size:0.78rem"> #${r.ewetag}</span>`:''}</td>
+          <td style="padding:0.6rem 0.75rem;color:var(--text2);font-size:0.82rem">${r.sire}</td>
+          <td style="padding:0.6rem 0.75rem">${typeBadge}</td>
+          <td style="padding:0.6rem 0.75rem;font-size:0.82rem;color:${dateColor};font-weight:600;white-space:nowrap">
+            ${r.expectedDate||'—'}
+            ${isOverdue?`<div style="font-size:0.7rem;color:#dc2626">${Math.abs(daysAway)}d overdue</div>`:''}
+            ${!r.isPast&&daysAway!==null&&!isOverdue?`<div style="font-size:0.7rem;color:${dateColor}">${daysAway}d away</div>`:''}
+          </td>
+          <td style="padding:0.6rem 0.75rem;font-size:0.82rem;color:var(--text2)">${r.actualDate||'—'}</td>
+          <td style="padding:0.6rem 0.75rem"><span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.15rem 0.5rem;font-size:0.72rem;font-weight:600">${r.outcome}</span></td>
+          <td style="padding:0.6rem 0.75rem;text-align:center;color:var(--text2)">${r.fetalCount||'—'}</td>
+          <td style="padding:0.6rem 0.75rem;text-align:center;font-weight:${r.lambCount?'700':'400'};color:${r.lambCount?'#15803d':'var(--text3)'}">${r.lambCount||'—'}</td>
+          <td style="padding:0.6rem 0.5rem;text-align:center" onclick="event.stopPropagation()">
+            ${r.outcome === 'Confirmed Pregnant' ? `<button class="btn btn-primary btn-sm" onclick="openRecordLambing('${r.source}','${r.id}')">🐑 Record</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+
+  document.getElementById('lr-content').innerHTML = `
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#2563eb">${totalAnticipated}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Anticipated</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#15803d">${totalPast}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Lambed</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#15803d">${totalLambs}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Lambs Born</div></div>
+      ${overdue>0?`<div class="card" style="padding:0.85rem;text-align:center;border-color:#fca5a5"><div style="font-size:1.5rem;font-weight:700;color:#dc2626">${overdue}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem">Overdue</div></div>`:''}
+    </div>
+    <!-- Table -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Ewe / Recip</th>
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Sire / Donor</th>
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Type</th>
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Expected</th>
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Actual</th>
+            <th style="padding:0.6rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+            <th style="padding:0.6rem 0.75rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Fetuses</th>
+            <th style="padding:0.6rem 0.75rem;text-align:center;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Lambs Born</th>
+            <th style="padding:0.6rem 0.5rem"></th>
+          </tr></thead>
+          <tbody>${rows_html}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 // ── ANALYTICS PAGE ────────────────────────────────────
 async function renderAnalytics() {
-  document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading analytics…</div>`;
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `
+    <div class="section-header"><div class="section-title" style="font-size:1.15rem">📈 Analytics</div></div>
+    <!-- Static filter bar -->
+    <div class="card" style="margin-bottom:1.25rem;padding:1rem" id="analytics-filter-bar">
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="margin:0;flex:1;min-width:130px"><label>From</label><input type="date" id="analytics-from" onchange="applyAnalyticsFilter()"></div>
+        <div class="field" style="margin:0;flex:1;min-width:130px"><label>To</label><input type="date" id="analytics-to" onchange="applyAnalyticsFilter()"></div>
+        <div class="field" style="margin:0;flex:0 0 auto"><label>Semen Type</label>
+          <select id="analytics-semen-type" onchange="applyAnalyticsFilter()" style="padding:0.4rem 0.6rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            <option value="">All</option>
+            <option value="frozen">❄️ Frozen only</option>
+            <option value="fresh">🌱 Fresh only</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analytics-from').value='';document.getElementById('analytics-to').value='';document.getElementById('analytics-semen-type').value='';applyAnalyticsFilter()">Clear</button>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">Pending outcomes are excluded from rate calculations. Semen type filter applies to AI sire records only.</div>
+    </div>
+    <div id="analytics-content"><div class="loading"><span class="spinner"></span>Loading analytics…</div></div>`;
 
   // Load all data needed
   const [{ data: breedingRecs }, { data: breedingResults }, { data: transfers }, { data: flushes }, { data: transferLambs }, { data: resultLambs }] = await Promise.all([
@@ -4907,25 +5142,6 @@ async function renderAnalytics() {
     }).join('');
 
     return `
-      <div class="section-header"><div class="section-title" style="font-size:1.15rem">📈 Analytics</div></div>
-
-      <!-- Date Range + Semen Type Filter -->
-      <div class="card" style="margin-bottom:1.25rem;padding:1rem">
-        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
-          <div class="field" style="margin:0;flex:1;min-width:130px"><label>From</label><input type="date" id="analytics-from" value="${fromDate}" onchange="applyAnalyticsFilter()"></div>
-          <div class="field" style="margin:0;flex:1;min-width:130px"><label>To</label><input type="date" id="analytics-to" value="${toDate}" onchange="applyAnalyticsFilter()"></div>
-          <div class="field" style="margin:0;flex:0 0 auto"><label>Semen Type</label>
-            <select id="analytics-semen-type" onchange="applyAnalyticsFilter()" style="padding:0.4rem 0.6rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-              <option value="">All</option>
-              <option value="frozen" ${window._analyticsSemenType==='frozen'?'selected':''}>❄️ Frozen only</option>
-              <option value="fresh" ${window._analyticsSemenType==='fresh'?'selected':''}>🌱 Fresh only</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analytics-from').value='';document.getElementById('analytics-to').value='';document.getElementById('analytics-semen-type').value='';applyAnalyticsFilter()">Clear</button>
-        </div>
-        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.5rem">Pending outcomes are excluded from rate calculations. Semen type filter applies to AI sire records only.</div>
-      </div>
-
       <!-- NEEDS UPDATE -->
       ${(overdueBreeding.length > 0 || overdueTransfer.length > 0) ? `
       <div style="background:#fffbeb;border:1px solid #fcd68a;border-radius:var(--radius);padding:1rem;margin-bottom:1.25rem">
@@ -5002,7 +5218,10 @@ async function renderAnalytics() {
 
   window._buildAnalyticsHTML = buildAnalyticsHTML;
   window._analyticsSemenType = window._analyticsSemenType || '';
-  document.getElementById('main-content').innerHTML = buildAnalyticsHTML(defaultFrom, today, window._analyticsSemenType);
+  // Set default date values in the static filter bar
+  const fromEl = document.getElementById('analytics-from');
+  if (fromEl) fromEl.value = defaultFrom;
+  document.getElementById('analytics-content').innerHTML = buildAnalyticsHTML(defaultFrom, today, window._analyticsSemenType||'');
 }
 
 function setPendingFilter(mode) {
@@ -5020,9 +5239,8 @@ function applyAnalyticsFilter() {
   const semenType = document.getElementById('analytics-semen-type')?.value || '';
   window._analyticsSemenType = semenType;
   if (!window._buildAnalyticsHTML) return;
-  const scrollPos = document.getElementById('main-content').scrollTop;
-  document.getElementById('main-content').innerHTML = window._buildAnalyticsHTML(from, to, semenType);
-  document.getElementById('main-content').scrollTop = scrollPos;
+  const el = document.getElementById('analytics-content') || document.getElementById('main-content');
+  el.innerHTML = window._buildAnalyticsHTML(from, to, semenType);
 }
 
 function showFlushTypeDetail(type, badgeClass, flushIds) {
@@ -7732,8 +7950,10 @@ function openAddBreeding(rec) {
   const semenOpts = aiSireId ? getSemenOptionsForRam(aiSireId, rec?.semen_location) : '<option value="">— Select sire first —</option>';
   const hasSemenInv = aiSireId && allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0);
 
+  const eweName = (() => { const l = allLambs.find(x => x.id === currentLambId); return l ? `${l.name}${l.ear_tag?' #'+l.ear_tag:''}` : ''; })();
+
   showModal(`
-    <div class="modal-header"><div class="modal-title">${isEdit?'Edit Breeding':'Log Breeding'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-header"><div class="modal-title">${isEdit?'Edit Breeding':'Log Breeding'}${eweName?` — <span style="color:var(--accent)">${eweName}</span>`:''}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="field"><label>Sire</label><select id="br-sire-id" onchange="updateBreedingSemenOpts()">${sireOptions(currentSire)}</select></div>
     <div class="field"><label>Sire (if not in system)</label><input id="br-sire-text" value="${rec?.sire_text||''}" placeholder="Sire name or ID"></div>
     <div id="br-semen-section" style="${(hasSemenInv && (rec?.semen_type||'frozen')==='frozen') ? '' : 'display:none'}">
@@ -7760,10 +7980,10 @@ function openAddBreeding(rec) {
       <div class="field"><label>Expected Lamb Date <span style="color:var(--text3);font-size:0.75rem">(auto +147 days)</span></label><input type="date" id="br-expected" value="${rec?.expected_lamb_date||''}"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Outcome</label><select id="br-outcome">
+      <div class="field"><label>Outcome</label><select id="br-outcome" onchange="toggleFetalCount('br')">
         ${outcomes.map(o=>`<option ${(rec?.outcome||'Pending')===o?'selected':''}>${o}</option>`).join('')}
       </select></div>
-      <div class="field"></div>
+      <div class="field" id="br-fetal-wrap" style="display:${rec?.outcome==='Confirmed Pregnant'?'':'none'}"><label>Fetal Count <span style="font-size:0.72rem;color:var(--text3);font-weight:400">(optional)</span></label><input type="number" id="br-fetal-count" min="1" max="6" placeholder="e.g. 2" value="${rec?.fetal_count||''}"></div>
     </div>
     <div class="field"><label>Notes</label><textarea id="br-notes">${rec?.notes||''}</textarea></div>
 
@@ -7819,7 +8039,7 @@ async function saveBreeding(id) {
   const semenType = ai_sire_id ? (document.querySelector('input[name="br-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('br-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('br-straws-used')) || 0) : 0;
-  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', notes: v('br-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { lamb_id: currentLambId, sire_id, ai_sire_id, sire_text: v('br-sire-text'), breeding_date: v('br-date')||null, expected_lamb_date: v('br-expected')||null, outcome: v('br-outcome')||'Pending', fetal_count: v('br-fetal-count') ? parseInt(v('br-fetal-count')) : null, notes: v('br-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   if (id) {
     // Load old record to determine if we need to reverse a previous deduction
     const { data: old } = await db.from('breeding_records').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
@@ -8036,6 +8256,12 @@ async function deleteInlineTransfer(flushId, transferId) {
   if (!confirm('Delete this transfer?')) return;
   await db.from('embryo_transfers').delete().eq('id', transferId);
   loadInlineTransfers(flushId);
+}
+
+function toggleFetalCount(prefix) {
+  const outcome = document.getElementById(`${prefix}-outcome`)?.value;
+  const wrap = document.getElementById(`${prefix}-fetal-wrap`);
+  if (wrap) wrap.style.display = outcome === 'Confirmed Pregnant' ? '' : 'none';
 }
 
 function updateFlushSemenOpts() {
@@ -8385,7 +8611,7 @@ function openFlockTreatment() {
       <div id="ft-lamb-list" style="height:200px;overflow-y:scroll;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem">
         ${activelambs.map(l => `
           <label id="ft-row-${l.id}" data-flock="${l.flock_type||''}" data-sex="${l.sex||''}" data-name="${l.name.toLowerCase()}" data-tag="${(l.ear_tag||'').toLowerCase()}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;width:100%;box-sizing:border-box">
-            <input type="checkbox" class="ft-lamb-check" value="${l.id}" checked style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+            <input type="checkbox" class="ft-lamb-check" value="${l.id}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
             <span style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap">${l.name}</span>
             <span style="font-size:0.75rem;color:var(--text3);white-space:nowrap">${l.ear_tag?'#'+l.ear_tag:''} ${l.sex?'· '+l.sex:''} ${l.flock_type?'· '+l.flock_type:''}</span>
           </label>`).join('')}
@@ -8707,15 +8933,16 @@ async function openBulkPregCheck() {
           const lamb = allLambs.find(l => l.id === r.lamb_id);
           const sire = r.ai_sire_id ? allAiRams.find(x=>x.id===r.ai_sire_id) : null;
           const sireName = sire ? sire.name+' 🧬' : (r.sire_text||'—');
-          return `<div class="pc-record-row" data-lamb-id="${r.lamb_id||''}" style="display:grid;grid-template-columns:16px 1fr auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
+          return `<div class="pc-record-row" data-lamb-id="${r.lamb_id||''}" style="display:grid;grid-template-columns:16px 1fr auto auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
             <input type="checkbox" id="pc-check-${r.id}" data-type="breeding" style="accent-color:var(--accent);width:14px;height:14px">
             <div style="min-width:0">
               <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${lamb?.name||'Unknown'} <span style="font-weight:400;color:var(--text3)">${lamb?.ear_tag?'#'+lamb.ear_tag:''}</span></div>
               <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bred: ${r.breeding_date||'—'} · ${sireName}${r.expected_lamb_date?' · Due: '+r.expected_lamb_date:''}</div>
             </div>
-            <select id="pc-outcome-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:160px">
+            <select id="pc-outcome-${r.id}" onchange="pcToggleFetal(this,'${r.id}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:150px">
               ${outcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
             </select>
+            <input type="number" id="pc-fetal-${r.id}" min="1" max="6" placeholder="# fetuses" title="Fetal count" style="width:80px;padding:0.3rem 0.45rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
           </div>`;
         }).join('')}` : ''}
       ${pendingTransfers.length > 0 ? `
@@ -8725,15 +8952,16 @@ async function openBulkPregCheck() {
           const recipName = recip ? recip.name+(recip.ear_tag?' #'+recip.ear_tag:'') : (t.recipient_text||'Unknown');
           const flush = (flushes||[]).find(f=>f.id===t.flush_id);
           const donor = flush ? allLambs.find(l=>l.id===flush.donor_id) : null;
-          return `<div class="pc-record-row" data-lamb-id="${t.recipient_id||''}" style="display:grid;grid-template-columns:16px 1fr auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
+          return `<div class="pc-record-row" data-lamb-id="${t.recipient_id||''}" style="display:grid;grid-template-columns:16px 1fr auto auto;gap:0.5rem 0.65rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--border)">
             <input type="checkbox" id="pc-check-${t.id}" data-type="transfer" style="accent-color:var(--accent);width:14px;height:14px">
             <div style="min-width:0">
               <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${recipName}</div>
               <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Implant: ${t.implant_date||'—'} · Donor: ${donor?.name||'—'}</div>
             </div>
-            <select id="pc-outcome-${t.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:160px">
+            <select id="pc-outcome-${t.id}" onchange="pcToggleFetal(this,'${t.id}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.3rem 0.45rem;font-size:0.78rem;width:150px">
               ${transferOutcomes.map(o=>`<option ${o==='Confirmed Pregnant'?'selected':''}>${o}</option>`).join('')}
             </select>
+            <input type="number" id="pc-fetal-${t.id}" min="1" max="6" placeholder="# fetuses" title="Fetal count" style="width:80px;padding:0.3rem 0.45rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
           </div>`;
         }).join('')}` : ''}
     </div>
@@ -8743,6 +8971,11 @@ async function openBulkPregCheck() {
     </div>`, true);
 
   renderFlock();
+}
+
+function pcToggleFetal(sel, id) {
+  const fetalEl = document.getElementById(`pc-fetal-${id}`);
+  if (fetalEl) fetalEl.style.opacity = sel.value === 'Confirmed Pregnant' ? '1' : '0.3';
 }
 
 function pcFilterByGroup() {
@@ -8775,19 +9008,21 @@ async function saveBulkPregCheck() {
     if (!cb.checked) return;
     const id = cb.id.replace('pc-check-', '');
     const outcome = document.getElementById(`pc-outcome-${id}`)?.value;
+    const fetalCount = document.getElementById(`pc-fetal-${id}`)?.value;
+    const fetal_count = fetalCount ? parseInt(fetalCount) : null;
     if (!outcome) return;
     if (cb.dataset.type === 'transfer') {
-      transferUpdates.push({ id, outcome, lambBorn: outcome === 'Lamb Born' });
+      transferUpdates.push({ id, outcome, fetal_count, lambBorn: outcome === 'Lamb Born' });
     } else {
-      breedingUpdates.push({ id, outcome });
+      breedingUpdates.push({ id, outcome, fetal_count });
     }
   });
 
   if (breedingUpdates.length === 0 && transferUpdates.length === 0) { toast('No records selected'); return; }
 
   await Promise.all([
-    ...breedingUpdates.map(u => db.from('breeding_records').update({ outcome: u.outcome }).eq('id', u.id)),
-    ...transferUpdates.map(u => db.from('embryo_transfers').update({ outcome: u.outcome, lamb_born: u.lambBorn }).eq('id', u.id)),
+    ...breedingUpdates.map(u => db.from('breeding_records').update({ outcome: u.outcome, ...(u.fetal_count ? {fetal_count: u.fetal_count} : {}) }).eq('id', u.id)),
+    ...transferUpdates.map(u => db.from('embryo_transfers').update({ outcome: u.outcome, lamb_born: u.lambBorn, ...(u.fetal_count ? {fetal_count: u.fetal_count} : {}) }).eq('id', u.id)),
   ]);
 
   const total = breedingUpdates.length + transferUpdates.length;
