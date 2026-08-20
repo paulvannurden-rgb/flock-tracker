@@ -11187,10 +11187,15 @@ async function openCompletePlan(groupId) {
         `<td style="padding:0.5rem">
           <div style="display:flex;flex-direction:column;gap:0.25rem">
             <select id="${sireSelectId}" data-sire="${sireVal}" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
-            ${showSemenType ? `<select id="cp-semen-type-${i}" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            ${showSemenType ? `<select id="cp-semen-type-${i}" onchange="updateCpSemenLoc('${i}')" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
               <option value="frozen" ${(semenType||'frozen')==='frozen'?'selected':''}>❄️ Frozen</option>
               <option value="fresh" ${semenType==='fresh'?'selected':''}>🌱 Fresh</option>
-            </select>` : ''}
+            </select>
+            <select id="cp-semen-loc-${i}" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+              <option value="">— Location —</option>
+              ${(allSemenInventory||[]).filter(s=>s.ai_ram_id===(sireVal||null)||(sireVal&&s.ai_ram_id===sireVal)).map(s=>`<option value="${s.id}">${s.location||'Tank'}(${s.straws})</option>`).join('')}
+            </select>
+            <input type="number" id="cp-straws-${i}" min="0" step="0.5" placeholder="straws" value="1" style="width:65px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">` : ''}
           </div>
         </td>
         <td style="padding:0.5rem">
@@ -11327,6 +11332,15 @@ async function syncFrozenEmbryoInventory(flushId, flushData, frozenCount, locati
   } else if (existing && existing.length > 0) {
     await db.from('embryo_inventory').delete().eq('flush_id', flushId);
   }
+}
+
+function updateCpSemenLoc(rowId) {
+  const sireEl = document.getElementById(`cp-sire-${rowId}`) || document.getElementById(`cp-ai-sire-${rowId}`);
+  const sireId = sireEl?.value || '';
+  const locSel = document.getElementById(`cp-semen-loc-${rowId}`);
+  if (!locSel) return;
+  const inv = (allSemenInventory||[]).filter(s => !sireId || s.ai_ram_id === sireId);
+  locSel.innerHTML = `<option value="">— Location —</option>` + inv.map(s => `<option value="${s.id}">${s.location||'Tank'} (${s.straws})</option>`).join('');
 }
 
 function updateCpExpected(i) {
@@ -11596,13 +11610,13 @@ async function confirmCompletePlanDom(groupId) {
           _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
       } else {
         const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
-        // Read semen type from dropdown; if no dropdown (non-AI sire), null
-        // If AI sire has inventory (tank), default to frozen if not explicitly set
         let semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
-        if (!semenType && ai_sire_id) semenType = 'frozen'; // AI sire without type = frozen by default
+        if (!semenType && ai_sire_id) semenType = 'frozen';
+        const semenLocId = document.getElementById(`cp-semen-loc-${rowId}`)?.value || null;
+        const strawsUsed = parseFloat(document.getElementById(`cp-straws-${rowId}`)?.value) || 0;
         breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending',
-          semen_type: semenType, group_id: groupId });
+          semen_type: semenType, semen_location: semenLocId||null, straws_used: strawsUsed||null, group_id: groupId, _semenLocId: semenLocId, _strawsUsed: strawsUsed });
       }
     }
   }
@@ -11678,10 +11692,16 @@ async function confirmCompletePlanDom(groupId) {
     }
   }
   if (breedInserts.length > 0) {
-    const results = await Promise.all(breedInserts.map(b => db.from('breeding_records').insert(b)));
-    const errs = results.filter(r => r.error);
-    if (errs.length) { toast('Breeding insert failed: ' + (errs[0].error?.message||'unknown')); console.error('Breeding insert errors:', errs); return; }
-    totalCreated += breedInserts.length;
+    for (const b of breedInserts) {
+      const { _semenLocId, _strawsUsed, ...breedData } = b;
+      const { data: inserted, error: breedErr } = await db.from('breeding_records').insert(breedData).select().single();
+      if (breedErr) { toast('Breeding insert failed: ' + (breedErr.message||'unknown')); console.error('Breeding insert error:', breedErr); return; }
+      // Deduct semen inventory if frozen semen with location
+      if (inserted?.id && breedData.semen_type === 'frozen' && _semenLocId && _strawsUsed > 0) {
+        await deductSemenInventory(breedData.ai_sire_id, _semenLocId, _strawsUsed, 'breeding', inserted.id);
+      }
+      totalCreated++;
+    }
   }
 
   await db.from('breeding_groups').update({ status: 'Complete' }).eq('id', groupId);
