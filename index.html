@@ -11281,7 +11281,8 @@ async function openCompletePlan(groupId) {
           <input type="date" id="cp-transfer-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
         </td>
         <td style="padding:0.5rem">
-          <input type="number" id="cp-embryos-${i}" placeholder="total" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:60px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" title="Total embryos (auto-sums sources)">
+          <div id="cp-embryos-total-${i}" style="font-size:0.82rem;font-weight:600;color:var(--text);padding:0.3rem 0.4rem;min-width:40px;text-align:center">1</div>
+          <input type="hidden" id="cp-embryos-${i}" value="1">
         </td>` :
         `<td style="padding:0.5rem">
           <div style="display:flex;flex-direction:column;gap:0.25rem">
@@ -11511,16 +11512,23 @@ function validateCpEmbryos() {
     frozenByDonor[di] = frozenByDonor[di] + unfert + degen; // include in accounted total
   });
 
-  // Sum recip embryos assigned per donor
+  // Sum recip embryos assigned per donor (multi-source aware)
   const assignedByDonor = {};
   recipRows.forEach(row => {
     const rowId = row.id.replace('cp-row-','');
-    const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
-    const embryos = parseInt(document.getElementById(`cp-embryos-${rowId}`)?.value) || 0;
-    if (donorIdx !== '' && donorIdx !== null && donorIdx !== undefined) {
-      const di = parseInt(donorIdx);
-      assignedByDonor[di] = (assignedByDonor[di] || 0) + embryos;
-    }
+    const sources = getCpRecipSources(rowId);
+    let rowTotal = 0;
+    sources.forEach(src => {
+      if (src.donorIdx !== null) {
+        assignedByDonor[src.donorIdx] = (assignedByDonor[src.donorIdx] || 0) + src.num;
+      }
+      rowTotal += src.num;
+    });
+    // Update total display and hidden input
+    const totalEl = document.getElementById(`cp-embryos-total-${rowId}`);
+    const hiddenEl = document.getElementById(`cp-embryos-${rowId}`);
+    if (totalEl) totalEl.textContent = rowTotal;
+    if (hiddenEl) hiddenEl.value = rowTotal;
   });
 
   // Validate each donor row
@@ -11583,30 +11591,34 @@ function validateCpEmbryos() {
     }
   });
 
-  // Validate recip rows
+  // Validate recip rows - check each source against donor's available transferred embryos
   recipRows.forEach(row => {
     const rowId = row.id.replace('cp-row-','');
-    const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
-    const embryosEl = document.getElementById(`cp-embryos-${rowId}`);
-    const embryos = parseInt(embryosEl?.value) || 0;
+    const sources = getCpRecipSources(rowId);
     let warnEl = document.getElementById(`cp-embryos-warn-${rowId}`);
-    if (donorIdx !== '' && donorIdx !== undefined) {
-      const di = parseInt(donorIdx);
-      const collected = collectedByDonor[di] || 0;
-      const assigned = assignedByDonor[di] || 0;
-      if (collected > 0 && assigned > collected) {
-        if (!warnEl) {
-          warnEl = document.createElement('div');
-          warnEl.id = `cp-embryos-warn-${rowId}`;
-          warnEl.style.cssText = 'font-size:0.68rem;color:#dc2626;font-weight:600;margin-top:0.1rem';
-          embryosEl?.parentElement?.appendChild(warnEl);
-        }
-        warnEl.textContent = `Over by ${assigned - collected}`;
-        if (embryosEl) embryosEl.style.borderColor = '#dc2626';
-      } else {
-        if (warnEl) warnEl.remove();
-        if (embryosEl) embryosEl.style.borderColor = collected > 0 ? '#16a34a' : '';
+    const container = document.getElementById(`cp-sources-${rowId}`);
+    let hasWarn = false;
+    sources.forEach((src, idx) => {
+      const selEl = document.getElementById(`cp-donor-${rowId}`) || document.getElementById(`cp-donor-${rowId}-${idx}`);
+      if (src.donorIdx !== null) {
+        const transferred = transferredByDonor[src.donorIdx] || 0;
+        const assigned = assignedByDonor[src.donorIdx] || 0;
+        if (transferred > 0 && assigned > transferred) hasWarn = true;
       }
+    });
+    if (hasWarn) {
+      if (!warnEl) {
+        warnEl = document.createElement('div');
+        warnEl.id = `cp-embryos-warn-${rowId}`;
+        warnEl.style.cssText = 'font-size:0.68rem;color:#dc2626;font-weight:600;margin-top:0.1rem';
+        container?.parentElement?.appendChild(warnEl);
+      }
+      // Find which donor is over
+      const overMsgs = sources.filter(s => s.donorIdx !== null && (transferredByDonor[s.donorIdx]||0) > 0 && (assignedByDonor[s.donorIdx]||0) > (transferredByDonor[s.donorIdx]||0))
+        .map(s => `donor ${s.donorIdx+1} over by ${assignedByDonor[s.donorIdx] - transferredByDonor[s.donorIdx]}`);
+      warnEl.textContent = `⚠️ ${overMsgs.join(', ')}`;
+    } else {
+      if (warnEl) warnEl.remove();
     }
   });
 }
