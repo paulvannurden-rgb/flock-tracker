@@ -11186,7 +11186,7 @@ async function openCompletePlan(groupId) {
         </td>` :
         `<td style="padding:0.5rem">
           <div style="display:flex;flex-direction:column;gap:0.25rem">
-            <select id="${sireSelectId}" data-sire="${sireVal}" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+            <select id="${sireSelectId}" data-sire="${sireVal}" onchange="updateCpSemenLoc('${i}')" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
             ${showSemenType ? `<select id="cp-semen-type-${i}" onchange="updateCpSemenLoc('${i}')" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
               <option value="frozen" ${(semenType||'frozen')==='frozen'?'selected':''}>❄️ Frozen</option>
               <option value="fresh" ${semenType==='fresh'?'selected':''}>🌱 Fresh</option>
@@ -11499,7 +11499,22 @@ function addCpRow() {
       <input type="hidden" id="cp-lamb-id-${i}" value="">
     </td>
     <td style="padding:0.5rem">
-      <select id="cp-sire-${i}" style="width:140px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+      <div style="display:flex;flex-direction:column;gap:0.25rem">
+        <select id="cp-sire-${i}" onchange="updateCpSemenLoc('${i}')" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${sireOpts}</select>
+        <select id="cp-semen-type-${i}" onchange="updateCpSemenLoc('${i}')" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="frozen">❄️ Frozen</option>
+          <option value="fresh">🌱 Fresh</option>
+        </select>
+        <select id="cp-semen-loc-${i}" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">— Location —</option>
+        </select>
+        <div style="display:flex;gap:0.35rem;align-items:center">
+          <input type="number" id="cp-straws-${i}" min="0" step="0.5" placeholder="straws" value="1" style="width:55px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <label style="display:flex;align-items:center;gap:0.2rem;font-size:0.7rem;color:var(--text3);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="cp-shared-${i}" style="accent-color:var(--accent)"> shared
+          </label>
+        </div>
+      </div>
     </td>
     <td style="padding:0.5rem">
       <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
@@ -11605,15 +11620,20 @@ async function confirmCompletePlanDom(groupId) {
       if (isFlush) {
         let semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
         if (!semenType && ai_sire_id) semenType = 'frozen';
+        const flushSemenLocId = document.getElementById(`cp-semen-loc-${rowId}`)?.value || null;
+        const flushStrawsUsed = parseFloat(document.getElementById(`cp-straws-${rowId}`)?.value) || 0;
+        const flushIsShared = document.getElementById(`cp-shared-${rowId}`)?.checked || false;
         flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
           semen_type: semenType, group_id: groupId,
+          semen_location: flushSemenLocId||null, straws_used: flushStrawsUsed||null,
           embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
           embryos_transferred: parseInt(document.getElementById(`cp-transferred-${rowId}`)?.value)||null,
           embryos_frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||null,
           embryos_unfertilized: parseInt(document.getElementById(`cp-unfertilized-${rowId}`)?.value)||null,
           embryos_degenerate: parseInt(document.getElementById(`cp-degenerate-${rowId}`)?.value)||null,
-          _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0 });
+          _frozen: parseInt(document.getElementById(`cp-frozen-${rowId}`)?.value)||0,
+          _semenLocId: flushSemenLocId, _strawsUsed: flushStrawsUsed, _isShared: flushIsShared });
       } else {
         const dueDate = document.getElementById(`cp-due-${rowId}`)?.value;
         let semenType = document.getElementById(`cp-semen-type-${rowId}`)?.value || null;
@@ -11666,8 +11686,9 @@ async function confirmCompletePlanDom(groupId) {
   const createdFlushIds = []; // index matches flushInserts order
 
   if (flushInserts.length > 0) {
+    const flushSharedDeducted = new Set();
     for (const flush of flushInserts) {
-      const { _frozen, ...flushData } = flush; // strip internal _frozen field before DB insert
+      const { _frozen, _semenLocId, _strawsUsed, _isShared, ...flushData } = flush;
       const { data: f, error: flushErr } = await db.from('embryo_flushes').insert(flushData).select().single();
       if (flushErr) { 
         const msg = flushErr.message || flushErr.details || JSON.stringify(flushErr);
@@ -11677,6 +11698,19 @@ async function confirmCompletePlanDom(groupId) {
       }
       createdFlushIds.push(f?.id || null);
       totalCreated++;
+      // Deduct semen inventory
+      if (f?.id && flushData.semen_type === 'frozen' && _semenLocId && _strawsUsed > 0) {
+        const invEntry = (allSemenInventory||[]).find(s => s.id === _semenLocId);
+        if (invEntry) {
+          const deductKey = `${flushData.ai_sire_id}:${_semenLocId}`;
+          if (_isShared && flushSharedDeducted.has(deductKey)) {
+            // Already deducted for shared sire+location — skip
+          } else {
+            await deductSemenInventory(flushData.ai_sire_id, invEntry.location, _strawsUsed, 'flush', f.id);
+            if (_isShared) flushSharedDeducted.add(deductKey);
+          }
+        }
+      }
       // Create embryo inventory record if frozen > 0
       if (f?.id && _frozen > 0) {
         await db.from('embryo_inventory').insert({
