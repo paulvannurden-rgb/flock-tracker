@@ -11603,7 +11603,7 @@ function validateCpEmbryos() {
       if (src.donorIdx !== null) {
         const transferred = transferredByDonor[src.donorIdx] || 0;
         const assigned = assignedByDonor[src.donorIdx] || 0;
-        if (transferred > 0 && assigned > transferred) hasWarn = true;
+        if (assigned > transferred) hasWarn = true;
       }
     });
     if (hasWarn) {
@@ -11614,7 +11614,7 @@ function validateCpEmbryos() {
         container?.parentElement?.appendChild(warnEl);
       }
       // Find which donor is over
-      const overMsgs = sources.filter(s => s.donorIdx !== null && (transferredByDonor[s.donorIdx]||0) > 0 && (assignedByDonor[s.donorIdx]||0) > (transferredByDonor[s.donorIdx]||0))
+      const overMsgs = sources.filter(s => s.donorIdx !== null && (assignedByDonor[s.donorIdx]||0) > (transferredByDonor[s.donorIdx]||0))
         .map(s => `donor ${s.donorIdx+1} over by ${assignedByDonor[s.donorIdx] - transferredByDonor[s.donorIdx]}`);
       warnEl.textContent = `⚠️ ${overMsgs.join(', ')}`;
     } else {
