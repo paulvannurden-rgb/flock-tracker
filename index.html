@@ -11232,6 +11232,8 @@ async function openCompletePlan(groupId) {
   const expectedLambDate = !isFlush ? new Date(new Date(targetDate + 'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
 
   window._cpIsFlush = isFlush;
+  window._cpFlushType = g.type === 'ivf' ? 'IVF' : 'MOET';
+  const cpIsIVF = window._cpFlushType === 'IVF';
   window._cpTargetDate = targetDate;
   window._cpExpectedDate = expectedLambDate;
 
@@ -11304,13 +11306,13 @@ async function openCompletePlan(groupId) {
           </div>
         </td>
         <td style="padding:0.5rem">
-          <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
+          <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}>
         </td>
         <td style="padding:0.5rem">
           ${!isFlush
             ? `<input type="date" id="cp-due-${i}" value="${expectedLambDate||''}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">`
             : `<div style="display:flex;flex-direction:column;gap:0.25rem">
-                <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option>MOET</option><option>IVF</option></select>
+                <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option ${cpIsIVF?'':'selected'}>MOET</option><option ${cpIsIVF?'selected':''}>IVF</option></select>
                 <div style="display:flex;gap:0.25rem;align-items:center;flex-wrap:wrap">
                   <div style="display:flex;flex-direction:column;gap:0.1rem">
                     <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase">Collected</span>
@@ -11438,6 +11440,8 @@ async function syncFrozenEmbryoInventory(flushId, flushData, frozenCount, locati
     await db.from('embryo_inventory').delete().eq('flush_id', flushId);
   }
 }
+
+function getCpFlushType() { return window._cpFlushType || 'MOET'; }
 
 function updateCpSemenLoc(rowId) {
   const sireEl = document.getElementById(`cp-sire-${rowId}`);
@@ -11627,6 +11631,9 @@ function addCpRow() {
   const tbody = document.getElementById('cp-tbody');
   if (!tbody) return;
   const isFlush = window._cpIsFlush;
+  const isIVF = window._cpFlushType === 'IVF';
+  const moetSel = isIVF ? '' : 'selected';
+  const ivfSel = isIVF ? 'selected' : '';
   const targetDate = window._cpTargetDate || new Date().toISOString().slice(0,10);
   const expectedDate = window._cpExpectedDate || '';
   const sireOpts = sireOptions('');
@@ -11664,19 +11671,19 @@ function addCpRow() {
       </div>
     </td>
     <td style="padding:0.5rem">
-      <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}">
+      <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}>
     </td>
     ${!isFlush ? `<td style="padding:0.5rem">
       <input type="date" id="cp-due-${i}" value="${expectedDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-    </td>` : `<td style="padding:0.5rem">
-      <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option>MOET</option><option>IVF</option></select>
-    </td>`}
-    <td style="padding:0.5rem;text-align:center">
-      <input type="checkbox" id="cp-include-${i}" checked style="accent-color:var(--accent);width:16px;height:16px">
     </td>
     <td style="padding:0.5rem;text-align:center">
       <button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1">×</button>
-    </td>`;
+    </td>` : `<td style="padding:0.5rem">
+      <select id="cp-type-${i}" style="padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option ${moetSel}>MOET</option><option ${ivfSel}>IVF</option></select>
+    </td>
+    <td style="padding:0.5rem;text-align:center">
+      <button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1">×</button>
+    </td>`}`;
   tbody.appendChild(row);
 }
 
