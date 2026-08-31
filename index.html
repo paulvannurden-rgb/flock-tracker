@@ -11252,6 +11252,9 @@ async function openCompletePlan(groupId) {
       const dsire = d.ai_sire_id ? allAiRams.find(r => r.id === d.ai_sire_id) : null;
       return `<option value="${di}">${dlamb?.name||'?'} × ${dsire?.name||d.sire_text||'?'}</option>`;
     }).join('');
+    // Store for addCpSource to use later
+    window._cpDonorOpts = window._cpDonorOpts || {};
+    window._cpDonorOpts[i] = donorOpts;
 
     return `<tr id="cp-row-${i}" data-type="${rowType||'donor'}" style="border-bottom:1px solid var(--border);${bgColor}">
       <td style="padding:0.5rem">
@@ -11272,7 +11275,7 @@ async function openCompletePlan(groupId) {
               <input type="number" id="cp-embryos-${i}-0" value="1" min="1" title="# embryos from this flush" style="width:45px;padding:0.3rem 0.35rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()">
             </div>
           </div>
-          <button type="button" onclick="addCpSource('${i}','${donorOpts.replace(/'/g,"\\'")}')" style="font-size:0.68rem;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;margin-top:0.15rem">+ add flush</button>
+          <button type="button" onclick="addCpSource('${i}')" style="font-size:0.68rem;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;margin-top:0.15rem">+ add flush</button>
         </td>
         <td style="padding:0.5rem">
           <input type="date" id="cp-transfer-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
@@ -11445,9 +11448,10 @@ function updateCpSemenLoc(rowId) {
   locSel.innerHTML = `<option value="">— Location —</option>` + inv.map(s => `<option value="${s.id}">${s.location||'Tank'} (${s.straws} straws)</option>`).join('');
 }
 
-function addCpSource(rowId, donorOptsHtml) {
+function addCpSource(rowId) {
   const container = document.getElementById(`cp-sources-${rowId}`);
   if (!container) return;
+  const donorOptsHtml = (window._cpDonorOpts && window._cpDonorOpts[rowId]) || '';
   const idx = container.querySelectorAll('select').length;
   const div = document.createElement('div');
   div.style.cssText = 'display:flex;gap:0.25rem;align-items:center;margin-bottom:0.2rem';
