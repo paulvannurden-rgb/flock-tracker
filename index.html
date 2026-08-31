@@ -11193,7 +11193,7 @@ async function openCompletePlan(groupId) {
             </select>
             <select id="cp-semen-loc-${i}" style="width:130px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
               <option value="">— Location —</option>
-              ${(allSemenInventory||[]).filter(s=>s.ai_ram_id===(sireVal||null)||(sireVal&&s.ai_ram_id===sireVal)).map(s=>`<option value="${s.id}">${s.location||'Tank'}(${s.straws})</option>`).join('')}
+              ${(allSemenInventory||[]).filter(s=>s.ai_ram_id===(sireVal.replace(/^ai:/,'')||null)).map(s=>`<option value="${s.id}">${s.location||'Tank'} (${s.straws} straws)</option>`).join('')}
             </select>
             <input type="number" id="cp-straws-${i}" min="0" step="0.5" placeholder="straws" value="1" style="width:65px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">` : ''}
           </div>
@@ -11335,12 +11335,13 @@ async function syncFrozenEmbryoInventory(flushId, flushData, frozenCount, locati
 }
 
 function updateCpSemenLoc(rowId) {
-  const sireEl = document.getElementById(`cp-sire-${rowId}`) || document.getElementById(`cp-ai-sire-${rowId}`);
-  const sireId = sireEl?.value || '';
+  const sireEl = document.getElementById(`cp-sire-${rowId}`);
+  const rawVal = sireEl?.value || '';
+  const sireId = rawVal.replace(/^ai:/, '');
   const locSel = document.getElementById(`cp-semen-loc-${rowId}`);
   if (!locSel) return;
   const inv = (allSemenInventory||[]).filter(s => !sireId || s.ai_ram_id === sireId);
-  locSel.innerHTML = `<option value="">— Location —</option>` + inv.map(s => `<option value="${s.id}">${s.location||'Tank'} (${s.straws})</option>`).join('');
+  locSel.innerHTML = `<option value="">— Location —</option>` + inv.map(s => `<option value="${s.id}">${s.location||'Tank'} (${s.straws} straws)</option>`).join('');
 }
 
 function updateCpExpected(i) {
@@ -11698,7 +11699,8 @@ async function confirmCompletePlanDom(groupId) {
       if (breedErr) { toast('Breeding insert failed: ' + (breedErr.message||'unknown')); console.error('Breeding insert error:', breedErr); return; }
       // Deduct semen inventory if frozen semen with location
       if (inserted?.id && breedData.semen_type === 'frozen' && _semenLocId && _strawsUsed > 0) {
-        await deductSemenInventory(breedData.ai_sire_id, _semenLocId, _strawsUsed, 'breeding', inserted.id);
+        const invEntry = (allSemenInventory||[]).find(s => s.id === _semenLocId);
+        if (invEntry) await deductSemenInventory(breedData.ai_sire_id, invEntry.location, _strawsUsed, 'breeding', inserted.id);
       }
       totalCreated++;
     }
