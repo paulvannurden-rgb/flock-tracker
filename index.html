@@ -11618,9 +11618,20 @@ function validateCpEmbryos() {
         container?.parentElement?.appendChild(warnEl);
       }
       // Find which donor is over
+      const donorRowEls = Array.from(document.querySelectorAll('#cp-tbody tr[data-type="donor"]'));
       const overMsgs = sources.filter(s => s.donorIdx !== null && (assignedByDonor[s.donorIdx]||0) > (transferredByDonor[s.donorIdx]||0))
-        .map(s => `donor ${s.donorIdx+1} over by ${assignedByDonor[s.donorIdx] - transferredByDonor[s.donorIdx]}`);
-      warnEl.textContent = `⚠️ ${overMsgs.join(', ')}`;
+        .map(s => {
+          const donorRow = donorRowEls[s.donorIdx];
+          const donorRowId = donorRow?.id.replace('cp-row-','');
+          const lambId = donorRowId ? (document.getElementById(`cp-lamb-id-${donorRowId}`)?.value || document.getElementById(`cp-lamb-${donorRowId}`)?.value) : null;
+          const donorLamb = lambId ? allLambs.find(l => l.id === lambId) : null;
+          const sireEl = donorRowId ? document.getElementById(`cp-sire-${donorRowId}`) : null;
+          const sireVal = sireEl?.value || '';
+          const sire = sireVal ? (allLambs.find(l => l.id === sireVal) || allAiRams.find(r => 'ai:'+r.id === sireVal)) : null;
+          const label = donorLamb ? `${donorLamb.name}${sire?' × '+sire.name:''}` : `Donor ${s.donorIdx+1}`;
+          return `⚠️ ${label} over by ${assignedByDonor[s.donorIdx] - transferredByDonor[s.donorIdx]}`;
+        });
+      warnEl.textContent = overMsgs.join(', ');
     } else {
       if (warnEl) warnEl.remove();
     }
@@ -11742,10 +11753,21 @@ async function confirmCompletePlanDom(groupId) {
   const breedInserts = [];
   const transferInserts = [];
 
-  // First pass: collect donor rows and their indices for lookup
+  // First pass: collect donor rows and map original index → flush insert index
   const donorRowIds = [];
+  const donorOriginalIdxToFlushIdx = {}; // original dropdown value → position in flushInserts
+  let flushInsertIdx = 0;
   for (const row of rows) {
-    if ((row.dataset.type||'donor') === 'donor') donorRowIds.push(row.id.replace('cp-row-',''));
+    const rowType = row.dataset.type || 'donor';
+    if (rowType === 'donor') {
+      const rowId = row.id.replace('cp-row-','');
+      const originalIdx = donorRowIds.length; // this is what the dropdown shows
+      donorRowIds.push(rowId);
+      const include = document.getElementById(`cp-include-${rowId}`)?.checked;
+      if (include) {
+        donorOriginalIdxToFlushIdx[originalIdx] = flushInsertIdx++;
+      }
+    }
   }
 
   for (const row of rows) {
@@ -11763,7 +11785,8 @@ async function confirmCompletePlanDom(groupId) {
       // Get all sources for this recip row (supports multi-source)
       const sources = getCpRecipSources(rowId);
       sources.forEach(src => {
-        transferInserts.push({ recipient_id: lambId||null, recip_text: recipText||null, implant_date: transferDate, outcome: 'Pending', num_transferred: src.num, _donorIdx: src.donorIdx !== null ? src.donorIdx : null });
+        const mappedIdx = src.donorIdx !== null ? (donorOriginalIdxToFlushIdx[src.donorIdx] ?? null) : null;
+        transferInserts.push({ recipient_id: lambId||null, recip_text: recipText||null, implant_date: transferDate, outcome: 'Pending', num_transferred: src.num, _donorIdx: mappedIdx });
       });
     } else {
       const lambId = document.getElementById(`cp-lamb-id-${rowId}`)?.value ||
@@ -11878,15 +11901,20 @@ async function confirmCompletePlanDom(groupId) {
         });
       }
     }
-    // Create transfers linked to correct donor flush
+  }
+
+  // Create transfers (always, whether or not flush block ran)
+  if (transferInserts.length > 0) {
     for (const t of transferInserts) {
       const flushId = t._donorIdx !== null && createdFlushIds[t._donorIdx] ? createdFlushIds[t._donorIdx] : (createdFlushIds[0]||null);
-      const donorId = flushId ? flushInserts[t._donorIdx ?? 0]?.donor_id : null;
+      const donorId = flushId ? (flushInserts[t._donorIdx ?? 0]?.donor_id || null) : null;
       const { _donorIdx, recip_text, ...rest } = t;
-      await db.from('embryo_transfers').insert({ ...rest, flush_id: flushId, donor_id: donorId, recip_text: recip_text||null });
-      totalCreated++;
+      const { error: trErr } = await db.from('embryo_transfers').insert({ ...rest, flush_id: flushId, donor_id: donorId, recip_text: recip_text||null });
+      if (trErr) { console.error('Transfer insert error:', trErr.message); }
+      else totalCreated++;
     }
   }
+
   if (breedInserts.length > 0) {
     const sharedDeducted = new Set(); // track sire+location combos already deducted
     for (const b of breedInserts) {
