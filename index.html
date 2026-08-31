@@ -11846,6 +11846,29 @@ async function confirmCompletePlanDom(groupId) {
 
   if (flushInserts.length === 0 && breedInserts.length === 0) { toast('No records to create'); return; }
 
+  // Validate: for flush plans, ensure all transferred embryos have a recip assigned
+  if (isFlush && flushInserts.length > 0) {
+    const warnings = [];
+    flushInserts.forEach((flush, flushIdx) => {
+      const transferred = flush.embryos_transferred || 0;
+      if (transferred === 0) return;
+      const assigned = transferInserts.filter(t => t._donorIdx === flushIdx).reduce((s, t) => s + (t.num_transferred || 1), 0);
+      if (assigned < transferred) {
+        const donorLamb = allLambs.find(l => l.id === flush.donor_id);
+        const name = donorLamb?.name || `Donor ${flushIdx+1}`;
+        warnings.push(`${name}: ${transferred} to transfer but only ${assigned} assigned to recips`);
+      }
+    });
+    if (warnings.length > 0) {
+      const proceed = confirm(`⚠️ Unassigned embryos:\n\n${warnings.join('\n')}\n\nProceed anyway?`);
+      if (!proceed) {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✅ Create Records'; }
+        return;
+      }
+    }
+  }
+
+
   // Delete any records previously created by this plan (handles re-run without duplication)
   // Must delete transfers first (they reference flush IDs via FK)
   const existingFlushes = await db.from('embryo_flushes').select('id').eq('group_id', groupId);
