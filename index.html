@@ -11264,15 +11264,21 @@ async function openCompletePlan(groupId) {
       </td>
       ${rowType==='recip' ?
         `<td style="padding:0.5rem">
-          <select id="cp-donor-${i}" onchange="validateCpEmbryos()" style="width:130px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-            <option value="">— From donor —</option>${donorOpts}
-          </select>
+          <div id="cp-sources-${i}">
+            <div style="display:flex;gap:0.25rem;align-items:center;margin-bottom:0.2rem">
+              <select id="cp-donor-${i}" onchange="validateCpEmbryos()" style="width:110px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                <option value="">— From donor —</option>${donorOpts}
+              </select>
+              <input type="number" id="cp-embryos-${i}-0" value="1" min="1" title="# embryos from this flush" style="width:45px;padding:0.3rem 0.35rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()">
+            </div>
+          </div>
+          <button type="button" onclick="addCpSource('${i}','${donorOpts.replace(/'/g,"\\'")}')" style="font-size:0.68rem;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;margin-top:0.15rem">+ add flush</button>
         </td>
         <td style="padding:0.5rem">
           <input type="date" id="cp-transfer-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
         </td>
         <td style="padding:0.5rem">
-          <input type="number" id="cp-embryos-${i}" placeholder="# embryos" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:80px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <input type="number" id="cp-embryos-${i}" placeholder="total" min="1" value="1" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()" style="width:60px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" title="Total embryos (auto-sums sources)">
         </td>` :
         `<td style="padding:0.5rem">
           <div style="display:flex;flex-direction:column;gap:0.25rem">
@@ -11437,6 +11443,41 @@ function updateCpSemenLoc(rowId) {
   if (!locSel) return;
   const inv = (allSemenInventory||[]).filter(s => !sireId || s.ai_ram_id === sireId);
   locSel.innerHTML = `<option value="">— Location —</option>` + inv.map(s => `<option value="${s.id}">${s.location||'Tank'} (${s.straws} straws)</option>`).join('');
+}
+
+function addCpSource(rowId, donorOptsHtml) {
+  const container = document.getElementById(`cp-sources-${rowId}`);
+  if (!container) return;
+  const idx = container.querySelectorAll('select').length;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:0.25rem;align-items:center;margin-bottom:0.2rem';
+  div.innerHTML = `
+    <select id="cp-donor-${rowId}-${idx}" onchange="validateCpEmbryos()" style="width:110px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <option value="">— From donor —</option>${donorOptsHtml}
+    </select>
+    <input type="number" id="cp-embryos-${rowId}-${idx}" value="1" min="1" title="# embryos from this flush" style="width:45px;padding:0.3rem 0.35rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="validateCpEmbryos()" oninput="validateCpEmbryos()">
+    <button type="button" onclick="this.parentNode.remove();validateCpEmbryos()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.9rem">✕</button>`;
+  container.appendChild(div);
+  validateCpEmbryos();
+}
+
+function getCpRecipSources(rowId) {
+  // Returns array of {donorIdx, num} for a recip row (supports multi-source)
+  const sources = [];
+  const container = document.getElementById(`cp-sources-${rowId}`);
+  if (!container) {
+    // Fallback: single donor
+    const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
+    const num = parseInt(document.getElementById(`cp-embryos-${rowId}`)?.value) || 1;
+    if (donorIdx !== undefined) sources.push({ donorIdx: donorIdx !== '' ? parseInt(donorIdx) : null, num });
+    return sources;
+  }
+  const selects = container.querySelectorAll('select');
+  selects.forEach((sel, idx) => {
+    const num = parseInt(document.getElementById(`cp-embryos-${rowId}-${idx}`)?.value) || 1;
+    sources.push({ donorIdx: sel.value !== '' ? parseInt(sel.value) : null, num });
+  });
+  return sources;
 }
 
 function updateCpExpected(i) {
@@ -11696,10 +11737,11 @@ async function confirmCompletePlanDom(groupId) {
       const recipText = document.getElementById(`cp-lamb-name-${rowId}`)?.value?.trim() || null;
       if (!lambId && !recipText) continue;
       const transferDate = document.getElementById(`cp-transfer-date-${rowId}`)?.value || window._cpTargetDate;
-      const numEmbryos = parseInt(document.getElementById(`cp-embryos-${rowId}`)?.value) || 1;
-      const donorIdx = document.getElementById(`cp-donor-${rowId}`)?.value;
-      // Store donor index — will resolve to flush ID after flush creation
-      transferInserts.push({ recipient_id: lambId||null, recip_text: recipText||null, implant_date: transferDate, outcome: 'Pending', num_transferred: numEmbryos, _donorIdx: donorIdx !== '' ? parseInt(donorIdx) : null });
+      // Get all sources for this recip row (supports multi-source)
+      const sources = getCpRecipSources(rowId);
+      sources.forEach(src => {
+        transferInserts.push({ recipient_id: lambId||null, recip_text: recipText||null, implant_date: transferDate, outcome: 'Pending', num_transferred: src.num, _donorIdx: src.donorIdx !== null ? src.donorIdx : null });
+      });
     } else {
       const lambId = document.getElementById(`cp-lamb-id-${rowId}`)?.value ||
                      document.getElementById(`cp-lamb-${rowId}`)?.value;
