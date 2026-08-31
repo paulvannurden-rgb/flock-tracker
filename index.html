@@ -11870,15 +11870,30 @@ async function confirmCompletePlanDom(groupId) {
 
 
   // Delete any records previously created by this plan (handles re-run without duplication)
-  // Must delete transfers first (they reference flush IDs via FK)
-  const existingFlushes = await db.from('embryo_flushes').select('id').eq('group_id', groupId);
+  // First restore semen inventory from old records before deleting
+  const existingFlushes = await db.from('embryo_flushes').select('*').eq('group_id', groupId);
   if (existingFlushes.data?.length > 0) {
     const flushIds = existingFlushes.data.map(f => f.id);
+    // Restore semen for each flush that had inventory deducted
+    for (const f of existingFlushes.data) {
+      if (f.ai_sire_id && f.semen_location && f.straws_used > 0) {
+        await restoreSemenInventory(f.ai_sire_id, f.semen_location, f.straws_used, 'flush', f.id);
+      }
+    }
     for (const fid of flushIds) {
       await db.from('embryo_transfers').delete().eq('flush_id', fid);
       await db.from('embryo_inventory').delete().eq('flush_id', fid);
     }
     await db.from('embryo_flushes').delete().eq('group_id', groupId);
+  }
+  // Restore semen for existing breeding records
+  const existingBreeding = await db.from('breeding_records').select('*').eq('group_id', groupId);
+  if (existingBreeding.data?.length > 0) {
+    for (const r of existingBreeding.data) {
+      if (r.ai_sire_id && r.semen_location && r.straws_used > 0) {
+        await restoreSemenInventory(r.ai_sire_id, r.semen_location, r.straws_used, 'breeding', r.id);
+      }
+    }
   }
   await db.from('breeding_records').delete().eq('group_id', groupId);
 
