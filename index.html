@@ -8574,14 +8574,44 @@ function showTransferModal(flushId, transfer) {
   const recipOptions = allLambs.filter(l=>l.role==='Embryo Recipient'||l.role==='Both').map(l=>`<option value="${l.id}" ${transfer?.recipient_id===l.id?'selected':''}>${l.name}${l.ear_tag?' (#'+l.ear_tag+')':''}</option>`).join('');
   const isLambBorn = transfer?.outcome === 'Lamb Born' || transfer?.lamb_born;
   window._trLambs = [];
+
+  // Ensure flushes are loaded for the source dropdown
+  const allFlushes = window._lambingFlushes || window._transferFlushes || window._allFlushes || [];
+  if (allFlushes.length === 0) {
+    // Load async then reopen
+    db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}).then(({data}) => {
+      window._allFlushes = data || [];
+      showTransferModal(flushId, transfer);
+    });
+    return;
+  }
+  const flushOpts = allFlushes.map(f => {
+    const donor = allLambs.find(l => l.id === f.donor_id);
+    return `<option value="${f.id}" ${f.id===flushId?'selected':''}>${donor?.name||'?'} — ${f.flush_date} (${f.flush_type||'MOET'})</option>`;
+  }).join('');
+
+  // For new transfers, allow multiple flush sources
+  window._trSources = isEdit ? null : [{ flushId: flushId||'', num: 1 }];
+
   showModal(`
     <div class="modal-header"><div class="modal-title">${isEdit?'Edit Transfer':'Log Embryo Transfer'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="field"><label>Recipient (from flock)</label><select id="tr-recip-id"><option value="">— Select recipient —</option>${recipOptions}</select></div>
     <div class="field"><label>Recipient (if not in system)</label><input id="tr-recip-text" value="${transfer?.recipient_text||''}" placeholder="Recipient name/ID"></div>
     <div class="row">
       <div class="field"><label>Implant Date</label><input type="date" id="tr-date" value="${transfer?.implant_date||new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label># Embryos Transferred</label><input type="number" id="tr-num" value="${transfer?.num_transferred||''}" placeholder="e.g. 1" min="0"></div>
     </div>
+
+    ${isEdit ? `
+    <!-- Edit mode: single flush source -->
+    <div class="row">
+      <div class="field"><label>Flush Source</label><select id="tr-flush-id"><option value="">— Select flush —</option>${flushOpts}</select></div>
+      <div class="field"><label># Embryos</label><input type="number" id="tr-num" value="${transfer?.num_transferred||''}" placeholder="e.g. 1" min="0"></div>
+    </div>` : `
+    <!-- Add mode: multiple flush sources -->
+    <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">Embryo Sources</div>
+    <div id="tr-sources-list"></div>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="addTrSource()" style="margin-bottom:0.75rem">+ Add Another Flush Source</button>`}
+
     <div class="row">
       <div class="field"><label>Outcome</label><select id="tr-outcome" onchange="toggleLambBornFields()">
         ${outcomes.map(o=>`<option ${(transfer?.outcome||'Pending')===o?'selected':''}>${o}</option>`).join('')}
@@ -8606,12 +8636,18 @@ function showTransferModal(flushId, transfer) {
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-secondary" onclick="brResultCancel()">Cancel</button>
       <button class="btn btn-primary" onclick="saveTransfer('${flushId}','${transfer?.id||''}')">${isEdit?'Save Changes':'Save Transfer'}</button>
     </div>`);
 
+  // Render initial source rows for add mode
+  if (!isEdit) renderTrSources(flushOpts);
+
   // Load existing lamb rows if editing
   if (isEdit && transfer?.id) {
+    // Pre-fill flush source
+    const flushSel = document.getElementById('tr-flush-id');
+    if (flushSel && transfer.flush_id) flushSel.value = transfer.flush_id;
     db.from('embryo_transfer_lambs').select('*').eq('transfer_id', transfer.id).order('created_at').then(({data}) => {
       window._trLambs = (data||[]).map(l=>({...l}));
       const el = document.getElementById('tr-lamb-rows');
@@ -8664,16 +8700,46 @@ function toggleLambBornFields() {
   if (fields) fields.style.display = outcome === 'Lamb Born' ? 'block' : 'none';
 }
 
+function renderTrSources(flushOpts) {
+  const el = document.getElementById('tr-sources-list');
+  if (!el) return;
+  const allFlushes = window._lambingFlushes || window._transferFlushes || [];
+  const fo = flushOpts || allFlushes.map(f => {
+    const donor = allLambs.find(l => l.id === f.donor_id);
+    return `<option value="${f.id}">${donor?.name||'?'} — ${f.flush_date} (${f.flush_type||'MOET'})</option>`;
+  }).join('');
+  el.innerHTML = (window._trSources||[]).map((src, i) => `
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap">
+      <select id="tr-src-flush-${i}" style="flex:1;min-width:180px;padding:0.35rem 0.5rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">— Select flush —</option>${fo.replace(`value="${src.flushId}"`,`value="${src.flushId}" selected`)}
+      </select>
+      <div style="display:flex;align-items:center;gap:0.3rem">
+        <label style="font-size:0.78rem;color:var(--text3);white-space:nowrap"># embryos</label>
+        <input type="number" id="tr-src-num-${i}" value="${src.num||1}" min="1" style="width:55px;padding:0.35rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      </div>
+      ${(window._trSources||[]).length > 1 ? `<button type="button" onclick="removeTrSource(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">✕</button>` : ''}
+    </div>`).join('');
+}
+
+function addTrSource() {
+  window._trSources = window._trSources || [];
+  window._trSources.push({ flushId: '', num: 1 });
+  renderTrSources();
+}
+
+function removeTrSource(i) {
+  window._trSources.splice(i, 1);
+  renderTrSources();
+}
+
 async function saveTransfer(flushId, id) {
   const outcome = v('tr-outcome') || 'Pending';
   const lambBorn = outcome === 'Lamb Born';
-  const payload = {
-    flush_id: flushId,
+  const basePayload = {
     donor_id: currentLambId,
     recipient_id: v('tr-recip-id')||null,
     recipient_text: v('tr-recip-text'),
     implant_date: v('tr-date')||null,
-    num_transferred: v('tr-num') ? parseInt(v('tr-num')) : null,
     outcome,
     notes: v('tr-notes'),
     lamb_born: lambBorn,
@@ -8681,16 +8747,32 @@ async function saveTransfer(flushId, id) {
     lamb_count: lambBorn && v('tr-lamb-count') ? parseInt(v('tr-lamb-count')) : null,
     lamb_notes: lambBorn ? v('tr-lamb-notes') : null
   };
+
   let transferId = id;
+
   if (id) {
+    // Edit mode — single record, use flush dropdown
+    const editFlushId = v('tr-flush-id') || flushId;
+    const payload = { ...basePayload, flush_id: editFlushId, num_transferred: v('tr-num') ? parseInt(v('tr-num')) : null };
     await db.from('embryo_transfers').update(payload).eq('id', id);
     toast('Transfer updated');
   } else {
-    const { data } = await db.from('embryo_transfers').insert(payload).select().single();
-    transferId = data?.id;
-    toast('Transfer recorded');
+    // Add mode — create one record per source row
+    const sources = window._trSources || [{ flushId, num: parseInt(v('tr-num'))||1 }];
+    const savedIds = [];
+    for (let i = 0; i < sources.length; i++) {
+      const srcFlushId = document.getElementById(`tr-src-flush-${i}`)?.value || sources[i].flushId || flushId;
+      const srcNum = parseInt(document.getElementById(`tr-src-num-${i}`)?.value) || sources[i].num || 1;
+      if (!srcFlushId) continue;
+      const { data } = await db.from('embryo_transfers').insert({ ...basePayload, flush_id: srcFlushId, num_transferred: srcNum }).select().single();
+      if (data?.id) savedIds.push(data.id);
+    }
+    transferId = savedIds[0];
+    toast(savedIds.length > 1 ? `${savedIds.length} transfers recorded` : 'Transfer recorded');
+    window._trSources = null;
   }
-  // Save individual lamb rows using dedicated table
+
+  // Save individual lamb rows
   if (transferId && lambBorn) {
     await db.from('embryo_transfer_lambs').delete().eq('transfer_id', transferId);
     const lambRows = (window._trLambs||[]).filter(lb => lb.ear_tag || lb.lamb_id);
@@ -8705,7 +8787,15 @@ async function saveTransfer(flushId, id) {
     }
   }
   window._trLambs = [];
-  closeModal(); loadLambTab();
+  if (window._brResultCallback) {
+    const cb = window._brResultCallback; window._brResultCallback = null; cb();
+  } else if (window._brResultReopenData) {
+    const { breedingId: bid, lambId } = window._brResultReopenData;
+    window._brResultReopenData = null;
+    closeModal(); setTimeout(() => openEditBreedingGlobal(bid, lambId), 100);
+  } else {
+    closeModal(); loadLambTab();
+  }
 }
 
 function confirmDeleteTransfer(id) {
