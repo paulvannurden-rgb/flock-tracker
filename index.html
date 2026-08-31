@@ -11195,7 +11195,12 @@ async function openCompletePlan(groupId) {
               <option value="">— Location —</option>
               ${(allSemenInventory||[]).filter(s=>s.ai_ram_id===(sireVal.replace(/^ai:/,'')||null)).map(s=>`<option value="${s.id}">${s.location||'Tank'} (${s.straws} straws)</option>`).join('')}
             </select>
-            <input type="number" id="cp-straws-${i}" min="0" step="0.5" placeholder="straws" value="1" style="width:65px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">` : ''}
+            <div style="display:flex;gap:0.35rem;align-items:center">
+              <input type="number" id="cp-straws-${i}" min="0" step="0.5" placeholder="straws" value="1" style="width:55px;padding:0.25rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+              <label style="display:flex;align-items:center;gap:0.2rem;font-size:0.7rem;color:var(--text3);cursor:pointer;white-space:nowrap">
+                <input type="checkbox" id="cp-shared-${i}" style="accent-color:var(--accent)"> shared
+              </label>
+            </div>` : ''}
           </div>
         </td>
         <td style="padding:0.5rem">
@@ -11615,9 +11620,10 @@ async function confirmCompletePlanDom(groupId) {
         if (!semenType && ai_sire_id) semenType = 'frozen';
         const semenLocId = document.getElementById(`cp-semen-loc-${rowId}`)?.value || null;
         const strawsUsed = parseFloat(document.getElementById(`cp-straws-${rowId}`)?.value) || 0;
+        const isShared = document.getElementById(`cp-shared-${rowId}`)?.checked || false;
         breedInserts.push({ lamb_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
           breeding_date: date, expected_lamb_date: dueDate||null, outcome: 'Pending',
-          semen_type: semenType, semen_location: semenLocId||null, straws_used: strawsUsed||null, group_id: groupId, _semenLocId: semenLocId, _strawsUsed: strawsUsed });
+          semen_type: semenType, semen_location: semenLocId||null, straws_used: strawsUsed||null, group_id: groupId, _semenLocId: semenLocId, _strawsUsed: strawsUsed, _isShared: isShared });
       }
     }
   }
@@ -11693,14 +11699,23 @@ async function confirmCompletePlanDom(groupId) {
     }
   }
   if (breedInserts.length > 0) {
+    const sharedDeducted = new Set(); // track sire+location combos already deducted
     for (const b of breedInserts) {
-      const { _semenLocId, _strawsUsed, ...breedData } = b;
+      const { _semenLocId, _strawsUsed, _isShared, ...breedData } = b;
       const { data: inserted, error: breedErr } = await db.from('breeding_records').insert(breedData).select().single();
       if (breedErr) { toast('Breeding insert failed: ' + (breedErr.message||'unknown')); console.error('Breeding insert error:', breedErr); return; }
-      // Deduct semen inventory if frozen semen with location
+      // Deduct semen inventory
       if (inserted?.id && breedData.semen_type === 'frozen' && _semenLocId && _strawsUsed > 0) {
         const invEntry = (allSemenInventory||[]).find(s => s.id === _semenLocId);
-        if (invEntry) await deductSemenInventory(breedData.ai_sire_id, invEntry.location, _strawsUsed, 'breeding', inserted.id);
+        if (invEntry) {
+          const deductKey = `${breedData.ai_sire_id}:${_semenLocId}`;
+          if (_isShared && sharedDeducted.has(deductKey)) {
+            // Already deducted for this shared sire+location — skip
+          } else {
+            await deductSemenInventory(breedData.ai_sire_id, invEntry.location, _strawsUsed, 'breeding', inserted.id);
+            if (_isShared) sharedDeducted.add(deductKey);
+          }
+        }
       }
       totalCreated++;
     }
