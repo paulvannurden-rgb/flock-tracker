@@ -5352,12 +5352,17 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
       if (filters.category && c.category !== filters.category) return false;
       if (filters.dateFrom && (!c.date || c.date < filters.dateFrom)) return false;
       if (filters.dateTo && (!c.date || c.date > filters.dateTo)) return false;
+      if ((filters.type === 'ivf' || filters.type === 'moet') && type === 'flush') {
+        const flushType = (rec?.flush_type || 'MOET').toUpperCase();
+        if (filters.type === 'ivf' && flushType !== 'IVF') return false;
+        if (filters.type === 'moet' && flushType !== 'MOET') return false;
+      }
       return true;
     });
   }
 
   const fc = filters.type === 'breeding' ? [] : applyFilter(allFc, 'flush');
-  const bc = filters.type === 'flush' ? [] : applyFilter(allBc, 'breeding');
+  const bc = (filters.type === 'flush' || filters.type === 'ivf' || filters.type === 'moet') ? [] : applyFilter(allBc, 'breeding');
 
   // Summary stats from filtered data
   const flushTotal = fc.reduce((s,c) => s+(c.amount||0), 0);
@@ -5411,6 +5416,8 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
             ${!filters.type ? `<div style="border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.35rem">
               <div style="font-size:0.68rem;color:var(--text3);padding:0 0.5rem;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.06em">Type</div>
               <div class="filter-menu-item" onclick="window._costFilters.type='flush';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🐑 Flush costs only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='ivf';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🔬 IVF only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='moet';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🐄 MOET only</div>
               <div class="filter-menu-item" onclick="window._costFilters.type='breeding';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🧬 Breeding costs only</div>
             </div>` : ''}
             ${!filters.animal ? `<div class="filter-menu-item" onclick="showCostFilterInput('animal')">Animal name</div>` : ''}
