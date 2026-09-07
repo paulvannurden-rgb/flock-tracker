@@ -5398,7 +5398,7 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
     <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem">
       <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
         ${[
-          ...(filters.type ? [{ key:'type', val:filters.type === 'flush' ? 'Flush only' : 'Breeding only', label:'Type' }] : []),
+          ...(filters.type ? [{ key:'type', val: filters.type === 'flush' ? 'Flush only' : filters.type === 'ivf' ? '🔬 IVF only' : filters.type === 'moet' ? '🐄 MOET only' : 'Breeding only', label:'Type' }] : []),
           ...(filters.animal ? [{ key:'animal', val:filters.animal, label:'Animal' }] : []),
           ...(filters.category ? [{ key:'category', val:filters.category, label:'Category' }] : []),
           ...(filters.dateFrom ? [{ key:'dateFrom', val:filters.dateFrom, label:'From' }] : []),
@@ -5415,10 +5415,10 @@ function renderCostTables(allFc, allBc, flushRecs, breedRecs, transfers, filters
           <div id="cost-filter-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:var(--shadow);z-index:100;min-width:200px;padding:0.5rem">
             ${!filters.type ? `<div style="border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.35rem">
               <div style="font-size:0.68rem;color:var(--text3);padding:0 0.5rem;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.06em">Type</div>
-              <div class="filter-menu-item" onclick="window._costFilters.type='flush';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🐑 Flush costs only</div>
-              <div class="filter-menu-item" onclick="window._costFilters.type='ivf';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🔬 IVF only</div>
-              <div class="filter-menu-item" onclick="window._costFilters.type='moet';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🐄 MOET only</div>
-              <div class="filter-menu-item" onclick="window._costFilters.type='breeding';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters)">🧬 Breeding costs only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='ivf';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters);setTimeout(()=>switchCostsTab('flush'),0)">🔬 IVF only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='moet';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters);setTimeout(()=>switchCostsTab('flush'),0)">🐄 MOET only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='flush';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters);setTimeout(()=>switchCostsTab('flush'),0)">🐑 Flush costs only</div>
+              <div class="filter-menu-item" onclick="window._costFilters.type='breeding';closeCostFilterMenu();renderCostTables(window._costsAllFlush,window._costsAllBreed,window._costsFlushRecs,window._costsBreedRecs,window._costsTransfers,window._costFilters);setTimeout(()=>switchCostsTab('breeding'),0)">🧬 Breeding costs only</div>
             </div>` : ''}
             ${!filters.animal ? `<div class="filter-menu-item" onclick="showCostFilterInput('animal')">Animal name</div>` : ''}
             ${!filters.dateFrom ? `<div class="filter-menu-item" onclick="showCostFilterInput('dateFrom')">Date from</div>` : ''}
