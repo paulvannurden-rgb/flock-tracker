@@ -319,6 +319,7 @@
         <button class="sidebar-btn" onclick="showPage('airams')" data-page="airams"><span>🐏</span>AI Rams</button>
         <button class="sidebar-btn" onclick="showPage('breeding')" data-page="breeding"><span>📋</span>Breeding</button>
         <button class="sidebar-btn" onclick="showPage('flushes')" data-page="flushes"><span>🔬</span>Flushes</button>
+        <button class="sidebar-btn" onclick="showPage('flush-report')" data-page="flush-report"><span>📋</span>Flush Report</button>
         <button class="sidebar-btn" onclick="showPage('transfers')" data-page="transfers"><span>🔀</span>Transfers</button>
         <button class="sidebar-btn" onclick="showPage('lambing-report')" data-page="lambing-report"><span>🐣</span>Lambing</button>
         <button class="sidebar-btn" onclick="showPage('weights')" data-page="weights"><span>⚖️</span>Weights</button>
@@ -688,6 +689,7 @@ function showPage(page) {
   else if (page === 'airams') renderAiRams();
   else if (page === 'breeding') renderBreeding();
   else if (page === 'flushes') renderFlushes();
+  else if (page === 'flush-report') renderFlushReport();
   else if (page === 'transfers') renderTransfersPage();
   else if (page === 'lambing') renderLambingReport();
   else if (page === 'lambing-report') renderLambingReport();
@@ -1900,8 +1902,8 @@ function renderAiRams() {
                 ${invBadge}
               </div>
               ${ram.genetic_code?`<div style="font-size:0.75rem;color:var(--text3);margin-top:0.25rem">🧬 ${ram.genetic_code}</div>`:''}
-              ${(()=>{ const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null; const sireName = sire ? sire.name+' 🧬' : ram.sire_name||null; return sireName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}</div>` : ''; })()}
-              ${(()=>{ const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null; const damName = dam ? dam.name+(dam.ear_tag?' #'+dam.ear_tag:'') : ram.dam_name||null; return damName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Dam: ${damName}</div>` : ''; })()}
+              ${(()=>{ const sire = ram.sire_ai_id ? allAiRams.find(r=>r.id===ram.sire_ai_id) : null; const sireName = sire ? sire.name+' 🧬' : ram.sire_name||null; const sireGc = sire?.genetic_code; return sireName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Sire: ${sireName}${sireGc?` <span style="color:var(--accent);font-weight:600">🧬 ${sireGc}</span>`:''}</div>` : ''; })()}
+              ${(()=>{ const dam = ram.dam_lamb_id ? allLambs.find(l=>l.id===ram.dam_lamb_id) : null; const damName = dam ? dam.name+(dam.ear_tag?' #'+dam.ear_tag:'') : ram.dam_name||null; const damGc = dam?.genetic_code; return damName ? `<div style="font-size:0.75rem;color:var(--text3);margin-top:0.15rem">Dam: ${damName}${damGc?` <span style="color:var(--accent);font-weight:600">🧬 ${damGc}</span>`:''}</div>` : ''; })()}
               ${inv.filter(i=>i.straws>0).length > 0 ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.3rem;display:flex;gap:0.5rem;flex-wrap:wrap">${inv.filter(i=>i.straws>0).map(i=>`<span>${i.location}: ${i.straws}</span>`).join(' · ')}</div>` : ''}
             </div>
           </div>
@@ -3685,9 +3687,10 @@ function renderBreedingTable(allRecs, filters) {
                   <td style="padding:0.75rem 1rem">
                     <span style="font-weight:600;color:var(--accent);cursor:pointer" onclick="showLamb('${r.lamb_id}')">${lamb?.name||'Unknown'}</span>
                     ${lamb?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${lamb.ear_tag}</span>`:''}
+                    ${lamb?.genetic_code?`<span style="color:var(--accent);font-weight:700;font-size:0.72rem;margin-left:0.3rem">${lamb.genetic_code}</span>`:''}
                   </td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                    ${sireName}
+                    ${sireName}${sire?.genetic_code?` <span style="color:var(--accent);font-weight:700;font-size:0.72rem">${sire.genetic_code}</span>`:''}
                     ${r.ai_sire_id && r.semen_type ? (r.semen_type==='frozen' ? `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dbeafe;color:#1e40af;border-radius:0.2rem;padding:0.05rem 0.35rem">❄️</span>` : `<span style="margin-left:0.3rem;font-size:0.68rem;background:#dcfce7;color:#15803d;border-radius:0.2rem;padding:0.05rem 0.35rem">🌱</span>`) : ''}
                   </td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${r.breeding_date||'—'}</td>
@@ -4028,6 +4031,7 @@ function renderFlushTable(allRecs, allTransfers, filters) {
                   <td style="padding:0.75rem 1rem" onclick="event.stopPropagation();showLamb('${f.donor_id}')">
                     <span style="font-weight:600;color:var(--accent)">${donor?.name||'Unknown'}</span>
                     ${donor?.ear_tag?`<span style="color:var(--text3);font-size:0.78rem;margin-left:0.3rem">#${donor.ear_tag}</span>`:''}
+                    ${donor?.genetic_code?`<span style="color:var(--accent);font-weight:700;font-size:0.75rem;margin-left:0.3rem">${donor.genetic_code}</span>`:''}
                     ${(()=>{
                       const viable = (f.embryos_transferred||0) + (f.embryos_frozen||0);
                       const actualTransfers = allTransfers.filter(t=>t.flush_id===f.id).reduce((s,t)=>s+(t.num_transferred||1),0);
@@ -4036,7 +4040,7 @@ function renderFlushTable(allRecs, allTransfers, filters) {
                       return '';
                     })()}
                   </td>
-                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}</td>
+                  <td style="padding:0.75rem 1rem;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sireName}${sire?.genetic_code?` <span style="color:var(--accent);font-weight:700;font-size:0.75rem">${sire.genetic_code}</span>`:''}</td>
                   <td style="padding:0.75rem 1rem;color:var(--text2);white-space:nowrap">${f.flush_date||'—'}</td>
                   <td style="padding:0.75rem 1rem">
                     <span style="background:${typeBg};color:${typeColor};padding:0.2rem 0.6rem;border-radius:1rem;font-size:0.75rem;font-weight:600">${flushType}</span>
@@ -4341,8 +4345,9 @@ function renderTransfersHTML(filterFlushId) {
       <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem">
         <div style="padding:0.75rem 1rem;background:var(--surface2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;border-bottom:1px solid var(--border)">
           <div>
-            <span style="font-weight:700;color:var(--accent)">${donor?.name||'?'}</span>
-            <span style="color:var(--text3);font-size:0.82rem"> × ${sire?.name||flush?.sire_text||'?'} · ${flush?.flush_date||''} · ${flush?.flush_type||'MOET'}</span>
+            <span style="font-weight:700;color:var(--accent)">${donor?.name||'?'}${donor?.genetic_code?` <span style="font-size:0.72rem;font-weight:700">${donor.genetic_code}</span>`:''}</span>
+            <span style="color:var(--text3);font-size:0.82rem"> × ${sire?.name||flush?.sire_text||'?'}${sire?.genetic_code?` <span style="color:var(--accent);font-weight:700;font-size:0.72rem">${sire.genetic_code}</span>`:''} · ${flush?.flush_date||''} · ${flush?.flush_type||'MOET'}</span>
+            ${(donor?.genetic_code||sire?.genetic_code) ? `` : ''}
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
             ${groupDecided>0 ? `<span style="font-size:0.78rem;color:var(--text3)">${groupPreg}/${groupDecided} conceived</span>` : ''}
@@ -4899,6 +4904,282 @@ function refreshLambingReport() {
     </div>`;
 }
 
+// ── FLUSH REPORT ──────────────────────────────────────
+async function renderFlushReport() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">📋 Flush Report</div>
+      <button class="btn btn-secondary btn-sm" onclick="printFlushReport()">🖨️ Print</button>
+    </div>
+    <!-- Static filter bar -->
+    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden" id="fr-type-toggle">
+        <button id="fr-btn-all" onclick="window._frType='all';refreshFlushReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff">All</button>
+        <button id="fr-btn-ivf" onclick="window._frType='IVF';refreshFlushReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--surface2);color:var(--text)">🔬 IVF</button>
+        <button id="fr-btn-moet" onclick="window._frType='MOET';refreshFlushReport()" style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;background:var(--surface2);color:var(--text)">🐄 MOET</button>
+      </div>
+      <select id="fr-donor" onchange="window._frDonor=this.value;refreshFlushReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="">All Donors</option>
+        ${allLambs.filter(l=>l.role==='Embryo Donor'||l.role==='Both').map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('')}
+      </select>
+      <input type="date" id="fr-from" onchange="window._frFrom=this.value;refreshFlushReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      <label style="font-size:0.75rem;color:var(--text3)">to</label>
+      <input type="date" id="fr-to" onchange="window._frTo=this.value;refreshFlushReport()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+    </div>
+    <div id="fr-content"><div class="loading"><span class="spinner"></span>Loading…</div></div>`;
+
+  const [{ data: flushes }, { data: transfers }, { data: breedResults }] = await Promise.all([
+    db.from('embryo_flushes').select('*').order('flush_date', {ascending: false}),
+    db.from('embryo_transfers').select('*'),
+    db.from('breeding_results').select('*'),
+  ]);
+
+  window._frFlushes = flushes || [];
+  window._frTransfers = transfers || [];
+  window._frBreedResults = breedResults || [];
+  window._frType = window._frType || 'all';
+  window._frDonor = window._frDonor || '';
+  window._frFrom = window._frFrom || '';
+  window._frTo = window._frTo || '';
+  refreshFlushReport();
+}
+
+function printFlushReport() {
+  const content = document.getElementById('fr-content')?.innerHTML || '';
+  const filterBar = document.getElementById('fr-content')?.closest('#main-content')?.querySelector('.card')?.innerText || '';
+  const printWin = window.open('', '_blank');
+  printWin.document.write(`<!DOCTYPE html><html><head><title>Flush Report — Hidden Creek Lambs</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; color: #111; background: #fff; padding: 1.5cm; }
+    h1 { font-size: 16px; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 10px; color: #666; margin-bottom: 1rem; }
+    /* Summary cards */
+    .cards { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .card { border: 1px solid #ddd; border-radius: 4px; padding: 0.4rem 0.6rem; text-align: center; min-width: 70px; }
+    .card-val { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+    .card-lbl { font-size: 8px; text-transform: uppercase; color: #666; letter-spacing: 0.05em; margin-top: 2px; }
+    /* Flush blocks */
+    .flush-block { border: 1px solid #ccc; border-radius: 4px; margin-bottom: 0.75rem; page-break-inside: avoid; }
+    .flush-header { background: #f5f5f5; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; align-items: flex-start; }
+    .flush-title { font-weight: 700; font-size: 12px; }
+    .flush-meta { font-size: 9px; color: #555; margin-top: 2px; }
+    .flush-stats { display: flex; gap: 1rem; font-size: 9px; text-align: center; }
+    .flush-stats div { }
+    .flush-stats .val { font-weight: 700; font-size: 11px; }
+    .badge { display: inline-block; border-radius: 3px; padding: 1px 5px; font-size: 8px; font-weight: 700; }
+    .badge-ivf { background: #ede9fe; color: #7c3aed; }
+    .badge-moet { background: #dbeafe; color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    th { background: #f0f0f0; padding: 3px 6px; text-align: left; font-size: 8px; text-transform: uppercase; color: #555; letter-spacing: 0.04em; border-bottom: 1px solid #ccc; }
+    td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+    .status { display: inline-block; border-radius: 8px; padding: 1px 5px; font-size: 8px; font-weight: 600; }
+    .s-lamb { background: #dcfce7; color: #15803d; }
+    .s-preg { background: #dbeafe; color: #1d4ed8; }
+    .s-pend { background: #fef3cd; color: #92560a; }
+    .s-neg { background: #fee2e2; color: #dc2626; }
+    .overdue { color: #dc2626; font-weight: 600; }
+    @media print { body { padding: 1cm; } }
+  </style></head><body>
+  <h1>🔬 Flush Report — Hidden Creek Lambs</h1>
+  <div class="subtitle">Generated ${new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'})}</div>
+  <div id="print-body"></div>
+  <script>
+    // Re-render from data passed via window
+    const flushes = ${JSON.stringify((window._frFlushes||[]).filter(f => {
+      if (window._frType !== 'all' && (f.flush_type||'MOET').toUpperCase() !== window._frType) return false;
+      if (window._frDonor && f.donor_id !== window._frDonor) return false;
+      if (window._frFrom && f.flush_date < window._frFrom) return false;
+      if (window._frTo && f.flush_date > window._frTo) return false;
+      return true;
+    }))};
+    const transfers = ${JSON.stringify(window._frTransfers||[])};
+    const donors = ${JSON.stringify(allLambs.filter(l=>l.role==='Embryo Donor'||l.role==='Both'))};
+    const allLambsData = ${JSON.stringify(allLambs)};
+    const allAiRamsData = ${JSON.stringify(allAiRams||[])};
+    const today = new Date().toISOString().slice(0,10);
+    function getSireName(f) {
+      if (f.ai_sire_id) { const r=allAiRamsData.find(x=>x.id===f.ai_sire_id); return r?r.name+(r.tag?' #'+r.tag:''):'AI Sire'; }
+      if (f.sire_id) { const l=allLambsData.find(x=>x.id===f.sire_id); return l?l.name:'Ram'; }
+      return f.sire_text||'—';
+    }
+
+    const totalCollected = flushes.reduce((s,f)=>s+(f.embryos_collected||0),0);
+    const totalTransferred = flushes.reduce((s,f)=>s+(f.embryos_transferred||0),0);
+    const totalFrozen = flushes.reduce((s,f)=>s+(f.embryos_frozen||0),0);
+    const totalTransfers = flushes.reduce((s,f)=>s+transfers.filter(t=>t.flush_id===f.id).length,0);
+    const totalPreg = flushes.reduce((s,f)=>s+transfers.filter(t=>t.flush_id===f.id&&(t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born')).length,0);
+    const totalLamb = flushes.reduce((s,f)=>s+transfers.filter(t=>t.flush_id===f.id&&t.outcome==='Lamb Born').length,0);
+    const pregRate = totalTransfers>0?Math.round(totalPreg/totalTransfers*100):0;
+
+    let html = '<div class="cards">'
+      + '<div class="card"><div class="card-val">'+flushes.length+'</div><div class="card-lbl">Flushes</div></div>'
+      + '<div class="card"><div class="card-val">'+totalCollected+'</div><div class="card-lbl">Collected</div></div>'
+      + '<div class="card"><div class="card-val">'+totalTransferred+'</div><div class="card-lbl">Transferred</div></div>'
+      + '<div class="card"><div class="card-val">'+totalFrozen+'</div><div class="card-lbl">Frozen</div></div>'
+      + '<div class="card"><div class="card-val">'+totalPreg+'</div><div class="card-lbl">Pregnant</div></div>'
+      + '<div class="card"><div class="card-val">'+pregRate+'%</div><div class="card-lbl">Preg Rate</div></div>'
+      + '<div class="card"><div class="card-val">'+totalLamb+'</div><div class="card-lbl">Lamb Born</div></div>'
+      + '</div>';
+
+    flushes.forEach(f => {
+      const donor = allLambsData.find(l=>l.id===f.donor_id);
+      const ft = transfers.filter(t=>t.flush_id===f.id);
+      const preg = ft.filter(t=>t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born').length;
+      const pr = ft.length>0?Math.round(preg/ft.length*100):0;
+      const lb = ft.filter(t=>t.outcome==='Lamb Born').length;
+      const typeClass = (f.flush_type||'MOET')==='IVF'?'badge-ivf':'badge-moet';
+      html += '<div class="flush-block">'
+        +'<div class="flush-header"><div>'
+        +'<div class="flush-title">'+(donor?donor.name+(donor.ear_tag?' #'+donor.ear_tag:'')+(donor.genetic_code?' '+donor.genetic_code:''):'Unknown')+' <span class="badge '+typeClass+'">'+(f.flush_type||'MOET')+'</span></div>'
+        +'<div class="flush-meta">'+(f.flush_date||'—')+' &nbsp;·&nbsp; Sire: '+getSireName(f)+(f.ai_sire_id&&allAiRamsData.find(r=>r.id===f.ai_sire_id)?.genetic_code?' '+allAiRamsData.find(r=>r.id===f.ai_sire_id).genetic_code:'')+'</div>'
+        +'</div>'
+        +'<div class="flush-stats">'
+        +'<div><div class="val">'+(f.embryos_collected||0)+'</div>Collected</div>'
+        +'<div><div class="val">'+(f.embryos_transferred||0)+'</div>Transferred</div>'
+        +'<div><div class="val">'+(f.embryos_frozen||0)+'</div>Frozen</div>'
+        +'<div><div class="val">'+pr+'%</div>Preg%</div>'
+        +(lb>0?'<div><div class="val">'+lb+'</div>Born</div>':'')
+        +'</div></div>'
+        +'<table><thead><tr><th>Recip</th><th>Implant</th><th>Due</th><th>#</th><th>Status</th><th>Lambs</th></tr></thead><tbody>';
+      if (ft.length===0) { html+='<tr><td colspan="6" style="text-align:center;color:#999">No transfers</td></tr>'; }
+      ft.forEach(t=>{
+        const recip=allLambsData.find(l=>l.id===t.recipient_id);
+        const rn=recip?recip.name+(recip.ear_tag?' #'+recip.ear_tag:''):(t.recipient_text||t.recip_text||'—');
+        const due=t.implant_date?new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*24*60*60*1000).toISOString().slice(0,10):'—';
+        const ov=t.outcome!=='Lamb Born'&&t.outcome!=='Not Pregnant'&&t.outcome!=='Failed'&&due<today;
+        const sc=t.outcome==='Lamb Born'?'s-lamb':t.outcome==='Confirmed Pregnant'?'s-preg':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'s-neg':'s-pend';
+        html+='<tr><td>'+rn+'</td><td>'+(t.implant_date||'—')+'</td>'
+          +'<td'+(ov?' class="overdue"':'')+'>'+due+(ov?' ⚠':'')+'</td>'
+          +'<td style="text-align:center">'+(t.num_transferred||1)+'</td>'
+          +'<td><span class="status '+sc+'">'+(t.outcome||'Pending')+'</span></td>'
+          +'<td style="text-align:center">'+(t.lamb_count||'—')+'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    });
+    document.getElementById('print-body').innerHTML = html;
+    window.print();
+  <\/script></body></html>`);
+  printWin.document.close();
+}
+
+function refreshFlushReport() {
+  // Update toggle buttons
+  ['all','ivf','moet'].forEach(t => {
+    const btn = document.getElementById(`fr-btn-${t}`);
+    const match = t === 'all' ? window._frType === 'all' : window._frType === t.toUpperCase();
+    if (btn) { btn.style.background = match ? 'var(--accent)' : 'var(--surface2)'; btn.style.color = match ? '#fff' : 'var(--text)'; }
+  });
+
+  let flushes = window._frFlushes || [];
+  const transfers = window._frTransfers || [];
+  const breedResults = window._frBreedResults || [];
+
+  // Apply filters
+  if (window._frType !== 'all') flushes = flushes.filter(f => (f.flush_type||'MOET').toUpperCase() === window._frType);
+  if (window._frDonor) flushes = flushes.filter(f => f.donor_id === window._frDonor);
+  if (window._frFrom) flushes = flushes.filter(f => f.flush_date >= window._frFrom);
+  if (window._frTo) flushes = flushes.filter(f => f.flush_date <= window._frTo);
+
+  if (flushes.length === 0) {
+    document.getElementById('fr-content').innerHTML = `<div class="empty"><div class="empty-icon">🔬</div><h3>No flushes found</h3><p>Try adjusting your filters</p></div>`;
+    return;
+  }
+
+  // Summary stats
+  const totalCollected = flushes.reduce((s,f) => s+(f.embryos_collected||0), 0);
+  const totalTransferred = flushes.reduce((s,f) => s+(f.embryos_transferred||0), 0);
+  const totalFrozen = flushes.reduce((s,f) => s+(f.embryos_frozen||0), 0);
+  const totalTransfers = flushes.reduce((s,f) => s+transfers.filter(t=>t.flush_id===f.id).length, 0);
+  const totalPregnant = flushes.reduce((s,f) => s+transfers.filter(t=>t.flush_id===f.id&&(t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born')).length, 0);
+  const totalLambBorn = flushes.reduce((s,f) => s+transfers.filter(t=>t.flush_id===f.id&&t.outcome==='Lamb Born').length, 0);
+  const pregnancyRate = totalTransfers > 0 ? Math.round(totalPregnant/totalTransfers*100) : 0;
+
+  const cards = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0.75rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--text)">${flushes.length}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Flushes</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${totalCollected}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Collected</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#2563eb">${totalTransferred}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Transferred</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#7c3aed">${totalFrozen}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Frozen</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#15803d">${totalPregnant}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Pregnant</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#15803d">${pregnancyRate}%</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Preg Rate</div></div>
+      <div class="card" style="padding:0.85rem;text-align:center"><div style="font-size:1.5rem;font-weight:700;color:#d97706">${totalLambBorn}</div><div style="font-size:0.7rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Lamb Born</div></div>
+    </div>`;
+
+  const flushCards = flushes.map(f => {
+    const donor = allLambs.find(l => l.id === f.donor_id);
+    const sire = f.ai_sire_id ? allAiRams.find(r => r.id === f.ai_sire_id) : (f.sire_id ? allLambs.find(l => l.id === f.sire_id) : null);
+    const sireName = sire?.name || f.sire_text || '—';
+    const flushTransfers = transfers.filter(t => t.flush_id === f.id);
+    const typeColor = (f.flush_type||'MOET') === 'IVF' ? '#7c3aed' : '#2563eb';
+    const typeBg = (f.flush_type||'MOET') === 'IVF' ? '#ede9fe' : '#dbeafe';
+
+    // Transfer rows
+    const transferRows = flushTransfers.length > 0 ? flushTransfers.map(t => {
+      const recip = allLambs.find(l => l.id === t.recipient_id);
+      const recipName = recip?.name || t.recipient_text || t.recip_text || '—';
+      const recipTag = recip?.ear_tag ? ` #${recip.ear_tag}` : '';
+      const dueDate = t.implant_date ? new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*24*60*60*1000).toISOString().slice(0,10) : '—';
+      const today = new Date().toISOString().slice(0,10);
+      const isOverdue = t.outcome !== 'Lamb Born' && t.outcome !== 'Not Pregnant' && t.outcome !== 'Failed' && dueDate < today;
+      const outColor = t.outcome==='Lamb Born'?'#15803d':t.outcome==='Confirmed Pregnant'?'#1d4ed8':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'#dc2626':'#92560a';
+      const outBg = t.outcome==='Lamb Born'?'#dcfce7':t.outcome==='Confirmed Pregnant'?'#dbeafe':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'#fee2e2':'#fef3cd';
+      // Get lambing results
+      const lambCount = t.lamb_count || (breedResults.filter(r=>r.transfer_id===t.id).reduce((s,r)=>s+(r.num_born||0),0)) || null;
+      return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditFlushGlobal('${f.id}','${f.donor_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <td style="padding:0.5rem 0.75rem;font-size:0.82rem;font-weight:600;color:var(--text)">${recipName}<span style="color:var(--text3);font-weight:400">${recipTag}</span></td>
+        <td style="padding:0.5rem 0.75rem;font-size:0.78rem;color:var(--text2)">${t.implant_date||'—'}</td>
+        <td style="padding:0.5rem 0.75rem;font-size:0.78rem;color:${isOverdue?'#dc2626':'var(--text2)'}">${dueDate}${isOverdue?' ⚠️':''}</td>
+        <td style="padding:0.5rem 0.75rem;text-align:center;font-size:0.78rem">${t.num_transferred||1}</td>
+        <td style="padding:0.5rem 0.75rem"><span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.1rem 0.45rem;font-size:0.7rem;font-weight:600;white-space:nowrap">${t.outcome||'Pending'}</span></td>
+        <td style="padding:0.5rem 0.75rem;text-align:center;font-size:0.82rem;color:${lambCount?'#15803d':'var(--text3)'};font-weight:${lambCount?'700':'400'}">${lambCount||'—'}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="6" style="padding:0.75rem;text-align:center;font-size:0.82rem;color:var(--text3)">No transfers recorded</td></tr>`;
+
+    const pregnant = flushTransfers.filter(t=>t.outcome==='Confirmed Pregnant'||t.outcome==='Lamb Born').length;
+    const lambBorn = flushTransfers.filter(t=>t.outcome==='Lamb Born').length;
+    const pregRate = flushTransfers.length > 0 ? Math.round(pregnant/flushTransfers.length*100) : 0;
+
+    return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem">
+      <!-- Flush header -->
+      <div style="padding:0.85rem 1rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;cursor:pointer" onclick="openEditFlushGlobal('${f.id}','${f.donor_id}')">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.2rem">
+            <span style="font-weight:700;color:var(--text);font-size:0.95rem">${donor?.name||'?'}${donor?.ear_tag?' <span style="color:var(--text3);font-weight:400;font-size:0.82rem">#'+donor.ear_tag+'</span>':''}${donor?.genetic_code?' <span style="color:var(--accent);font-weight:700;font-size:0.75rem">'+donor.genetic_code+'</span>':''}</span>
+            <span style="background:${typeBg};color:${typeColor};border-radius:0.2rem;padding:0.1rem 0.4rem;font-size:0.7rem;font-weight:700">${f.flush_type||'MOET'}</span>
+            <span style="font-size:0.78rem;color:var(--text3)">${f.flush_date||'—'}</span>
+          </div>
+          <div style="font-size:0.78rem;color:var(--text2)">× ${sireName}${sire?.genetic_code?` <span style="color:var(--accent);font-weight:600;font-size:0.7rem">${sire.genetic_code}</span>`:''} ${f.semen_type?' · '+f.semen_type:''}</div>
+        </div>
+        <div style="display:flex;gap:1.5rem;flex-shrink:0">
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:700;color:var(--accent)">${f.embryos_collected||0}</div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">Collected</div></div>
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:700;color:#2563eb">${f.embryos_transferred||0}</div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">Transferred</div></div>
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:700;color:#7c3aed">${f.embryos_frozen||0}</div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">Frozen</div></div>
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:700;color:#15803d">${pregRate}%</div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">Preg%</div></div>
+          ${lambBorn>0?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:700;color:#d97706">${lambBorn}</div><div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase">Born</div></div>`:''}
+        </div>
+      </div>
+      <!-- Transfer table -->
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+          <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+            <th style="padding:0.4rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Recip</th>
+            <th style="padding:0.4rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Implant</th>
+            <th style="padding:0.4rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Due</th>
+            <th style="padding:0.4rem 0.75rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">#</th>
+            <th style="padding:0.4rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+            <th style="padding:0.4rem 0.75rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Lambs</th>
+          </tr></thead>
+          <tbody>${transferRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('fr-content').innerHTML = cards + flushCards;
+}
+
 // ── ANALYTICS PAGE ────────────────────────────────────
 async function renderAnalytics() {
   const mc = document.getElementById('main-content');
@@ -5292,8 +5573,8 @@ function showFlushTypeDetail(type, badgeClass, flushIds) {
     return `<div style="padding:0.65rem 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal();showLamb('${f.donor_id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${donor?.name||'Unknown'}${donor?.ear_tag?' <span style="color:var(--text3)">#'+donor.ear_tag+'</span>':''}</div>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem">📅 ${f.flush_date} · Sire: ${sireName}</div>
+          <div style="font-weight:600;font-size:0.88rem;color:var(--text)">${donor?.name||'Unknown'}${donor?.ear_tag?' <span style="color:var(--text3)">#'+donor.ear_tag+'</span>':''}${donor?.genetic_code?' <span style="color:var(--accent);font-weight:700;font-size:0.75rem">'+donor.genetic_code+'</span>':''}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem">📅 ${f.flush_date} · Sire: ${sireName}${sire?.genetic_code?' <span style="color:var(--accent);font-weight:700">'+sire.genetic_code+'</span>':''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
           <div style="font-size:0.78rem;color:var(--text2)">${f.embryos_collected||0} collected · ${f.embryos_transferred||0} transferred</div>
@@ -7667,7 +7948,24 @@ function closeModal() {
 }
 
 // ── ADD/EDIT LAMB ─────────────────────────────────────
-function openAddLamb() { showLambModal(null); }
+function openAddLamb() {
+  // Pre-load transfers for linkage
+  Promise.all([
+    db.from('embryo_transfers').select('*').order('implant_date', {ascending: false}),
+    db.from('embryo_flushes').select('*'),
+  ]).then(([{data: transfers}, {data: flushes}]) => {
+    window._allTransfersForLinkage = (transfers||[]).filter(t => !t.recipient_id); // only unlinked
+    window._allFlushesForLinkage = flushes||[];
+    showLambModal(null);
+    setTimeout(() => {
+      const roleEl = document.getElementById('lm-role');
+      if (roleEl) roleEl.addEventListener('change', () => {
+        const sec = document.getElementById('lm-transfer-link-section');
+        if (sec) sec.style.display = (roleEl.value === 'Embryo Recipient' || roleEl.value === 'Both') ? '' : 'none';
+      });
+    }, 50);
+  });
+}
 function openEditLamb(id) { showLambModal(allLambs.find(l=>l.id===id)); }
 
 function showLambModal(lamb) {
@@ -7713,6 +8011,29 @@ function showLambModal(lamb) {
       <div class="field"><label>Dam (if not in system)</label><input id="lm-dam-text" value="${lamb?.dam_text||''}" placeholder="Dam name/ID"></div>
     </div>
     <div class="field"><label>Notes / Breed details</label><textarea id="lm-notes">${lamb?.notes||''}</textarea></div>
+    ${!isEdit ? `
+    <div style="border-top:1px solid var(--border);margin-top:0.75rem;padding-top:0.75rem">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">📦 Purchase Info (optional)</div>
+      <div class="row">
+        <div class="field"><label>Purchase Date</label><input type="date" id="lm-purchase-date"></div>
+        <div class="field"><label>Purchase Price ($)</label><input type="number" id="lm-purchase-price" min="0" step="0.01" placeholder="e.g. 500"></div>
+      </div>
+      <div class="field"><label>Purchased From</label><input id="lm-purchase-from" placeholder="Breeder / farm name"></div>
+    </div>
+    <div id="lm-transfer-link-section" style="border-top:1px solid var(--border);margin-top:0.75rem;padding-top:0.75rem;display:none">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">🔬 Link to Existing Transfer Record (optional)</div>
+      <div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.5rem">If this animal was purchased as a confirmed pregnant recip, link her to the embryo transfer record</div>
+      <div class="field"><label>Transfer Record</label>
+        <select id="lm-transfer-id">
+          <option value="">— Select transfer —</option>
+          ${(window._allTransfersForLinkage||[]).map(t => {
+            const flush = (window._allFlushesForLinkage||[]).find(f => f.id === t.flush_id);
+            const donor = flush ? allLambs.find(l => l.id === flush.donor_id) : null;
+            return `<option value="${t.id}">${t.implant_date||'?'} · ${donor?.name||'?'} flush · ${t.recipient_text||'External recip'} · ${t.outcome||'Pending'}</option>`;
+          }).join('')}
+        </select>
+      </div>
+    </div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveLamb('${lamb?.id||''}')">${isEdit?'Save Changes':'Add Lamb'}</button>
@@ -7741,8 +8062,32 @@ async function saveLamb(id) {
     dam_id: v('lm-dam-id')||null, dam_text: v('lm-dam-text'), notes: v('lm-notes'),
     tag_color: id ? undefined : TAG_COLORS[colorIdx]
   };
-  if (id) { await db.from('lambs').update(payload).eq('id', id); toast('Lamb updated'); }
-  else { await db.from('lambs').insert(payload); toast('Lamb added'); }
+  let savedId = id;
+  if (id) {
+    await db.from('lambs').update(payload).eq('id', id);
+    toast('Lamb updated');
+  } else {
+    const { data } = await db.from('lambs').insert(payload).select().single();
+    savedId = data?.id;
+    toast('Lamb added');
+    // Handle purchase info
+    const purchaseDate = v('lm-purchase-date');
+    const purchasePrice = v('lm-purchase-price');
+    const purchaseFrom = v('lm-purchase-from');
+    if (savedId && (purchaseDate || purchasePrice || purchaseFrom)) {
+      await db.from('lamb_notes').insert({
+        lamb_id: savedId,
+        date: purchaseDate || new Date().toISOString().slice(0,10),
+        note: `Purchased${purchaseFrom ? ' from ' + purchaseFrom : ''}${purchasePrice ? ' for $' + purchasePrice : ''}`,
+      });
+    }
+    // Link to existing transfer record
+    const transferId = v('lm-transfer-id');
+    if (savedId && transferId) {
+      await db.from('embryo_transfers').update({ recipient_id: savedId, recipient_text: null }).eq('id', transferId);
+      toast('Linked to transfer record');
+    }
+  }
   closeModal();
   await loadLambs();
   if (id) renderLambDetail(); else renderFlock();
@@ -10157,6 +10502,7 @@ async function openUseInventory(id) {
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:0.65rem;margin-bottom:0.75rem;font-size:0.85rem">
       <strong>${donor?.name||'Unknown'}</strong> × ${sire?sire.name+(item.ai_sire_id?' 🧬':''):'—'}
       <span style="margin-left:0.75rem;color:#1d4ed8;font-weight:700">${item.quantity} available</span>
+      ${(donor?.genetic_code||sire?.genetic_code)?`<div style="font-size:0.72rem;margin-top:0.25rem;color:var(--text3)">${donor?.genetic_code?`🧬 Dam: <span style="color:var(--accent);font-weight:600">${donor.genetic_code}</span>`:''} ${sire?.genetic_code?`&nbsp;🧬 Sire: <span style="color:var(--accent);font-weight:600">${sire.genetic_code}</span>`:''}</div>`:''}
     </div>
     <div class="row">
       <div class="field"><label>Recipient</label><select id="ui-recip"><option value="">— System lamb —</option>${eweOpts}</select></div>
@@ -10295,9 +10641,8 @@ function generateSemenReport() {
           groupType: 'ivf',
           targetDate: g.target_date,
           donorName: donorLamb?.name || '?',
+          donorGeneticCode: donorLamb?.genetic_code || '',
           doses: straws,
-          semenType,
-          shared: m.semen_shared,
         });
       });
     } else {
@@ -10316,8 +10661,8 @@ function generateSemenReport() {
           groupType: g.type,
           targetDate: g.target_date,
           donorName: donorLamb?.name || '?',
+          donorGeneticCode: donorLamb?.genetic_code || '',
           doses: dosesEach,
-          semenType,
         });
       });
     }
@@ -10361,7 +10706,7 @@ function generateSemenReport() {
     const subRows = s.entries.map(e =>
       `<tr style="background:#fafafa">
         <td style="padding:4px 10px 4px 24px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupName}</td>
-        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.donorName}</td>
+        <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.donorName}${e.donorGeneticCode?` <span style="color:#7c3aed;font-weight:700">${e.donorGeneticCode}</span>`:''}</td>
         <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.targetDate||'—'}</td>
         <td style="padding:4px 8px;font-size:10px;color:#666;border-bottom:1px solid #f0f0f0">${e.groupType?.toUpperCase()||'—'} · ${e.doses} straw${e.doses!==1?'s':''}${e.shared?' 🤝':''}</td>
         <td colspan="3" style="border-bottom:1px solid #f0f0f0"></td>
@@ -10381,7 +10726,7 @@ function generateSemenReport() {
       : diff < 0 ? `⚠️ Short ${Math.abs(diff)} doses` : diff === 0 ? '✓ Exact' : '✓ OK';
 
     tableRows += `<tr style="border-bottom:2px solid #e5e7eb">
-      <td style="padding:8px 10px;font-weight:700;font-size:11px" colspan="2">${s.name}${semenBadge}</td>
+      <td style="padding:8px 10px;font-weight:700;font-size:11px" colspan="2">${s.name}${s.ai_sire_id ? (() => { const r = allAiRams.find(x=>x.id===s.ai_sire_id); return r?.genetic_code ? ` <span style="color:#7c3aed;font-weight:700;font-size:10px">${r.genetic_code}</span>` : ''; })() : ''}${semenBadge}</td>
       <td style="padding:8px;font-size:11px">${s.entries[0]?.targetDate||'—'}</td>
       <td style="padding:8px;font-size:11px">${s.needed} doses</td>
       <td style="padding:8px;font-size:11px;font-weight:600">${availDisplay}</td>
@@ -10419,7 +10764,7 @@ function generateSemenReport() {
         grandTotalAfter += afterPlan;
         const afterColor = afterPlan < 0 ? '#dc2626' : afterPlan === 0 ? '#92400e' : '#15803d';
         return `<tr style="border-bottom:1px solid #e5e7eb">
-          <td style="padding:7px 10px;font-weight:600;font-size:11px">${r.name} 🧬</td>
+          <td style="padding:7px 10px;font-weight:600;font-size:11px">${r.name}${r.genetic_code ? ` <span style="color:#7c3aed;font-weight:700">${r.genetic_code}</span>` : ''}</td>
           <td style="padding:7px 8px;font-size:11px">${total} ${detail?`<span style="font-size:9px;color:#888">(${detail})</span>`:''}</td>
           <td style="padding:7px 8px;font-size:11px;color:${committed>0?'#1e40af':'#aaa'}">${committed > 0 ? committed + ' ❄️' : '—'}</td>
           <td style="padding:7px 8px;font-size:12px;font-weight:700;color:${afterColor}">${afterPlan >= 0 ? '+' : ''}${afterPlan}</td>
@@ -10964,7 +11309,7 @@ function renderPlanningHTML() {
         const donorNames = donors.map(m => {
           const lamb = allLambs.find(l => l.id === m.lamb_id);
           const sire = m.ai_sire_id ? allAiRams.find(r => r.id === m.ai_sire_id) : null;
-          return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${lamb?.name||'?'}<span style="color:var(--text3)">× ${sire?.name||m.sire_text||'?'}</span></span>`;
+          return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--surface2);border:1px solid var(--border);border-radius:0.25rem;padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text2)">${lamb?.name||'?'}${lamb?.genetic_code?` <span style="color:var(--accent);font-weight:700;font-size:0.7rem">${lamb.genetic_code}</span>`:''}<span style="color:var(--text3)">× ${sire?.name||m.sire_text||'?'}${sire?.genetic_code?` <span style="color:var(--accent);font-weight:700;font-size:0.7rem">${sire.genetic_code}</span>`:''}</span></span>`;
         }).join('');
         const recipNames = recips.map(m => {
           const lamb = m.lamb_id ? allLambs.find(l => l.id === m.lamb_id) : null;
