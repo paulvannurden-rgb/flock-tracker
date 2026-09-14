@@ -342,6 +342,7 @@
         <button class="sidebar-btn" onclick="showPage('calendar')" data-page="calendar"><span>📅</span>Calendar</button>
         <button class="sidebar-btn" onclick="showPage('pedigree')" data-page="pedigree"><span>🌳</span>Pedigree</button>
         <button class="sidebar-btn" onclick="showPage('export')" data-page="export"><span>📊</span>Export</button>
+        <button class="sidebar-btn" onclick="showPage('sales')" data-page="sales"><span>💰</span>Sales</button>
         <button class="sidebar-btn" onclick="showPage('invoices')" data-page="invoices"><span>🧾</span>Invoices</button>
         <div style="height:1px;background:var(--border);margin:0.5rem 0"></div>
         <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openFlockTreatment()"><span>💉</span>Flock Treatment</button>
@@ -718,6 +719,7 @@ function showPage(page) {
   else if (page === 'calendar') renderCalendar();
   else if (page === 'pedigree') renderPedigreeNetwork();
   else if (page === 'export') renderExport();
+  else if (page === 'sales') renderSales();
   else if (page === 'invoices') renderInvoices();
 }
 
@@ -765,6 +767,93 @@ function showLamb(id) {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────
+function showDashPanel(type) {
+  const panel = document.getElementById('dash-panel');
+  if (!panel) return;
+  // Toggle off if same card clicked again
+  if (panel._activeType === type && panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    panel._activeType = null;
+    document.querySelectorAll('.dash-stat-card').forEach(c => c.style.outline = '');
+    return;
+  }
+  panel._activeType = type;
+  // Highlight active card
+  document.querySelectorAll('.dash-stat-card').forEach(c => c.style.outline = '');
+  const activeCard = document.getElementById(`dsc-${type}`);
+  if (activeCard) activeCard.style.outline = '2px solid var(--accent)';
+
+  const d = window._dash || {};
+  let rows = '';
+  let title = '';
+
+  const animalRow = (l, sub) => `
+    <div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="showLamb('${l.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      <div>
+        <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}${l.genetic_code?` <span style="color:var(--accent);font-size:0.72rem;font-weight:700">${l.genetic_code}</span>`:''}</span>
+        ${sub ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">${sub}</div>` : ''}
+      </div>
+      <span style="font-size:0.7rem;color:var(--text3);white-space:nowrap">→</span>
+    </div>`;
+
+  if (type === 'active') {
+    title = `Active Animals (${allLambs.filter(l=>l.status==='Active').length})`;
+    rows = allLambs.filter(l=>l.status==='Active').map(l => animalRow(l, `${l.sex||''}${l.flock_type?' · '+l.flock_type:''}`)).join('');
+  } else if (type === 'ewes') {
+    title = `Active Ewes (${allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').length})`;
+    rows = allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').map(l => animalRow(l, l.flock_type||'')).join('');
+  } else if (type === 'pregnant') {
+    title = 'Confirmed Pregnant';
+    const breedRows = (d.activeBreedRecs||[]).filter(r=>r.outcome==='Confirmed Pregnant').map(r => {
+      const l = lambById[r.lamb_id]; if (!l) return '';
+      const sire = r.ai_sire_id ? aiRamById[r.ai_sire_id] : (r.sire_id ? lambById[r.sire_id] : null);
+      return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <div>
+          <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}${r.expected_lamb_date?' · Due '+r.expected_lamb_date:''}</div>
+        </div>
+        <span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span>
+      </div>`;
+    }).join('');
+    const etRows = (d.activeTransfers||[]).filter(t=>t.outcome==='Confirmed Pregnant').map(t => {
+      const recip = lambById[t.recipient_id]; const donor = lambById[t.embryo_flushes?.donor_id];
+      const due = t.implant_date ? new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10) : null;
+      return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <div>
+          <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${due?' · Due '+due:''}</div>
+        </div>
+        <span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span>
+      </div>`;
+    }).join('');
+    rows = breedRows + etRows;
+  } else if (type === 'due7') {
+    title = 'Due This Week';
+    rows = [
+      ...(d.dueSoon||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; const sire=r.ai_sire_id?aiRamById[r.ai_sire_id]:(r.sire_id?lambById[r.sire_id]:null); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${r.expected_lamb_date}</span></div>`; }),
+      ...(d.dueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${due}</span></div>`; })
+    ].join('');
+  } else if (type === 'overdue') {
+    title = 'Overdue';
+    rows = [
+      ...(d.overdue||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">Due ${r.expected_lamb_date}</div></div><button onclick="openQuickLambing('${r.lamb_id}','${r.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐣 Record</button></div>`; }),
+      ...(d.overdueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">ET Due ${due}</div></div><button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button></div>`; })
+    ].join('');
+  }
+
+  panel.style.display = '';
+  panel.innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden;border-color:var(--accent)">
+      <div style="padding:0.5rem 0.85rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text)">${title}</div>
+        <button onclick="document.getElementById('dash-panel').style.display='none';document.querySelectorAll('.dash-stat-card').forEach(c=>c.style.outline='')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1">✕</button>
+      </div>
+      <div style="max-height:300px;overflow-y:auto">
+        ${rows || '<div style="padding:1rem;text-align:center;color:var(--text3);font-size:0.82rem">None</div>'}
+      </div>
+    </div>`;
+}
+
 async function renderDashboard() {
   const mc = document.getElementById('main-content');
   mc.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
@@ -772,12 +861,14 @@ async function renderDashboard() {
   const in7 = new Date(Date.now()+7*864e5).toISOString().slice(0,10);
   const in14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
 
-  const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }] = await Promise.all([
+  const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }, { data: activeHealthRecsRaw }] = await Promise.all([
     db.from('breeding_records').select('*').order('expected_lamb_date'),
     db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
     db.from('weight_records').select('*').order('weigh_date', {ascending:false}).limit(50),
     db.from('health_records').select('*').order('date', {ascending:false}).limit(30),
+    db.from('health_records').select('*').order('withdrawal_date'),
   ]);
+  const activeHealthRecs = (activeHealthRecsRaw||[]).filter(h => h.withdrawal_date >= today);
 
   const breedAll = breedRecs || [];
   const transferAll = transfers || [];
@@ -793,6 +884,11 @@ async function renderDashboard() {
 
   // Overdue (past due date, still pregnant)
   const overdue = activeBreedRecs.filter(r => r.expected_lamb_date && r.expected_lamb_date < today && r.outcome === 'Confirmed Pregnant');
+  const overdueTransfers = activeTransfers.filter(t => {
+    if (t.outcome !== 'Confirmed Pregnant' || !t.implant_date) return false;
+    const due = new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10);
+    return due < today;
+  });
 
   // Preg check due (45-60 days post breeding, still Pending)
   const pregCheckDue = activeBreedRecs.filter(r => {
@@ -813,10 +909,8 @@ async function renderDashboard() {
   ].filter(a => a.date).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,8);
 
   mc.innerHTML = `
-    <!-- Quick Entry -->
-    <div style="margin-bottom:1.5rem">
       <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">⚡ Quick Entry</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem;margin-bottom:0.75rem">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:0.75rem">
         <!-- Weight -->
         <div style="display:flex;flex-direction:column;gap:0.3rem">
           <button onclick="openQuickEntry('weight')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem 0.5rem;cursor:pointer;text-align:center;transition:all 0.15s;flex:1" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
@@ -833,6 +927,14 @@ async function renderDashboard() {
           </button>
           <button onclick="openBulkEntry('treatment')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.3rem;cursor:pointer;font-size:0.7rem;font-weight:600;color:var(--text3);transition:all 0.15s" onmouseenter="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseleave="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">📋 Bulk</button>
         </div>
+        <!-- Preg Check -->
+        <div style="display:flex;flex-direction:column;gap:0.3rem">
+          <button onclick="openPregCheck()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem 0.5rem;cursor:pointer;text-align:center;transition:all 0.15s;flex:1" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="font-size:1.4rem;margin-bottom:0.2rem">🔍</div>
+            <div style="font-size:0.78rem;font-weight:600;color:var(--text)">Preg Check</div>
+          </button>
+          <button onclick="openBulkPregCheck()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.3rem;cursor:pointer;font-size:0.7rem;font-weight:600;color:var(--text3);transition:all 0.15s" onmouseenter="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseleave="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">📋 Bulk</button>
+        </div>
         <!-- Lambing -->
         <button onclick="openQuickEntry('lambing')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem 0.5rem;cursor:pointer;text-align:center;transition:all 0.15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
           <div style="font-size:1.4rem;margin-bottom:0.2rem">🐣</div>
@@ -842,49 +944,61 @@ async function renderDashboard() {
     </div>
 
     <!-- Stats row -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0.6rem;margin-bottom:1.25rem">
-      <div class="card" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showPage('flock')">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0.6rem;margin-bottom:0.75rem">
+      <div class="card dash-stat-card" id="dsc-active" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showDashPanel('active')">
         <div style="font-size:1.6rem;font-weight:700;color:var(--accent)">${active}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Active</div>
       </div>
-      <div class="card" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showPage('flock')">
+      <div class="card dash-stat-card" id="dsc-ewes" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showDashPanel('ewes')">
         <div style="font-size:1.6rem;font-weight:700;color:#2563eb">${ewes}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Ewes</div>
       </div>
-      <div class="card" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showPage('breeding')">
+      <div class="card dash-stat-card" id="dsc-pregnant" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showDashPanel('pregnant')">
         <div style="font-size:1.6rem;font-weight:700;color:#15803d">${pregnant}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Pregnant</div>
       </div>
-      <div class="card" style="padding:0.85rem;text-align:center;cursor:pointer;${dueSoon.length+dueTransfers.length>0?'background:#fef9c3;border-color:#ca8a04':''}" onclick="showPage('lambing-report')">
+      <div class="card dash-stat-card" id="dsc-due7" style="padding:0.85rem;text-align:center;cursor:pointer;${dueSoon.length+dueTransfers.length>0?'background:#fef9c3;border-color:#ca8a04':''}" onclick="showDashPanel('due7')">
         <div style="font-size:1.6rem;font-weight:700;color:${dueSoon.length+dueTransfers.length>0?'#92400e':'var(--text3)'}">${dueSoon.length+dueTransfers.length}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Due 7d</div>
       </div>
-      <div class="card" style="padding:0.85rem;text-align:center;cursor:pointer;${overdue.length>0?'background:#fee2e2;border-color:#dc2626':''}" onclick="showPage('lambing-report')">
-        <div style="font-size:1.6rem;font-weight:700;color:${overdue.length>0?'#dc2626':'var(--text3)'}">${overdue.length}</div>
+      <div class="card dash-stat-card" id="dsc-overdue" style="padding:0.85rem;text-align:center;cursor:pointer;${overdue.length+overdueTransfers.length>0?'background:#fee2e2;border-color:#dc2626':''}" onclick="showDashPanel('overdue')">
+        <div style="font-size:1.6rem;font-weight:700;color:${overdue.length+overdueTransfers.length>0?'#dc2626':'var(--text3)'}">${overdue.length+overdueTransfers.length}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Overdue</div>
       </div>
     </div>
+    <!-- Expandable detail panel -->
+    <div id="dash-panel" style="display:none;margin-bottom:1rem"></div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
       <!-- Alerts column -->
       <div>
-        ${overdue.length > 0 ? `
+        ${overdue.length+overdueTransfers.length > 0 ? `
         <div style="font-size:0.72rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">⚠️ Overdue</div>
         <div class="card" style="padding:0;overflow:hidden;border-color:#dc2626;margin-bottom:1rem">
-          ${overdue.map(r => { const l=lambById[r.lamb_id]; return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="showLamb('${r.lamb_id}')">
-            <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}${l?.ear_tag?' <span style="color:var(--text3);font-weight:400">#'+l.ear_tag+'</span>':''}</span>
-            <span style="font-size:0.72rem;color:#dc2626;font-weight:600">Due ${r.expected_lamb_date}</span>
+          ${overdue.map(r => { const l=lambById[r.lamb_id]; return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
+            <div style="flex:1;cursor:pointer;min-width:0" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')">
+              <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}${l?.ear_tag?' <span style="color:var(--text3);font-weight:400">#'+l.ear_tag+'</span>':''}</span>
+              <span style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-left:0.5rem">Due ${r.expected_lamb_date}</span>
+            </div>
+            <button onclick="openQuickLambing('${r.lamb_id}','${r.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐣 Record</button>
+          </div>`; }).join('')}
+          ${overdueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
+            <div style="flex:1;cursor:pointer;min-width:0" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
+              <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span>
+              <span style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-left:0.5rem">ET Due ${due}</span>
+            </div>
+            <button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button>
           </div>`; }).join('')}
         </div>` : ''}
 
         ${dueSoon.length+dueTransfers.length > 0 ? `
         <div style="font-size:0.72rem;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">🐣 Due This Week</div>
         <div class="card" style="padding:0;overflow:hidden;border-color:#ca8a04;margin-bottom:1rem">
-          ${[...dueSoon.map(r => { const l=lambById[r.lamb_id]; return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="showLamb('${r.lamb_id}')">
+          ${[...dueSoon.map(r => { const l=lambById[r.lamb_id]; return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')">
             <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}</span>
             <span style="font-size:0.72rem;color:#92400e">${r.expected_lamb_date}</span>
           </div>`; }),
-          ...dueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          ...dueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
             <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem">← ${donor?.name||'?'}</span></span>
             <span style="font-size:0.72rem;color:#92400e">${due}</span>
           </div>`; })].join('')}
@@ -893,13 +1007,13 @@ async function renderDashboard() {
         ${pregCheckDue.length > 0 ? `
         <div style="font-size:0.72rem;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">🔍 Preg Check Due</div>
         <div class="card" style="padding:0;overflow:hidden;border-color:#93c5fd;margin-bottom:1rem">
-          ${pregCheckDue.slice(0,5).map(r => { const l=lambById[r.lamb_id]; const days=Math.floor((Date.now()-new Date(r.breeding_date+'T12:00:00').getTime())/864e5); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="showLamb('${r.lamb_id}')">
+          ${pregCheckDue.slice(0,5).map(r => { const l=lambById[r.lamb_id]; const days=Math.floor((Date.now()-new Date(r.breeding_date+'T12:00:00').getTime())/864e5); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')">
             <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}</span>
             <span style="font-size:0.72rem;color:#1d4ed8">Day ${days} post-breed</span>
           </div>`; }).join('')}
         </div>` : ''}
 
-        ${overdue.length===0&&dueSoon.length+dueTransfers.length===0&&pregCheckDue.length===0 ? `
+        ${overdue.length===0&&overdueTransfers.length===0&&dueSoon.length+dueTransfers.length===0&&pregCheckDue.length===0 ? `
         <div class="card" style="padding:1.25rem;text-align:center;color:var(--text3)">
           <div style="font-size:1.5rem;margin-bottom:0.35rem">✅</div>
           <div style="font-size:0.82rem">No alerts — all clear!</div>
@@ -920,10 +1034,152 @@ async function renderDashboard() {
             </div>`).join('')}
         </div>
       </div>
-    </div>`;
+    </div>
+
+    <!-- Withdrawal table -->
+    ${(activeHealthRecs||[]).length > 0 ? `
+    <div style="margin-top:1rem">
+      <div style="font-size:0.72rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">⏱ Active Withdrawal Periods</div>
+      <div class="card" style="padding:0;overflow:hidden;border-color:#fca5a5">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+          <thead><tr style="background:#fee2e2;border-bottom:1px solid #fca5a5">
+            <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:#dc2626">Animal</th>
+            <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:#dc2626">Product</th>
+            <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:#dc2626">Treated</th>
+            <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:#dc2626">Clear Date</th>
+            <th style="padding:0.4rem 0.85rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:#dc2626">Days Left</th>
+          </tr></thead>
+          <tbody>
+            ${(activeHealthRecs||[]).map(h => {
+              const l = lambById[h.lamb_id];
+              const today = new Date().toISOString().slice(0,10);
+              const daysLeft = h.withdrawal_date ? Math.ceil((new Date(h.withdrawal_date+'T12:00:00') - new Date(today+'T12:00:00')) / 864e5) : null;
+              const urgent = daysLeft !== null && daysLeft <= 3;
+              return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showLamb('${h.lamb_id}')" onmouseenter="this.style.background='#fff7f7'" onmouseleave="this.style.background=''">
+                <td style="padding:0.45rem 0.85rem;font-weight:600;color:var(--text)">${l?.name||'?'}${l?.ear_tag?` <span style="color:var(--text3);font-weight:400;font-size:0.75rem">#${l.ear_tag}</span>`:''}</td>
+                <td style="padding:0.45rem 0.85rem;color:var(--text2)">${h.product}</td>
+                <td style="padding:0.45rem 0.85rem;color:var(--text3);font-size:0.78rem">${h.date}</td>
+                <td style="padding:0.45rem 0.85rem;font-weight:600;color:#dc2626">${h.withdrawal_date}</td>
+                <td style="padding:0.45rem 0.85rem;text-align:center;font-weight:700;color:${urgent?'#dc2626':'#92400e'}">${daysLeft !== null ? daysLeft+'d' : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+    `;
+
+  // Store for panel and preg check access
+  window._dash = { activeBreedRecs, activeTransfers, overdue, overdueTransfers, dueSoon, dueTransfers, pregCheckDue };
+}
+// ── PREG CHECK ─────────────────────────────────────────
+function openPregCheck() {
+  const pending = (window._dash?.activeBreedRecs||[]).filter(r => r.outcome === 'Pending' && r.breeding_date);
+  const eweopts = pending.map(r => {
+    const l = lambById[r.lamb_id];
+    const days = Math.floor((Date.now()-new Date(r.breeding_date+'T12:00:00').getTime())/864e5);
+    return `<option value="${r.id}|${r.lamb_id}">📅 Day ${days} — ${l?.name||'?'}${l?.ear_tag?' #'+l.ear_tag:''} (bred ${r.breeding_date})</option>`;
+  }).join('');
+  if (!eweopts) { toast('No pending breeding records to check'); return; }
+  window._pcResult = null;
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🔍 Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Breeding Record</label><select id="pc-record">${eweopts}</select></div>
+    <div class="field"><label>Result</label>
+      <div style="display:flex;gap:0.5rem;margin-top:0.25rem">
+        <button type="button" id="pc-btn-preg" onclick="setPcResult('Confirmed Pregnant')" class="btn btn-secondary" style="flex:1">✅ Pregnant</button>
+        <button type="button" id="pc-btn-open" onclick="setPcResult('Not Pregnant')" class="btn btn-secondary" style="flex:1">❌ Open</button>
+      </div>
+    </div>
+    <div class="field" id="pc-fetal-field" style="display:none"><label>Fetal Count</label><input type="number" id="pc-fetal" min="0" placeholder="Number of fetuses"></div>
+    <div class="field"><label>Notes</label><input id="pc-notes" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePregCheck()">Save Result</button>
+    </div>`);
 }
 
-// ── QUICK ENTRY ────────────────────────────────────────
+function setPcResult(result) {
+  window._pcResult = result;
+  document.getElementById('pc-btn-preg').className = `btn ${result==='Confirmed Pregnant'?'btn-primary':'btn-secondary'}`;
+  document.getElementById('pc-btn-open').className = `btn ${result==='Not Pregnant'?'btn-danger':'btn-secondary'}`;
+  document.getElementById('pc-fetal-field').style.display = result==='Confirmed Pregnant' ? '' : 'none';
+}
+
+async function savePregCheck() {
+  const val = document.getElementById('pc-record')?.value;
+  if (!val) { toast('Select a record'); return; }
+  const result = window._pcResult;
+  if (!result) { toast('Select a result'); return; }
+  const [recId] = val.split('|');
+  const fetal = result==='Confirmed Pregnant' && v('pc-fetal') ? parseInt(v('pc-fetal')) : null;
+  const payload = { outcome: result, notes: v('pc-notes')||'' };
+  if (fetal) payload.fetal_count = fetal;
+  if (result === 'Confirmed Pregnant') {
+    const rec = (window._dash?.activeBreedRecs||[]).find(r=>r.id===recId);
+    if (rec?.breeding_date) payload.expected_lamb_date = new Date(new Date(rec.breeding_date+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
+  }
+  await db.from('breeding_records').update(payload).eq('id', recId);
+  toast(`Preg check saved — ${result}`); closeModal(); renderDashboard();
+}
+
+async function openBulkPregCheck() {
+  const pending = (window._dash?.activeBreedRecs||[]).filter(r => r.outcome === 'Pending');
+  if (pending.length === 0) { toast('No pending breeding records'); return; }
+  const rows = pending.map(r => {
+    const l = lambById[r.lamb_id];
+    const days = r.breeding_date ? Math.floor((Date.now()-new Date(r.breeding_date+'T12:00:00').getTime())/864e5) : null;
+    const due = days !== null && days >= 40 && days <= 65;
+    return `<tr style="border-bottom:1px solid var(--border)${due?';background:#f0fdf4':''}">
+      <td style="padding:0.4rem 0.75rem;font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}${l?.ear_tag?` <span style="color:var(--text3)">#${l.ear_tag}</span>`:''}</td>
+      <td style="padding:0.4rem 0.75rem;font-size:0.78rem;color:var(--text3)">${r.breeding_date||'—'}${days!==null?` · Day ${days}`:''}${due?' ✓':''}</td>
+      <td style="padding:0.4rem 0.5rem;text-align:center">
+        <select data-rec="${r.id}" class="pc-bulk-result" style="padding:0.25rem 0.35rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+          <option value="">—</option><option value="Confirmed Pregnant">✅ Pregnant</option><option value="Not Pregnant">❌ Open</option>
+        </select>
+      </td>
+      <td style="padding:0.4rem 0.5rem">
+        <input type="number" data-rec="${r.id}" class="pc-bulk-fetal" min="0" placeholder="fetuses" style="width:65px;padding:0.25rem 0.35rem;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+      </td></tr>`;
+  }).join('');
+  showModal(`
+    <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="font-size:0.75rem;color:var(--text3);margin-bottom:0.5rem">Green rows = 40–65 days post-breeding (ideal check window)</div>
+    <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="position:sticky;top:0;background:var(--surface2);z-index:1"><tr>
+          <th style="padding:0.35rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Animal</th>
+          <th style="padding:0.35rem 0.75rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Bred</th>
+          <th style="padding:0.35rem 0.5rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Result</th>
+          <th style="padding:0.35rem 0.5rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Fetuses</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save All</button>
+    </div>`, true);
+}
+
+async function saveBulkPregCheck() {
+  const results = [...document.querySelectorAll('.pc-bulk-result')].filter(s => s.value);
+  if (results.length === 0) { toast('No results entered'); return; }
+  let saved = 0;
+  for (const sel of results) {
+    const recId = sel.dataset.rec;
+    const outcome = sel.value;
+    const fetal = document.querySelector(`.pc-bulk-fetal[data-rec="${recId}"]`)?.value;
+    const rec = (window._dash?.activeBreedRecs||[]).find(r=>r.id===recId);
+    const payload = { outcome };
+    if (fetal) payload.fetal_count = parseInt(fetal);
+    if (outcome === 'Confirmed Pregnant' && rec?.breeding_date) payload.expected_lamb_date = new Date(new Date(rec.breeding_date+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
+    await db.from('breeding_records').update(payload).eq('id', recId);
+    saved++;
+  }
+  toast(`${saved} preg check${saved!==1?'s':''} saved`); closeModal(); renderDashboard();
+}
+
 let _qeBatchMode = false;
 let _qeType = null;
 
@@ -950,14 +1206,13 @@ function openBulkEntry(type) {
           <button type="button" onclick="addBulkProduct()" style="font-size:0.72rem;color:var(--accent);background:none;border:none;cursor:pointer;font-weight:600">+ Add Another</button>
         </div>
         <div id="bulk-products-list">
-          <div class="bulk-product-row" style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.35rem">
-            <input class="bulk-prod-name" list="bulk-product-list-1" placeholder="Vaccine or medication…" style="flex:2;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-            <datalist id="bulk-product-list-1">${productListHtml}</datalist>
-            <input class="bulk-prod-dose" placeholder="Dose" style="width:70px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-            <select class="bulk-prod-route" style="flex:1;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select>
+          <div class="bulk-product-row" style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap">
+            <select class="bulk-prod-name" style="flex:2;min-width:160px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="autoFillBulkWithdrawal(this)">${buildProductDropdown('')}</select>
+            <input class="bulk-prod-dose" placeholder="ml" style="width:55px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            <select class="bulk-prod-route" style="flex:1;min-width:90px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select>
+            <input class="bulk-prod-wd" type="number" placeholder="WD days" min="0" title="Withdrawal days" style="width:70px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
           </div>
         </div>
-        <datalist id="bulk-product-list-shared">${productListHtml}</datalist>
       </div>`;
   }
 
@@ -1082,6 +1337,15 @@ function bulkSelectByFilter(field, value, btn) {
   });
 }
 
+function autoFillBulkWithdrawal(el) {
+  const row = el.closest('.bulk-product-row');
+  if (!row) return;
+  const wdInput = row.querySelector('.bulk-prod-wd');
+  if (!wdInput) return;
+  const days = lookupWithdrawalDays(el.value);
+  if (days !== null) wdInput.value = days;
+}
+
 function addBulkProduct() {
   const container = document.getElementById('bulk-products-list');
   if (!container) return;
@@ -1090,20 +1354,21 @@ function addBulkProduct() {
   div.className = 'bulk-product-row';
   div.style.cssText = 'display:flex;gap:0.4rem;align-items:center;margin-bottom:0.35rem';
   div.innerHTML = `
-    <input class="bulk-prod-name" list="bulk-product-list-shared" placeholder="Vaccine or medication…" style="flex:2;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-    <input class="bulk-prod-dose" placeholder="Dose" style="width:70px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-    <select class="bulk-prod-route" style="flex:1;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select>
+    <select class="bulk-prod-name" style="flex:2;min-width:160px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" onchange="autoFillBulkWithdrawal(this)">${buildProductDropdown('')}</select>
+    <input class="bulk-prod-dose" placeholder="ml" style="width:55px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+    <select class="bulk-prod-route" style="flex:1;min-width:90px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select>
+    <input class="bulk-prod-wd" type="number" placeholder="WD days" min="0" title="Withdrawal days" style="width:70px;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
     <button type="button" onclick="this.parentNode.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;flex-shrink:0">✕</button>`;
   container.appendChild(div);
 }
 
 function getBulkProducts() {
-  // Returns array of {name, dose, route} for all filled product rows
   return [...document.querySelectorAll('.bulk-product-row')].map(row => ({
-    name: row.querySelector('.bulk-prod-name')?.value?.trim() || '',
+    name: (row.querySelector('.bulk-prod-name')?.value || '').trim(),
     dose: row.querySelector('.bulk-prod-dose')?.value?.trim() || '',
     route: row.querySelector('.bulk-prod-route')?.value || '',
-  })).filter(p => p.name);
+    withdrawalDays: parseInt(row.querySelector('.bulk-prod-wd')?.value) || 0,
+  })).filter(p => p.name && p.name !== '— Select product —');
 }
 
 async function saveBulkEntry(type) {
@@ -1127,9 +1392,11 @@ async function saveBulkEntry(type) {
     const inserts = [];
     checked.forEach(lambId => {
       prods.forEach(p => {
+        const wdDate = p.withdrawalDays > 0 && date ? new Date(new Date(date+'T12:00:00').getTime()+p.withdrawalDays*864e5).toISOString().slice(0,10) : null;
         inserts.push({
           lamb_id: lambId, date,
           product: p.name, dose: p.dose, route: p.route,
+          withdrawal_days: p.withdrawalDays||null, withdrawal_date: wdDate,
           notes: document.querySelector(`.bulk-notes[data-id="${lambId}"]`)?.value || '',
           type: 'medication'
         });
@@ -1140,6 +1407,98 @@ async function saveBulkEntry(type) {
   }
   closeModal();
   renderDashboard();
+}
+
+function openQuickLambing(lambId, breedingRecordId) {
+  const lamb = lambById[lambId];
+  const today = new Date().toISOString().slice(0,10);
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">🐣 Record Lambing — <span style="color:var(--accent)">${lamb?.name||'?'}</span></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="row">
+      <div class="field"><label>Birth Date</label><input type="date" id="qe-date" value="${today}"></div>
+      <div class="field"><label>Total Born</label><input type="number" id="qe-born" min="0" placeholder="e.g. 2" style="font-size:1.1rem;font-weight:600" autofocus></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Alive</label><input type="number" id="qe-alive" min="0" placeholder="e.g. 2"></div>
+      <div class="field"><label>Males</label><input type="number" id="qe-males" min="0" placeholder="0"></div>
+      <div class="field"><label>Females</label><input type="number" id="qe-females" min="0" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="qe-notes" placeholder="Birth weights, complications…"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuickLambing('${lambId}','${breedingRecordId}')">Save Lambing</button>
+    </div>`);
+}
+
+async function saveQuickLambing(lambId, breedingRecordId) {
+  const born = parseInt(document.getElementById('qe-born')?.value) || 0;
+  if (!born) { toast('Enter number born'); return; }
+  const date = document.getElementById('qe-date')?.value || new Date().toISOString().slice(0,10);
+  const alive = parseInt(document.getElementById('qe-alive')?.value) || born;
+  const males = parseInt(document.getElementById('qe-males')?.value) || 0;
+  const females = parseInt(document.getElementById('qe-females')?.value) || 0;
+  const notes = document.getElementById('qe-notes')?.value || '';
+  const lamb = lambById[lambId];
+
+  let recId = breedingRecordId;
+  if (!recId) {
+    // Fall back to finding the most recent confirmed pregnant record
+    const { data } = await db.from('breeding_records').select('id').eq('lamb_id', lambId).eq('outcome', 'Confirmed Pregnant').order('expected_lamb_date').limit(1).single();
+    recId = data?.id;
+  }
+  if (recId) {
+    await db.from('breeding_records').update({ outcome: 'Lamb Born', actual_lamb_date: date, lamb_count: born, lamb_notes: notes }).eq('id', recId);
+    await db.from('breeding_results').insert({ breeding_id: recId, lamb_id: lambId, birth_date: date, num_born: born, num_alive: alive, num_males: males, num_females: females, notes });
+  }
+  toast(`🐣 ${lamb?.name} — ${born} lamb${born!==1?'s':''} recorded`);
+  closeModal();
+  renderDashboard();
+}
+
+function renderQeProductsList() {
+  const el = document.getElementById('qe-products-list');
+  if (!el) return;
+  el.innerHTML = (window._qeProducts||[]).map((p, i) => `
+    <div style="display:flex;gap:0.4rem;align-items:flex-end;margin-bottom:0.4rem;flex-wrap:wrap">
+      <div style="flex:2;min-width:160px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Product</div>`:''}
+        <select style="width:100%;padding:0.35rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          onchange="window._qeProducts[${i}].name=this.value;autoFillQeWithdrawal(${i},this.value)">${buildProductDropdown(p.name||'')}</select>
+      </div>
+      <div style="width:60px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Dose ml</div>`:''}
+        <input placeholder="ml" value="${p.dose||''}" style="width:100%;padding:0.35rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" oninput="window._qeProducts[${i}].dose=this.value">
+      </div>
+      <div style="flex:1;min-width:90px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Route</div>`:''}
+        <select style="width:100%;padding:0.35rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          onchange="window._qeProducts[${i}].route=this.value">${ROUTES.map(r=>`<option ${p.route===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      <div style="width:65px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">WD Days</div>`:''}
+        <input type="number" min="0" placeholder="days" value="${p.withdrawalDays??''}" style="width:100%;padding:0.35rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" oninput="window._qeProducts[${i}].withdrawalDays=this.value?parseInt(this.value):null">
+      </div>
+      <div style="padding-bottom:0.2rem">
+        ${i>0?`<button type="button" onclick="window._qeProducts.splice(${i},1);renderQeProductsList()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">✕</button>`:'<div style="width:1rem"></div>'}
+      </div>
+    </div>`).join('');
+}
+
+function addQeProduct() {
+  window._qeProducts = window._qeProducts || [];
+  window._qeProducts.push({ name:'', dose:'', route:'', withdrawalDays:null });
+  renderQeProductsList();
+}
+
+function autoFillQeWithdrawal(i, productName) {
+  const days = lookupWithdrawalDays(productName);
+  if (days !== null && window._qeProducts[i] && !window._qeProducts[i].withdrawalDays) {
+    window._qeProducts[i].withdrawalDays = days;
+    renderQeProductsList();
+  }
 }
 
 function openQuickEntry(type) {
@@ -1173,6 +1532,7 @@ function openQuickEntry(type) {
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveQuickEntry()">Save</button>
     </div>`);
+  if (type === 'treatment') renderQeProductsList();
 }
 
 function renderQeFields(type) {
@@ -1184,18 +1544,17 @@ function renderQeFields(type) {
     </div>
     <div class="field"><label>Notes</label><input id="qe-notes" placeholder="Optional"></div>`;
   if (type === 'treatment') {
-    const products = [...new Set([...(customProducts.vaccine||[]), ...(customProducts.medication||[]), ...BASE_VACCINES, ...BASE_MEDS])].sort();
+    window._qeProducts = [{ name:'', dose:'', route:'', withdrawalDays:null }];
     return `
     <div class="row">
-      <div class="field"><label>Product</label>
-        <input id="qe-product" list="qe-product-list" placeholder="Vaccine or medication…">
-        <datalist id="qe-product-list">${products.map(p=>`<option value="${p}">`).join('')}</datalist>
-      </div>
       <div class="field"><label>Date</label><input type="date" id="qe-date" value="${today}"></div>
     </div>
-    <div class="row">
-      <div class="field"><label>Dose</label><input id="qe-dose" placeholder="e.g. 2ml"></div>
-      <div class="field"><label>Route</label><select id="qe-route">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select></div>
+    <div style="margin-bottom:0.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--text2)">Products / Treatments</label>
+        <button type="button" onclick="addQeProduct()" style="font-size:0.72rem;color:var(--accent);background:none;border:none;cursor:pointer;font-weight:600">+ Add Another</button>
+      </div>
+      <div id="qe-products-list"></div>
     </div>
     <div class="field"><label>Notes</label><input id="qe-notes" placeholder="Optional"></div>`;
   }
@@ -1238,12 +1597,15 @@ async function saveQuickEntry() {
     toast(`⚖️ ${lamb?.name} — ${weight} lbs saved`);
 
   } else if (_qeType === 'treatment') {
-    const product = document.getElementById('qe-product')?.value?.trim();
-    if (!product) { toast('Enter a product'); return; }
-    const dose = document.getElementById('qe-dose')?.value || '';
-    const route = document.getElementById('qe-route')?.value || '';
-    await db.from('health_records').insert({ lamb_id: lambId, date, product, dose, route, notes, type: 'medication' });
-    toast(`💊 ${lamb?.name} — ${product} saved`);
+    const prods = (window._qeProducts||[]).filter(p => p.name && p.name !== '— Select product —');
+    if (prods.length === 0) { toast('Select a product'); return; }
+    const vaccineNames = new Set([...BASE_VACCINES, ...(customProducts.vaccine||[])].map(s=>s.toLowerCase()));
+    const inserts = prods.map(p => {
+      const wdDate = p.withdrawalDays > 0 ? new Date(new Date(date+'T12:00:00').getTime()+p.withdrawalDays*864e5).toISOString().slice(0,10) : null;
+      return { lamb_id: lambId, date, product: p.name, dose: p.dose||'', route: p.route||'', notes, type: vaccineNames.has(p.name.toLowerCase()) ? 'vaccine' : 'medication', withdrawal_days: p.withdrawalDays||null, withdrawal_date: wdDate };
+    });
+    await db.from('health_records').insert(inserts);
+    toast(`💊 ${lamb?.name} — ${prods.length} treatment${prods.length!==1?'s':''} saved`);
 
   } else if (_qeType === 'lambing') {
     const born = parseInt(document.getElementById('qe-born')?.value) || 0;
@@ -1262,7 +1624,7 @@ async function saveQuickEntry() {
 
   if (_qeBatchMode) {
     // Clear inputs, keep animal list and type, ready for next entry
-    const weightEl = document.getElementById('qe-weight');
+    if (_qeType === 'treatment') { window._qeProducts = [{ name:'', dose:'', route:'', withdrawalDays:null }]; renderQeProductsList(); }
     const bornEl = document.getElementById('qe-born');
     const aliveEl = document.getElementById('qe-alive');
     const malesEl = document.getElementById('qe-males');
@@ -1623,7 +1985,7 @@ async function renderLambDetail() {
           <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text3)">
             Sire: ${sireDisplay} &nbsp;·&nbsp; Dam: ${damDisplay}
           </div>
-          ${lamb.status!=='Active'&&lamb.status_date?`<div style="margin-top:0.4rem;font-size:0.8rem;color:var(--text3)">${lamb.status} ${lamb.status_date}${lamb.status_note?' — '+lamb.status_note:''}</div>`:''}
+          ${lamb.status!=='Active'&&lamb.status_date?`<div style="margin-top:0.4rem;font-size:0.8rem;color:var(--text3)">${lamb.status} ${lamb.status_date}${lamb.sale_price?` · <span style="color:#15803d;font-weight:600">$${parseFloat(lamb.sale_price).toLocaleString('en-US',{minimumFractionDigits:2})}</span>`:''}${lamb.buyer_name?' · '+lamb.buyer_name:''}${lamb.sale_method?' · '+lamb.sale_method:''}${lamb.status_note?' — '+lamb.status_note:''}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
           <button class="btn btn-secondary btn-sm" onclick="openEditLamb('${lamb.id}')">✏️ Edit Profile</button>
@@ -1706,6 +2068,7 @@ async function renderHealthTab(el) {
                 <span>📅 ${r.date}${r.end_date?' → '+r.end_date:''}</span>
                 ${r.dose?`<span>⚖️ ${r.dose}</span>`:''}
                 ${r.route?`<span>💉 ${r.route}</span>`:''}
+                ${r.withdrawal_date?(()=>{ const today=new Date().toISOString().slice(0,10); const active=r.withdrawal_date>=today; return `<span style="color:${active?'#dc2626':'#15803d'};font-weight:600">⏱ Withdrawal: ${r.withdrawal_date}${active?' ⚠️':' ✓'}</span>`; })():''}
               </div>
               ${r.notes?`<div style="font-size:0.78rem;color:var(--text3);margin-top:0.2rem;font-style:italic">${r.notes}</div>`:''}
             </div>
@@ -7131,6 +7494,68 @@ async function deleteSupply(id) {
   toast('Deleted'); renderSupplies();
 }
 
+// ── SALES ─────────────────────────────────────────────
+async function renderSales() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const sold = allLambs.filter(l => l.status === 'Sold').sort((a,b) => (b.status_date||'').localeCompare(a.status_date||''));
+  const totalRevenue = sold.reduce((s,l) => s + (parseFloat(l.sale_price)||0), 0);
+  const withPrice = sold.filter(l => l.sale_price);
+
+  mc.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">💰 Sales</div>
+    </div>
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.6rem;margin-bottom:1.25rem">
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--accent)">${sold.length}</div>
+        <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Animals Sold</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#15803d">$${totalRevenue.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+        <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Total Revenue</div>
+      </div>
+      <div class="card" style="padding:0.85rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#2563eb">${withPrice.length > 0 ? '$'+(totalRevenue/withPrice.length).toLocaleString('en-US',{minimumFractionDigits:2}) : '—'}</div>
+        <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Avg Sale Price</div>
+      </div>
+    </div>
+    <!-- Sales table -->
+    ${sold.length === 0 ? `<div class="empty"><div class="empty-icon">💰</div><h3>No sales recorded yet</h3><p>Mark animals as Sold from their profile page</p></div>` : `
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+            <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Animal</th>
+            <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Sale Date</th>
+            <th style="padding:0.65rem 1rem;text-align:right;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Price</th>
+            <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Buyer</th>
+            <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Method</th>
+            <th style="padding:0.65rem 1rem;text-align:left;font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Notes</th>
+            <th style="padding:0.65rem 0.5rem"></th>
+          </tr></thead>
+          <tbody>
+            ${sold.map(l => `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showLamb('${l.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+              <td style="padding:0.65rem 1rem">
+                <div style="font-weight:600;color:var(--accent)">${l.name}${l.genetic_code?` <span style="font-size:0.72rem;font-weight:700">${l.genetic_code}</span>`:''}</div>
+                ${l.ear_tag?`<div style="font-size:0.72rem;color:var(--text3)">#${l.ear_tag}</div>`:''}
+              </td>
+              <td style="padding:0.65rem 1rem;color:var(--text2)">${l.status_date||'—'}</td>
+              <td style="padding:0.65rem 1rem;text-align:right;font-weight:600;color:${l.sale_price?'#15803d':'var(--text3)'}">${l.sale_price?'$'+parseFloat(l.sale_price).toLocaleString('en-US',{minimumFractionDigits:2}):'—'}</td>
+              <td style="padding:0.65rem 1rem;color:var(--text2)">${l.buyer_name||'—'}</td>
+              <td style="padding:0.65rem 1rem;color:var(--text2)">${l.sale_method||'—'}</td>
+              <td style="padding:0.65rem 1rem;color:var(--text3);font-size:0.78rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.status_note||''}</td>
+              <td style="padding:0.65rem 0.5rem;text-align:center" onclick="event.stopPropagation()">
+                <button class="btn-icon btn-sm" onclick="openStatusChange('${l.id}','Sold')" title="Edit sale">✏️</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`}`;
+}
+
 // ── INVOICES ──────────────────────────────────────────
 
 async function renderInvoices() {
@@ -8579,18 +9004,77 @@ async function saveLamb(id) {
 
 // ── STATUS CHANGE ─────────────────────────────────────
 function openStatusChange(id, status) {
+  if (status === 'Sold') {
+    const lamb = lambById[id];
+    showModal(`
+      <div class="modal-header"><div class="modal-title">💰 Record Sale — <span style="color:var(--accent)">${lamb?.name||'?'}</span></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="row">
+        <div class="field"><label>Sale Date</label><input type="date" id="sc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Sale Price ($)</label><input type="number" id="sc-price" min="0" step="0.01" placeholder="e.g. 500.00" style="font-size:1.05rem;font-weight:600"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Buyer Name</label><input id="sc-buyer" placeholder="Full name"></div>
+        <div class="field"><label>Buyer Phone / Email</label><input id="sc-buyer-contact" placeholder="Optional"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Sale Method</label>
+          <select id="sc-method">
+            <option value="">— Select —</option>
+            <option>Private Sale</option>
+            <option>Show Sale</option>
+            <option>Auction</option>
+            <option>Club Lamb Sale</option>
+            <option>Online</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field"><label>Destination</label><input id="sc-destination" placeholder="Farm, city, state…"></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="sc-note" placeholder="Any additional details…" rows="2"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-secondary" onclick="saveStatus('${id}','Sold',true)">Save + Create Invoice</button>
+        <button class="btn btn-primary" onclick="saveStatus('${id}','Sold',false)">Mark Sold</button>
+      </div>`);
+    return;
+  }
   showModal(`
     <div class="modal-header"><div class="modal-title">Mark as ${status}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="field"><label>Date</label><input type="date" id="sc-date" value="${new Date().toISOString().slice(0,10)}"></div>
-    <div class="field"><label>Notes ${status==='Sold'?'(buyer, price, etc.)':'(cause, notes)'}</label><textarea id="sc-note" placeholder="Optional notes…"></textarea></div>
+    <div class="field"><label>Notes</label><textarea id="sc-note" placeholder="Optional notes…"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveStatus('${id}','${status}')">${status==='Sold'?'Mark Sold':'Mark Deceased'}</button>
     </div>`);
 }
-async function saveStatus(id, status) {
-  await db.from('lambs').update({ status, status_date: v('sc-date'), status_note: v('sc-note') }).eq('id', id);
-  toast(`Marked as ${status}`); closeModal(); await loadLambs(); renderLambDetail();
+
+async function saveStatus(id, status, createInvoice) {
+  const date = v('sc-date') || new Date().toISOString().slice(0,10);
+  const note = v('sc-note') || '';
+  if (status === 'Sold') {
+    const price = parseFloat(v('sc-price')) || null;
+    const buyer = v('sc-buyer') || '';
+    const contact = v('sc-buyer-contact') || '';
+    const method = v('sc-method') || '';
+    const destination = v('sc-destination') || '';
+    const saleNote = [buyer, contact, method, destination, note].filter(Boolean).join(' · ');
+    await db.from('lambs').update({ status, status_date: date, status_note: saleNote, sale_price: price, buyer_name: buyer, sale_method: method }).eq('id', id);
+    if (createInvoice && price) {
+      const lamb = lambById[id];
+      const { data: inv } = await db.from('invoices').insert({ date, buyer_name: buyer, buyer_phone: contact, notes: note, status: 'Draft' }).select().single();
+      if (inv?.id) {
+        await db.from('invoice_items').insert({ invoice_id: inv.id, lamb_id: id, description: `${lamb?.name||'Lamb'}${lamb?.ear_tag?' #'+lamb.ear_tag:''}${method?' — '+method:''}`, quantity: 1, unit_price: price, total: price });
+        toast('Sale saved + invoice created'); closeModal(); await loadLambs();
+        showPage('invoices');
+        return;
+      }
+    }
+    toast('Sale saved');
+  } else {
+    await db.from('lambs').update({ status, status_date: date, status_note: note }).eq('id', id);
+    toast(`Marked as ${status}`);
+  }
+  closeModal(); await loadLambs(); renderLambDetail();
 }
 
 async function reactivateLamb(id) {
@@ -8625,30 +9109,109 @@ async function deleteLamb(id) {
 }
 
 // ── HEALTH RECORD ─────────────────────────────────────
+// Withdrawal period lookup table for sheep (meat withdrawal, oral/SQ unless noted)
+// Sources: label data, FARAD, OSU Small Ruminant, sheep101.info
+// These are reference values only — always verify with your veterinarian
+const WITHDRAWAL_DAYS = {
+  // Dewormers / Anthelmintics
+  'ivermectin (dewormer)': 11, 'ivermectin': 11,
+  'ivomec': 11,
+  'fenbendazole': 6, 'safeguard': 6,
+  'coccidiostat': 0,
+  'moxidectin': 14, 'cydectin': 14,
+  'levamisole': 3, 'levasole': 3,
+  'albendazole': 7, 'valbazen': 7,
+  'oxfendazole': 7, 'synanthic': 7,
+  // Antibiotics
+  'penicillin': 28, 'penicillin g': 28,
+  'la-200 (oxytetracycline)': 35, 'la-200': 35, 'oxytetracycline': 35, 'bio-mycin 200': 35,
+  'tetracycline': 28,
+  'chlortetracycline': 10,
+  'tylan 200 (tylosin)': 21, 'tylosin': 21,
+  'nuflor': 42, 'florfenicol': 42,
+  'naxcel (ceftiofur)': 5, 'naxcel': 5, 'ceftiofur': 5,
+  'excenel': 21,
+  'exceed': 28,
+  'zactran': 90,
+  'draxxin': 21,
+  'sulfamethazine': 14,
+  'trimethoprim-sulfa': 10, 'trimethoprim sulfa': 10,
+  'spectinomycin': 5,
+  'dexamethasone': 28,
+  // NSAIDs / Pain
+  'banamine': 4, 'flunixin meglumine': 4, 'flunixin': 4,
+  'meloxicam': 3,
+  'aspirin': 1,
+  // Vitamins / Minerals
+  'vitamin b12': 0, 'b12': 0,
+  'selenium/vit e': 30, 'selenium': 30, 'bo-se': 30,
+  'vitamin e': 0,
+  // Vaccines (no withdrawal)
+  'cdt (clostridium/tetanus)': 0, 'cdtvaccine': 0,
+  'overeating disease': 0,
+  'foot rot': 0,
+  'caseous lymphadenitis (cl)': 0, 'cl vaccine': 0,
+  'rabies': 0,
+};
+
+function lookupWithdrawalDays(productName) {
+  if (!productName) return null;
+  const key = productName.toLowerCase().trim();
+  // Exact match
+  if (WITHDRAWAL_DAYS[key] !== undefined) return WITHDRAWAL_DAYS[key];
+  // Partial match — find any key that the product name includes or vice versa
+  for (const [k, days] of Object.entries(WITHDRAWAL_DAYS)) {
+    if (key.includes(k) || k.includes(key)) return days;
+  }
+  return null;
+}
+
+function autoFillWithdrawal() {
+  const product = document.getElementById('rec-product')?.value ||
+                  document.getElementById('qe-product')?.value || '';
+  if (!product || product === '__custom__') return;
+  const wdEl = document.getElementById('rec-withdrawal-days');
+  if (!wdEl) return;
+  const days = lookupWithdrawalDays(product);
+  if (days !== null) {
+    wdEl.value = days;
+    calcWithdrawal();
+    if (days === 0) {
+      const disp = document.getElementById('rec-withdrawal-date-display');
+      const hidden = document.getElementById('rec-withdrawal-date');
+      if (disp) { disp.textContent = 'No withdrawal required'; disp.style.color = '#15803d'; }
+      if (hidden) hidden.value = '';
+    }
+  }
+}
+
+function calcWithdrawal() {
+  const date = document.getElementById('rec-date')?.value;
+  const days = parseInt(document.getElementById('rec-withdrawal-days')?.value);
+  const display = document.getElementById('rec-withdrawal-date-display');
+  const hidden = document.getElementById('rec-withdrawal-date');
+  if (date && days > 0) {
+    const wd = new Date(new Date(date+'T12:00:00').getTime() + days*864e5).toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0,10);
+    if (display) { display.textContent = wd; display.style.color = wd >= today ? '#dc2626' : '#15803d'; }
+    if (hidden) hidden.value = wd;
+  } else {
+    if (display) { display.textContent = '—'; display.style.color = 'var(--text3)'; }
+    if (hidden) hidden.value = '';
+  }
+}
+
 function openAddRecord(rec) {
   const isEdit = !!rec;
-  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
-  const meds = [...BASE_MEDS, ...customProducts.medication];
-  const type = rec?.type || 'vaccine';
-  const opts = (type === 'vaccine' ? vaccines : meds).map(o=>`<option ${rec?.product===o?'selected':''}>${o}</option>`).join('');
-  window._recType = type;
-  window._recProducts = isEdit ? [] : [{ product:'', customName:'', saveCustom:false }];
+  window._recType = rec?.type || 'medication';
+  window._recProducts = isEdit ? [] : [{ product:'', customName:'', saveCustom:false, dose:'', route:'', withdrawalDays:null }];
 
   showModal(`
     <div class="modal-header"><div class="modal-title">${isEdit?'💊 Edit Health Record':'💊 Log Health Record'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div class="field"><label>Type</label>
-      <div style="display:flex;gap:0.5rem">
-        <button class="btn ${type==='vaccine'?'btn-primary':'btn-secondary'}" style="flex:1" onclick="switchRecordType('vaccine')">💉 Vaccine</button>
-        <button class="btn ${type==='medication'?'btn-primary':'btn-secondary'}" style="flex:1" onclick="switchRecordType('medication')">💊 Medication</button>
-      </div>
-    </div>
     ${isEdit ? `
       <div class="field" id="rec-product-field"><label>Product *</label>
-        <select id="rec-product" onchange="checkCustomProduct()">
-          <option value="">— Select —</option>
-          <optgroup label="Standard">${opts}</optgroup>
-          <optgroup label="My Products">${(type==='vaccine'?customProducts.vaccine:customProducts.medication).map(o=>`<option ${rec?.product===o?'selected':''}>${o}</option>`).join('')}</optgroup>
-          <option value="__custom__">+ Add custom product…</option>
+        <select id="rec-product" onchange="checkCustomProduct();autoFillWithdrawal()">
+          ${buildProductDropdown(rec?.product)}
         </select>
       </div>
       <div class="field" id="rec-custom-field" style="display:none"><label>Custom Product Name</label>
@@ -8663,13 +9226,27 @@ function openAddRecord(rec) {
       <button class="btn-icon" style="margin-bottom:0.75rem" onclick="addRecProduct()">+ Add Another Product</button>
     `}
     <div class="row">
-      <div class="field"><label>Start Date *</label><input type="date" id="rec-date" value="${rec?.date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Start Date *</label><input type="date" id="rec-date" value="${rec?.date||new Date().toISOString().slice(0,10)}" oninput="calcWithdrawal()${!isEdit?';renderRecProductsList()':''}"></div>
       <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="rec-end-date" value="${rec?.end_date||''}"></div>
     </div>
-    <div class="row">
-      <div class="field"><label>Dose</label><input id="rec-dose" value="${rec?.dose||''}" placeholder="e.g. 2ml"></div>
+    ${isEdit ? `<div class="row">
+      <div class="field"><label>Dose (ml)</label><input id="rec-dose" value="${rec?.dose||''}" placeholder="e.g. 2"></div>
       <div class="field"><label>Route</label><select id="rec-route">${ROUTES.map(r=>`<option ${rec?.route===r?'selected':''}>${r}</option>`).join('')}</select></div>
     </div>
+    <div class="row">
+      <div class="field">
+        <label>Withdrawal Period <span style="color:var(--text3);font-size:0.72rem">(days)</span></label>
+        <input type="number" id="rec-withdrawal-days" value="${rec?.withdrawal_days||''}" min="0" placeholder="e.g. 21" oninput="calcWithdrawal()">
+        <div style="font-size:0.68rem;color:var(--text3);margin-top:0.2rem">Auto-filled from reference data — verify with your vet</div>
+      </div>
+      <div class="field">
+        <label>Withdrawal Date</label>
+        <div id="rec-withdrawal-date-display" style="padding:0.4rem 0.5rem;font-size:0.85rem;font-weight:600;color:${rec?.withdrawal_date?'#dc2626':'var(--text3)'};background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);min-height:2.2rem;display:flex;align-items:center">
+          ${rec?.withdrawal_date || '—'}
+        </div>
+        <input type="hidden" id="rec-withdrawal-date" value="${rec?.withdrawal_date||''}">
+      </div>
+    </div>` : ''}
     <div class="field"><label>Notes</label><input id="rec-notes" value="${rec?.notes||''}" placeholder="Lot number, reactions…"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -8680,12 +9257,14 @@ function openAddRecord(rec) {
 }
 
 function buildProductDropdown(selectedVal) {
-  const type = window._recType || 'vaccine';
   const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
   const meds = [...BASE_MEDS, ...customProducts.medication];
-  const opts = (type==='vaccine'?vaccines:meds).map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('');
-  const customOpts = (type==='vaccine'?customProducts.vaccine:customProducts.medication).map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('');
-  return `<option value="">— Select —</option><optgroup label="Standard">${opts}</optgroup>${customOpts?`<optgroup label="My Products">${customOpts}</optgroup>`:''}<option value="__custom__">+ Add custom product…</option>`;
+  const myProducts = [...new Set([...customProducts.vaccine, ...customProducts.medication])];
+  return `<option value="">— Select product —</option>
+    <optgroup label="💉 Vaccines">${vaccines.map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('')}</optgroup>
+    <optgroup label="💊 Medications">${meds.map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('')}</optgroup>
+    ${myProducts.length?`<optgroup label="⭐ My Products">${myProducts.map(o=>`<option ${selectedVal===o?'selected':''}>${o}</option>`).join('')}</optgroup>`:''}
+    <option value="__custom__">+ Add custom product…</option>`;
 }
 
 function renderRecProductsList() {
@@ -8697,43 +9276,56 @@ function renderRecProductsList() {
         <span style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Product ${i+1}</span>
         ${i>0?`<button class="btn-icon" style="color:#c07070;border-color:#5a2a2a;font-size:0.72rem;padding:0.15rem 0.4rem" onclick="removeRecProduct(${i})">✕ Remove</button>`:''}
       </div>
-      <select style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;font-family:'Source Serif 4',serif" onchange="window._recProducts[${i}].product=this.value;window._recProducts[${i}].customName='';renderRecProductsList()">
+      <select style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;font-family:'Source Serif 4',serif;margin-bottom:0.4rem" onchange="window._recProducts[${i}].product=this.value;window._recProducts[${i}].customName='';autoFillRecProductWd(${i},this.value);renderRecProductsList()">
         ${buildProductDropdown(p.product)}
       </select>
       ${p.product==='__custom__'?`
-        <input style="width:100%;margin-top:0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;box-sizing:border-box" placeholder="Enter product name" value="${p.customName||''}" oninput="window._recProducts[${i}].customName=this.value">
-        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;cursor:pointer">
+        <input style="width:100%;margin-bottom:0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;box-sizing:border-box" placeholder="Enter product name" value="${p.customName||''}" oninput="window._recProducts[${i}].customName=this.value">
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;cursor:pointer">
           <input type="checkbox" ${p.saveCustom?'checked':''} onchange="window._recProducts[${i}].saveCustom=this.checked" style="accent-color:var(--accent);width:13px;height:13px">
           <span style="font-size:0.78rem;color:var(--text2)">Save to my product list</span>
         </label>
       `:''}
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:80px">
+          <input placeholder="ml" value="${p.dose||''}"
+            style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+            oninput="window._recProducts[${i}].dose=this.value">
+        </div>
+        <div style="flex:2;min-width:120px">
+          <div style="font-size:0.72rem;color:var(--text3);margin-bottom:0.2rem">Route</div>
+          <select style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+            onchange="window._recProducts[${i}].route=this.value">${ROUTES.map(r=>`<option ${p.route===r?'selected':''}>${r}</option>`).join('')}</select>
+        </div>
+        <div style="flex:1;min-width:70px">
+          <div style="font-size:0.72rem;color:var(--text3);margin-bottom:0.2rem">WD days</div>
+          <input type="number" min="0" placeholder="days" value="${p.withdrawalDays??''}"
+            style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+            oninput="window._recProducts[${i}].withdrawalDays=this.value?parseInt(this.value):null">
+        </div>
+        ${p.withdrawalDays>0?`<div style="display:flex;align-items:flex-end;padding-bottom:0.3rem;font-size:0.75rem;font-weight:600;color:#dc2626;white-space:nowrap">
+          ⏱ ${(()=>{const d=v('rec-date');return d?new Date(new Date(d+'T12:00:00').getTime()+p.withdrawalDays*864e5).toISOString().slice(0,10):'?';})()}
+        </div>`:''}
+      </div>
     </div>`).join('');
 }
 
+function autoFillRecProductWd(i, productName) {
+  if (!productName || productName === '__custom__') return;
+  const days = lookupWithdrawalDays(productName);
+  if (days !== null && window._recProducts[i]) {
+    window._recProducts[i].withdrawalDays = days;
+  }
+}
+
 function addRecProduct() {
-  window._recProducts.push({ product:'', customName:'', saveCustom:false });
+  window._recProducts.push({ product:'', customName:'', saveCustom:false, dose:'', route:'', withdrawalDays:null });
   renderRecProductsList();
 }
 
 function removeRecProduct(i) {
   window._recProducts.splice(i, 1);
   renderRecProductsList();
-}
-
-function switchRecordType(type) {
-  window._recType = type;
-  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
-  const meds = [...BASE_MEDS, ...customProducts.medication];
-  const opts = (type==='vaccine'?vaccines:meds).map(o=>`<option>${o}</option>`).join('');
-  // Update single product dropdown (edit mode)
-  const prodEl = document.getElementById('rec-product');
-  if (prodEl) prodEl.innerHTML = `<option value="">— Select —</option><optgroup label="Standard">${opts}</optgroup><option value="__custom__">+ Add custom product…</option>`;
-  // Update multi-product list (add mode)
-  if (window._recProducts) { window._recProducts.forEach(p => p.product=''); renderRecProductsList(); }
-  document.querySelectorAll('.modal .btn').forEach(b => {
-    if (b.textContent.includes('Vaccine')) b.className = `btn ${type==='vaccine'?'btn-primary':'btn-secondary'}`;
-    if (b.textContent.includes('Medication')) b.className = `btn ${type==='medication'?'btn-primary':'btn-secondary'}`;
-  });
 }
 
 function checkCustomProduct() {
@@ -8748,23 +9340,27 @@ async function openEditRecord(id) {
 }
 
 async function saveRecord(id) {
-  const type = window._recType || 'vaccine';
   const date = v('rec-date');
   const endDate = v('rec-end-date') || null;
   const dose = v('rec-dose');
   const route = v('rec-route');
   const notes = v('rec-notes');
+  const withdrawalDays = v('rec-withdrawal-days') ? parseInt(v('rec-withdrawal-days')) : null;
+  const withdrawalDate = v('rec-withdrawal-date') || null;
+
+  const vaccineNames = new Set([...BASE_VACCINES, ...customProducts.vaccine].map(s=>s.toLowerCase()));
+  const inferType = name => vaccineNames.has((name||'').toLowerCase()) ? 'vaccine' : 'medication';
 
   if (id) {
-    // Edit single record
     const productSel = document.getElementById('rec-product').value;
     let product = productSel === '__custom__' ? v('rec-custom-name') : productSel;
     if (!product) { toast('Select a product'); return; }
+    const type = inferType(product);
     if (productSel === '__custom__' && document.getElementById('rec-save-custom').checked) {
       await db.from('custom_products').insert({ type, name: product });
       await loadCustomProducts();
     }
-    await db.from('health_records').update({ lamb_id: currentLambId, type, product, date, end_date: endDate, dose, route, notes }).eq('id', id);
+    await db.from('health_records').update({ lamb_id: currentLambId, type, product, date, end_date: endDate, dose, route, notes, withdrawal_days: withdrawalDays, withdrawal_date: withdrawalDate }).eq('id', id);
     toast('Record saved');
   } else {
     // Add multiple products
@@ -8774,12 +9370,17 @@ async function saveRecord(id) {
       const name = p.product === '__custom__' ? p.customName.trim() : p.product;
       if (!name) continue;
       if (p.product === '__custom__' && p.saveCustom) {
-        await db.from('custom_products').insert({ type, name });
+        await db.from('custom_products').insert({ type: inferType(name), name });
       }
-      resolved.push(name);
+      resolved.push({ name, dose: p.dose||'', route: p.route||'', withdrawalDays: p.withdrawalDays ?? null });
     }
     if (resolved.length === 0) { toast('Select at least one product'); return; }
-    await db.from('health_records').insert(resolved.map(product => ({ lamb_id: currentLambId, type, product, date, end_date: endDate, dose, route, notes })));
+    const inserts = resolved.map(({ name: product, dose: pDose, route: pRoute, withdrawalDays }) => {
+      const wdDays = withdrawalDays ?? null;
+      const wdDate = wdDays > 0 && date ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
+      return { lamb_id: currentLambId, type: inferType(product), product, date, end_date: endDate, dose: pDose||'', route: pRoute||'', notes, withdrawal_days: wdDays, withdrawal_date: wdDate };
+    });
+    await db.from('health_records').insert(inserts);
     if (resolved.length > 1) { await loadCustomProducts(); toast(`${resolved.length} records saved`); }
     else toast('Record saved');
   }
@@ -9676,10 +10277,11 @@ function openFlockTreatment() {
   const activelambs = allLambs.filter(l => l.status === 'Active');
   const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
   const meds = [...BASE_MEDS, ...customProducts.medication];
+  const allProducts = [...new Set([...vaccines, ...meds])].sort();
   window._ftType = 'vaccine';
   window._ftAllLambs = activelambs;
+  window._ftProducts = [{ name:'', dose:'', route:'', withdrawalDays:null }];
 
-  // Build planning group options — only groups with members in active flock
   const groups = window._planGroups || [];
   const members = window._planMembers || [];
   const activeIds = new Set(activelambs.map(l => l.id));
@@ -9695,68 +10297,32 @@ function openFlockTreatment() {
       <div class="modal-title">💉 Flock Treatment</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div class="field"><label>Type</label>
-      <div style="display:flex;gap:0.5rem">
-        <button class="btn btn-primary" style="flex:1" id="ft-vax-btn" onclick="switchFTType('vaccine')">💉 Vaccine</button>
-        <button class="btn btn-secondary" style="flex:1" id="ft-med-btn" onclick="switchFTType('medication')">💊 Medication</button>
-      </div>
-    </div>
-    <div class="field"><label>Product *</label>
-      <select id="ft-product" onchange="checkFTCustom()">
-        <option value="">— Select —</option>
-        <optgroup label="Standard">${vaccines.map(o=>`<option>${o}</option>`).join('')}</optgroup>
-        ${customProducts.vaccine.length ? `<optgroup label="My Products">${customProducts.vaccine.map(o=>`<option>${o}</option>`).join('')}</optgroup>` : ''}
-        <option value="__custom__">+ Add custom product…</option>
-      </select>
-    </div>
-    <div class="field" id="ft-custom-field" style="display:none"><label>Custom Product Name</label>
-      <input id="ft-custom-name" placeholder="Enter product name">
-      <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer">
-        <input type="checkbox" id="ft-save-custom" style="accent-color:var(--accent);width:14px;height:14px">
-        <span style="font-size:0.82rem;color:var(--text2)">Save to my product list</span>
-      </label>
-    </div>
-    <div class="field"><label>Start Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
     <div class="row">
+      <div class="field"><label>Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="ft-end-date"></div>
-      <div class="field"><label>Dose</label><input id="ft-dose" placeholder="e.g. 2ml"></div>
     </div>
-    <div class="field"><label>Route</label><select id="ft-route">${ROUTES.map(r=>`<option>${r}</option>`).join('')}</select></div>
+    <!-- Multi-product list -->
+    <div style="margin-bottom:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--text2)">Products / Treatments</label>
+        <button type="button" onclick="addFTProduct()" style="font-size:0.72rem;color:var(--accent);background:none;border:none;cursor:pointer;font-weight:600">+ Add Another</button>
+      </div>
+      <div id="ft-products-list"></div>
+    </div>
     <div class="field"><label>Notes</label><input id="ft-notes" placeholder="Lot number, instructions…"></div>
     <div class="field">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
         <label style="margin:0">Select Animals *</label>
-        <div style="display:flex;gap:0.3rem">
+        <div style="display:flex;gap:0.3rem;align-items:center">
           <button class="btn-icon btn-sm" onclick="ftCheckVisible(true)">✓ All</button>
           <button class="btn-icon btn-sm" onclick="ftCheckVisible(false)">✕ None</button>
+          <input id="ft-search" placeholder="Search…" oninput="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:80px">
+          <select id="ft-sex-filter" onchange="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All sex</option><option>Ewe</option><option>Ram</option><option>Wether</option></select>
+          <select id="ft-flock-filter" onchange="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All type</option><option>Show</option><option>Breeding</option></select>
+          ${groupOpts ? `<select id="ft-group-filter" onchange="ftGroupSelected()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All groups</option>${groupOpts}</select>` : ''}
         </div>
       </div>
-      <div style="display:flex;gap:0.35rem;margin-bottom:0.4rem;flex-wrap:wrap">
-        <input id="ft-search" placeholder="Search..." oninput="ftFilterList()" style="padding:0.3rem 0.55rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
-        <select id="ft-flock-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-          <option value="">All Flocks</option>
-          <option value="Show">Show</option>
-          <option value="Breeding">Breeding</option>
-          <option value="Both">Both</option>
-        </select>
-        <select id="ft-sex-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-          <option value="">All Sexes</option>
-          <option value="Ewe">Ewes</option>
-          <option value="Wether">Wethers</option>
-          <option value="Ram">Rams</option>
-        </select>
-        <select id="ft-role-filter" onchange="ftFilterList()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-          <option value="">All Roles</option>
-          <option value="Embryo Donor">Donors</option>
-          <option value="Embryo Recipient">Recipients</option>
-          <option value="Both">Both</option>
-          <option value="Standard">Standard</option>
-        </select>
-        ${groupOpts ? `<select id="ft-group-filter" onchange="ftGroupSelected()" style="font-size:0.8rem;padding:0.3rem 0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-          <option value="">All Groups</option>${groupOpts}
-        </select>` : ''}
-      </div>
-      <div id="ft-lamb-list" style="height:200px;overflow-y:scroll;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem">
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.25rem 0.5rem">
         ${activelambs.map(l => `
           <label id="ft-row-${l.id}" data-flock="${l.flock_type||''}" data-sex="${l.sex||''}" data-name="${l.name.toLowerCase()}" data-tag="${(l.ear_tag||'').toLowerCase()}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;width:100%;box-sizing:border-box">
             <input type="checkbox" class="ft-lamb-check" value="${l.id}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
@@ -9769,6 +10335,55 @@ function openFlockTreatment() {
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveFlockTreatment()">Save Treatment</button>
     </div>`, true);
+  renderFTProductsList();
+}
+
+
+function renderFTProductsList() {
+  const el = document.getElementById('ft-products-list');
+  if (!el) return;
+  el.innerHTML = (window._ftProducts||[]).map((p, i) => `
+    <div style="display:flex;gap:0.4rem;align-items:flex-end;margin-bottom:0.5rem;flex-wrap:wrap">
+      <div style="flex:2;min-width:160px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Product</div>`:''}
+        <select class="ft-prod-name" style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          onchange="window._ftProducts[${i}].name=this.value;autoFillFTWithdrawal(${i},this.value)">${buildProductDropdown(p.name||'')}</select>
+      </div>
+      <div style="width:65px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Dose ml</div>`:''}
+        <input placeholder="ml" value="${p.dose||''}"
+          style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          oninput="window._ftProducts[${i}].dose=this.value">
+      </div>
+      <div style="flex:1;min-width:90px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Route</div>`:''}
+        <select style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          onchange="window._ftProducts[${i}].route=this.value">${ROUTES.map(r=>`<option ${p.route===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      <div style="width:70px">
+        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">WD Days</div>`:''}
+        <input type="number" min="0" placeholder="days" value="${p.withdrawalDays??''}"
+          style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
+          oninput="window._ftProducts[${i}].withdrawalDays=this.value?parseInt(this.value):null">
+      </div>
+      <div style="padding-bottom:0.2rem">
+        ${i>0?`<button type="button" onclick="window._ftProducts.splice(${i},1);renderFTProductsList()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">✕</button>`:'<div style="width:1.2rem"></div>'}
+      </div>
+    </div>`).join('');
+}
+
+function addFTProduct() {
+  window._ftProducts = window._ftProducts || [];
+  window._ftProducts.push({ name:'', dose:'', route:'', withdrawalDays:null });
+  renderFTProductsList();
+}
+
+function autoFillFTWithdrawal(i, productName) {
+  const days = lookupWithdrawalDays(productName);
+  if (days !== null && window._ftProducts[i] && !window._ftProducts[i].withdrawalDays) {
+    window._ftProducts[i].withdrawalDays = days;
+    renderFTProductsList();
+  }
 }
 
 function ftGroupSelected() {
@@ -9818,51 +10433,27 @@ function ftCheckVisible(checked) {
   });
 }
 
-function switchFTType(type) {
-  window._ftType = type;
-  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
-  const meds = [...BASE_MEDS, ...customProducts.medication];
-  const opts = (type === 'vaccine' ? vaccines : meds);
-  const customList = (type === 'vaccine' ? customProducts.vaccine : customProducts.medication);
-  document.getElementById('ft-product').innerHTML = `
-    <option value="">— Select —</option>
-    <optgroup label="Standard">${opts.map(o=>`<option>${o}</option>`).join('')}</optgroup>
-    ${customList.length ? `<optgroup label="My Products">${customList.map(o=>`<option>${o}</option>`).join('')}</optgroup>` : ''}
-    <option value="__custom__">+ Add custom product…</option>`;
-  document.getElementById('ft-vax-btn').className = `btn ${type==='vaccine'?'btn-primary':'btn-secondary'}`;
-  document.getElementById('ft-med-btn').className = `btn ${type==='medication'?'btn-primary':'btn-secondary'}`;
-  document.getElementById('ft-custom-field').style.display = 'none';
-}
-
-function checkFTCustom() {
-  document.getElementById('ft-custom-field').style.display =
-    document.getElementById('ft-product').value === '__custom__' ? '' : 'none';
-}
-
 async function saveFlockTreatment() {
-  const type = window._ftType || 'vaccine';
-  const productSel = document.getElementById('ft-product').value;
-  let product = productSel === '__custom__' ? v('ft-custom-name') : productSel;
-  if (!product) { toast('Select a product'); return; }
-
+  const prods = (window._ftProducts||[]).filter(p => p.name?.trim());
+  if (prods.length === 0) { toast('Enter at least one product'); return; }
   const selected = [...document.querySelectorAll('.ft-lamb-check:checked')].map(c => c.value);
   if (selected.length === 0) { toast('Select at least one lamb'); return; }
 
-  if (productSel === '__custom__' && document.getElementById('ft-save-custom').checked) {
-    await db.from('custom_products').insert({ type, name: product });
-    await loadCustomProducts();
-  }
-
   const date = v('ft-date');
   const endDate = v('ft-end-date') || null;
-  const dose = v('ft-dose');
-  const route = v('ft-route');
   const notes = v('ft-notes');
 
-  const records = selected.map(lambId => ({ lamb_id: lambId, type, product, date, end_date: endDate, dose, route, notes }));
+  const records = [];
+  selected.forEach(lambId => {
+    prods.forEach(p => {
+      const wdDays = p.withdrawalDays || null;
+      const wdDate = wdDays > 0 && date ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
+      const type = [...BASE_VACCINES, ...customProducts.vaccine].includes(p.name) ? 'vaccine' : 'medication';
+      records.push({ lamb_id: lambId, type, product: p.name.trim(), date, end_date: endDate, dose: p.dose||'', route: p.route||'', notes, withdrawal_days: wdDays, withdrawal_date: wdDate });
+    });
+  });
   await db.from('health_records').insert(records);
-
-  toast(`Treatment logged for ${selected.length} lamb${selected.length !== 1 ? 's' : ''}`);
+  toast(`Treatment logged: ${selected.length} animal${selected.length!==1?'s':''} × ${prods.length} product${prods.length!==1?'s':''}`);
   closeModal();
 }
 
