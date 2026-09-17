@@ -3089,7 +3089,7 @@ async function restoreSemenInventory(ramId, location, straws, referenceType, ref
 }
 
 function getSemenOptionsForRam(ramId, selectedLoc) {
-  const inv = allSemenInventory.filter(i => i.ai_ram_id === ramId && i.straws > 0);
+  const inv = allSemenInventory.filter(i => i.ai_ram_id === ramId && (i.straws > 0 || i.location === selectedLoc));
   if (inv.length === 0) return '<option value="">No inventory available</option>';
   return inv.map(i => `<option value="${i.location}" ${selectedLoc===i.location?'selected':''}>${i.location} (${i.straws} straws)</option>`).join('');
 }
@@ -9417,7 +9417,7 @@ function openAddBreeding(rec) {
   const outcomes = ['Pending','Confirmed Pregnant','Not Pregnant','Lamb Born','Failed'];
   const aiSireId = rec?.ai_sire_id || '';
   const semenOpts = aiSireId ? getSemenOptionsForRam(aiSireId, rec?.semen_location) : '<option value="">— Select sire first —</option>';
-  const hasSemenInv = aiSireId && allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0);
+  const hasSemenInv = aiSireId && (allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0) || (rec?.semen_type === 'frozen' && rec?.semen_location));
 
   const eweName = (() => { const l = allLambs.find(x => x.id === currentLambId); return l ? `${l.name}${l.ear_tag?' #'+l.ear_tag:''}` : ''; })();
   window._currentBreedingId = rec?.id || null;
@@ -9527,13 +9527,19 @@ async function saveBreeding(id) {
     // Load old record to determine if we need to reverse a previous deduction
     const { data: old } = await db.from('breeding_records').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('breeding_records').update(payload).eq('id', id);
-    // Reverse old inventory deduction if it was frozen with a location
-    if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
-      await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'breeding', id);
-    }
-    // Apply new deduction if now frozen
-    if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
-      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', id);
+    const semenUnchanged = old?.ai_sire_id === ai_sire_id
+      && old?.semen_type === semenType
+      && old?.semen_location === semenLoc
+      && parseFloat(old?.straws_used) === strawsUsed;
+    if (!semenUnchanged) {
+      // Reverse old inventory deduction if it was frozen with a location
+      if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
+        await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'breeding', id);
+      }
+      // Apply new deduction if now frozen
+      if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+        await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'breeding', id);
+      }
     }
     await saveInlineCostEntryRows('br-costs', 'breeding_costs', 'breeding_id', id);
     toast('Saved');
@@ -9578,7 +9584,7 @@ function showFlushModal(flush) {
   const currentSire = flush?.sire_id ? 'lamb:'+flush.sire_id : (flush?.ai_sire_id ? 'ai:'+flush.ai_sire_id : '');
   const aiSireId = flush?.ai_sire_id || '';
   const semenOpts = aiSireId ? getSemenOptionsForRam(aiSireId, flush?.semen_location) : '<option value="">— Select sire first —</option>';
-  const hasSemenInv = aiSireId && allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0);
+  const hasSemenInv = aiSireId && (allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0) || (rec?.semen_type === 'frozen' && rec?.semen_location));
 
   showModal(`
     <div class="modal-header"><div class="modal-title">${isEdit ? '🔬 Edit Flush' : '🔬 Log Flush'}${isEdit ? donorLabel : ''}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -9966,11 +9972,17 @@ async function saveFlush(id) {
   if (id) {
     const { data: old } = await db.from('embryo_flushes').select('ai_sire_id,semen_type,semen_location,straws_used').eq('id', id).single();
     await db.from('embryo_flushes').update(payload).eq('id', id);
-    if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
-      await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'flush', id);
-    }
-    if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
-      await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', id);
+    const semenUnchanged = old?.ai_sire_id === ai_sire_id
+      && old?.semen_type === semenType
+      && old?.semen_location === semenLoc
+      && parseFloat(old?.straws_used) === strawsUsed;
+    if (!semenUnchanged) {
+      if (old?.ai_sire_id && old?.semen_type === 'frozen' && old?.semen_location && old?.straws_used > 0) {
+        await restoreSemenInventory(old.ai_sire_id, old.semen_location, old.straws_used, 'flush', id);
+      }
+      if (ai_sire_id && semenType === 'frozen' && semenLoc && strawsUsed > 0) {
+        await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', id);
+      }
     }
     const addToInvEdit = document.getElementById('fl-add-inventory')?.checked;
     await syncFrozenEmbryoInventory(id, payload, addToInvEdit ? (payload.embryos_frozen || 0) : 0, document.getElementById('fl-embryo-location')?.value?.trim()||null);
