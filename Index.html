@@ -5073,7 +5073,7 @@ async function renderFlushes() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const [{ data: flushes }, { data: allTransfers }] = await Promise.all([
     db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
-    db.from('embryo_transfers').select('*'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
   ]);
   window._flushAllRecs = flushes || [];
   window._flushAllTransfers = allTransfers || [];
@@ -5456,7 +5456,7 @@ async function renderTransfersPage(filterFlushId) {
   mc.innerHTML = '<div style="padding:2rem;color:var(--text3)">Loading transfers…</div>';
 
   const [{ data: transfers }, { data: flushes }] = await Promise.all([
-    db.from('embryo_transfers').select('*').order('implant_date', {ascending:false}),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)').order('implant_date', {ascending:false}),
     db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
   ]);
 
