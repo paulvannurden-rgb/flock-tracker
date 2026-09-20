@@ -408,6 +408,7 @@ let flockTypeFilter = new Set();
 let flockRoleFilter = new Set();
 let flockSexFilter = new Set();
 let flockGeneticFilter = new Set();
+let flockReproFilter = new Set();
 let flockSearch = '';
 let confirmingDelete = null;
 
@@ -651,8 +652,17 @@ function doLogout() {
 
 // ── INIT ──────────────────────────────────────────────
 async function init() {
-  await Promise.all([loadLambs(), loadCustomProducts(), loadAiRams(), loadSemenInventory()]);
+  await Promise.all([loadLambs(), loadCustomProducts(), loadAiRams(), loadSemenInventory(), loadBreedingAndTransfers()]);
   showPage('dashboard');
+}
+
+async function loadBreedingAndTransfers() {
+  const [{ data: breedData }, { data: transferData }] = await Promise.all([
+    db.from('breeding_records').select('*').order('breeding_date'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
+  ]);
+  window._breedingAllRecs = breedData || [];
+  window._allTransfers = transferData || [];
 }
 
 async function loadSemenInventory() {
@@ -1768,6 +1778,7 @@ function clearAllFlockFilters() {
   flockRoleFilter.clear();
   flockSexFilter.clear();
   flockGeneticFilter.clear();
+  flockReproFilter.clear();
   flockSearch = '';
   renderFlock();
 }
@@ -1778,6 +1789,7 @@ function _getFlockSetById(id) {
   if (id === 'role') return flockRoleFilter;
   if (id === 'sex') return flockSexFilter;
   if (id === 'genetic') return flockGeneticFilter;
+  if (id === 'repro') return flockReproFilter;
   return null;
 }
 
@@ -1789,39 +1801,72 @@ document.addEventListener('click', (e) => {
 });
 
 function renderFlock() {
-  // Build gestation lookup from cached breeding/transfer data
-  const gestMap = {}; // lambId -> { gd, outcome, type }
+  // Build gestation lookup — only show badge if most recent record is Pending or Confirmed Pregnant
+  const gestMap = {}; // lambId -> { gd, outcome, type, due } | null
+  if (window._breedingAllRecs) {
+    // Group by lamb, pick most recent breeding_date
+    const byLamb = {};
+    for (const r of window._breedingAllRecs) {
+      if (!r.lamb_id || !r.breeding_date) continue;
+      if (!byLamb[r.lamb_id] || r.breeding_date > byLamb[r.lamb_id].breeding_date) {
+        byLamb[r.lamb_id] = r;
+      }
+    }
+    for (const [lambId, r] of Object.entries(byLamb)) {
+      const o = r.outcome || 'Pending';
+      if (o !== 'Confirmed Pregnant' && o !== 'Pending') continue; // resolved — no badge
+      gestMap[lambId] = { gd: gestDays(r.breeding_date), outcome: o, type: 'Natural/AI', due: r.expected_lamb_date };
+    }
+  }
+  if (window._allTransfers) {
+    const byRecip = {};
+    for (const t of window._allTransfers) {
+      if (!t.recipient_id || !t.implant_date) continue;
+      if (!byRecip[t.recipient_id] || t.implant_date > byRecip[t.recipient_id].implant_date) {
+        byRecip[t.recipient_id] = t;
+      }
+    }
+    for (const [rid, t] of Object.entries(byRecip)) {
+      const o = t.outcome || 'Pending';
+      if (o !== 'Confirmed Pregnant' && o !== 'Pending') continue;
+      const due = new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10);
+      // ET takes priority if more recent than any natural record, otherwise keep natural
+      if (!gestMap[rid] || t.implant_date > (gestMap[rid]._date||'')) {
+        gestMap[rid] = { gd: gestDays(t.implant_date), outcome: o, type: 'ET', due, _date: t.implant_date };
+      }
+    }
+  }
+  window._gestMap = gestMap;
+
+  // Build reproductive status map for all ewes — most recent record wins
+  const reproMap = {}; // lambId -> 'Confirmed Pregnant'|'Pending'|'Open'|'Lamb Born'
+  const terminalOutcomes = new Set(['Confirmed Pregnant','Pending','Not Pregnant','Lamb Born','Failed']);
   if (window._breedingAllRecs) {
     for (const r of window._breedingAllRecs) {
       if (!r.lamb_id || !r.breeding_date) continue;
       const o = r.outcome || 'Pending';
-      if (o === 'Lamb Born' || o === 'Not Pregnant' || o === 'Failed') continue;
-      const gd = gestDays(r.breeding_date);
-      if (!gestMap[r.lamb_id] || (gd||0) > (gestMap[r.lamb_id].gd||0)) {
-        gestMap[r.lamb_id] = { gd, outcome: o, type: 'Natural/AI', due: r.expected_lamb_date };
+      if (!reproMap[r.lamb_id] || r.breeding_date > (reproMap[r.lamb_id]._date||'')) {
+        reproMap[r.lamb_id] = { outcome: o === 'Not Pregnant' ? 'Open' : o, _date: r.breeding_date };
       }
     }
   }
   if (window._allTransfers) {
     for (const t of window._allTransfers) {
-      const rid = t.recipient_id;
-      if (!rid || !t.implant_date) continue;
+      if (!t.recipient_id || !t.implant_date) continue;
       const o = t.outcome || 'Pending';
-      if (o === 'Lamb Born' || o === 'Not Pregnant' || o === 'Failed') continue;
-      const gd = gestDays(t.implant_date);
-      const due = new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10);
-      if (!gestMap[rid] || (gd||0) > (gestMap[rid].gd||0)) {
-        gestMap[rid] = { gd, outcome: o, type: 'ET', due };
+      if (!reproMap[t.recipient_id] || t.implant_date > (reproMap[t.recipient_id]._date||'')) {
+        reproMap[t.recipient_id] = { outcome: o === 'Not Pregnant' ? 'Open' : o, _date: t.implant_date };
       }
     }
   }
-  window._gestMap = gestMap;
+  window._reproMap = reproMap;
   // Register flock filters with the generic multi-select system
   registerMultiSelect('status', flockFilter, renderFlock);
   registerMultiSelect('type', flockTypeFilter, renderFlock);
   registerMultiSelect('role', flockRoleFilter, renderFlock);
   registerMultiSelect('sex', flockSexFilter, renderFlock);
   registerMultiSelect('genetic', flockGeneticFilter, renderFlock);
+  registerMultiSelect('repro', flockReproFilter, renderFlock);
   const statusOpts = [
     {value:'Active', label:'Active'},
     {value:'Sold', label:'Sold'},
@@ -1862,11 +1907,16 @@ function renderFlock() {
     const matchSex = flockSexFilter.size === 0 || flockSexFilter.has(l.sex);
     const matchGenetic = flockGeneticFilter.size === 0 || flockGeneticFilter.has(l.genetic_code);
     const matchSearch = !flockSearch || l.name.toLowerCase().includes(flockSearch.toLowerCase()) || (l.ear_tag||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.scrapie_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.alt_id||'').toLowerCase().includes(flockSearch.toLowerCase()) || (l.genetic_code||'').toLowerCase().includes(flockSearch.toLowerCase());
-    return matchStatus && matchType && matchRole && matchSex && matchGenetic && matchSearch;
+    let matchRepro = flockReproFilter.size === 0;
+    if (!matchRepro) {
+      const repro = (window._reproMap||{})[l.id]?.outcome || null;
+      matchRepro = flockReproFilter.has(repro);
+    }
+    return matchStatus && matchType && matchRole && matchSex && matchGenetic && matchSearch && matchRepro;
   });
 
   // Count of active filters (excluding search) for the "clear filters" indicator
-  const activeFilterCount = flockFilter.size + flockTypeFilter.size + flockRoleFilter.size + flockSexFilter.size + flockGeneticFilter.size;
+  const activeFilterCount = flockFilter.size + flockTypeFilter.size + flockRoleFilter.size + flockSexFilter.size + flockGeneticFilter.size + flockReproFilter.size;
 
   const viewToggle = `
     <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
@@ -1883,6 +1933,7 @@ function renderFlock() {
         ${flockMultiSelectHtml('role', 'Role', 'All Roles', flockRoleFilter, roleOpts)}
         ${flockMultiSelectHtml('sex', 'Sex', 'All Sexes', flockSexFilter, sexOpts)}
         ${geneticOpts.length > 0 ? flockMultiSelectHtml('genetic', 'Genetic', 'All Codes', flockGeneticFilter, geneticOpts) : ''}
+        ${flockMultiSelectHtml('repro', 'Repro', 'All Repro', flockReproFilter, ['Confirmed Pregnant','Pending','Open','Lamb Born'])}
         ${(activeFilterCount > 0 || flockSearch) ? `<button type="button" onclick="clearAllFlockFilters()" style="font-size:0.78rem;padding:0.35rem 0.7rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:500" title="Clear all filters and search">✕ Clear All</button>` : ''}
         ${viewToggle}
       </div>
@@ -1904,7 +1955,9 @@ function renderFlock() {
       const statusBadge = lamb.status === 'Active' ? 'badge-green' : lamb.status === 'Sold' ? 'badge-blue' : 'badge-red';
       const flockBadge = flockType === 'Show' ? 'badge-purple' : flockType === 'Breeding' ? 'badge-blue' : 'badge-gray';
       const gest = (window._gestMap||{})[lamb.id];
+      const repro = (window._reproMap||{})[lamb.id];
       const gdColor = gest ? (gest.gd >= 140 ? '#dc2626' : gest.gd >= 120 ? '#d97706' : '#15803d') : 'var(--text3)';
+      const gestCell = gest ? `<span style="font-weight:700;color:${gdColor}">Day ${gest.gd}</span>` : (repro?.outcome === 'Open' ? `<span style="color:#6b7280;font-weight:600">Open</span>` : '—');
       return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showLamb('${lamb.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <td style="padding:0.55rem 0.85rem;font-weight:600;color:var(--text)">${lamb.name}</td>
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.ear_tag?'#'+lamb.ear_tag:'—'}</td>
@@ -1916,7 +1969,7 @@ function renderFlock() {
         <td style="padding:0.55rem 0.75rem;color:var(--text2)">${lamb.dob||'—'}</td>
         <td style="padding:0.55rem 0.75rem"><span class="badge ${flockBadge}" style="font-size:0.65rem">${flockType}</span></td>
         <td style="padding:0.55rem 0.75rem"><span class="badge ${statusBadge}">${lamb.status||'Active'}</span></td>
-        <td style="padding:0.55rem 0.75rem;font-weight:700;color:${gdColor}">${gest ? `Day ${gest.gd}` : '—'}</td>
+        <td style="padding:0.55rem 0.75rem;font-weight:700;color:${gdColor}">${gestCell}</td>
         ${lamb.role&&lamb.role!=='Standard'?`<td style="padding:0.55rem 0.75rem"><span class="badge badge-yellow" style="font-size:0.65rem">${lamb.role==='Embryo Donor'?'Donor':lamb.role==='Embryo Recipient'?'Recip':'Both'}</span></td>`:`<td style="padding:0.55rem 0.75rem;color:var(--text3);font-size:0.75rem">—</td>`}
       </tr>`;
     }).join('');
@@ -1947,13 +2000,14 @@ function renderFlock() {
       const flockType = lamb.flock_type || (lamb.sex === 'Wether' ? 'Show' : 'Breeding');
       const flockBadge = flockType === 'Show' ? 'badge-purple' : flockType === 'Breeding' ? 'badge-blue' : 'badge-gray';
       const gest = (window._gestMap||{})[lamb.id];
+      const repro = (window._reproMap||{})[lamb.id];
       const gestBadge = gest ? (() => {
         const gd = gest.gd;
         const gdColor = gd >= 140 ? '#dc2626' : gd >= 120 ? '#d97706' : '#15803d';
         const gdBg = gd >= 140 ? '#fee2e2' : gd >= 120 ? '#fef3c7' : '#dcfce7';
         const label = gest.outcome === 'Confirmed Pregnant' ? `🤰 Day ${gd}` : `⏳ Day ${gd}`;
         return `<span style="font-size:0.62rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:0.25rem;background:${gdBg};color:${gdColor};border:1px solid ${gdColor}44">${label}</span>`;
-      })() : '';
+      })() : (repro?.outcome === 'Open' ? `<span style="font-size:0.62rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:0.25rem;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db">Open</span>` : '');
       html += `
         <div class="card card-hover" onclick="showLamb('${lamb.id}')">
           <div style="min-width:0">
