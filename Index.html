@@ -659,7 +659,7 @@ async function init() {
 async function loadBreedingAndTransfers() {
   const [{ data: breedData }, { data: transferData }] = await Promise.all([
     db.from('breeding_records').select('*').order('breeding_date'),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
   ]);
   window._breedingAllRecs = breedData || [];
   window._allTransfers = transferData || [];
@@ -827,7 +827,7 @@ function showDashPanel(type) {
     }).join('');
     const etRows = (d.activeTransfers||[]).filter(t=>t.outcome==='Confirmed Pregnant').map(t => {
       const recip = lambById[t.recipient_id]; const donor = lambById[t.embryo_flushes?.donor_id];
-      const due = t.implant_date ? new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
+      const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
       return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
@@ -841,13 +841,13 @@ function showDashPanel(type) {
     title = 'Due This Week';
     rows = [
       ...(d.dueSoon||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; const sire=r.ai_sire_id?aiRamById[r.ai_sire_id]:(r.sire_id?lambById[r.sire_id]:null); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${r.expected_lamb_date}</span></div>`; }),
-      ...(d.dueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${due}</span></div>`; })
+      ...(d.dueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${due}</span></div>`; })
     ].join('');
   } else if (type === 'overdue') {
     title = 'Overdue';
     rows = [
       ...(d.overdue||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">Due ${r.expected_lamb_date}</div></div><button onclick="openQuickLambing('${r.lamb_id}','${r.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐣 Record</button></div>`; }),
-      ...(d.overdueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">ET Due ${due}</div></div><button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button></div>`; })
+      ...(d.overdueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">ET Due ${due}</div></div><button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button></div>`; })
     ].join('');
   }
 
@@ -873,7 +873,7 @@ async function renderDashboard() {
 
   const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }, { data: activeHealthRecsRaw }] = await Promise.all([
     db.from('breeding_records').select('*').order('expected_lamb_date'),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
     db.from('weight_records').select('*').order('weigh_date', {ascending:false}).limit(50),
     db.from('health_records').select('*').order('date', {ascending:false}).limit(30),
     db.from('health_records').select('*').order('withdrawal_date'),
@@ -888,7 +888,7 @@ async function renderDashboard() {
   // Due to lamb this week
   const dueSoon = activeBreedRecs.filter(r => r.expected_lamb_date && r.expected_lamb_date <= in7 && r.expected_lamb_date >= today);
   const dueTransfers = activeTransfers.filter(t => {
-    const due = t.implant_date ? new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
+    const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
     return due && due <= in7 && due >= today;
   });
 
@@ -896,7 +896,7 @@ async function renderDashboard() {
   const overdue = activeBreedRecs.filter(r => r.expected_lamb_date && r.expected_lamb_date < today && r.outcome === 'Confirmed Pregnant');
   const overdueTransfers = activeTransfers.filter(t => {
     if (t.outcome !== 'Confirmed Pregnant' || !t.implant_date) return false;
-    const due = new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
+    const due = new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
     return due < today;
   });
 
@@ -992,7 +992,7 @@ async function renderDashboard() {
             </div>
             <button onclick="openQuickLambing('${r.lamb_id}','${r.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐣 Record</button>
           </div>`; }).join('')}
-          ${overdueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
+          ${overdueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
             <div style="flex:1;cursor:pointer;min-width:0" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
               <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span>
               <span style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-left:0.5rem">ET Due ${due}</span>
@@ -1008,7 +1008,7 @@ async function renderDashboard() {
             <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l?.name||'?'}</span>
             <span style="font-size:0.72rem;color:#92400e">${r.expected_lamb_date}</span>
           </div>`; }),
-          ...dueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
+          ...dueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
             <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem">← ${donor?.name||'?'}</span></span>
             <span style="font-size:0.72rem;color:#92400e">${due}</span>
           </div>`; })].join('')}
@@ -1829,10 +1829,10 @@ function renderFlock() {
     for (const [rid, t] of Object.entries(byRecip)) {
       const o = t.outcome || 'Pending';
       if (o !== 'Confirmed Pregnant' && o !== 'Pending') continue;
-      const due = new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
+      const due = new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
       // ET takes priority if more recent than any natural record, otherwise keep natural
       if (!gestMap[rid] || t.implant_date > (gestMap[rid]._date||'')) {
-        gestMap[rid] = { gd: gestDays(t.embryo_flushes?.flush_date || t.implant_date), outcome: o, type: 'ET', due, _date: t.implant_date };
+        gestMap[rid] = { gd: gestDays(etConceptionDate(t)), outcome: o, type: 'ET', due, _date: t.implant_date };
       }
     }
   }
@@ -2558,7 +2558,7 @@ async function renderEmbryoTab(el) {
     }
   }
   if (lamb.role === 'Embryo Recipient' || lamb.role === 'Both') {
-    const { data: transfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date, donor_id)').eq('recipient_id', currentLambId);
+    const { data: transfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)').eq('recipient_id', currentLambId);
     html += `<div class="section-header" style="margin-top:1rem"><div class="section-title">🐑 Received Embryos (Recipient)</div></div>`;
     if (!transfers || transfers.length === 0) {
       html += `<div class="empty" style="padding:1.5rem"><div class="empty-icon">🐑</div><h3>No transfers recorded</h3></div>`;
@@ -2567,7 +2567,7 @@ async function renderEmbryoTab(el) {
         const donor = t.embryo_flushes?.donor_id ? lambById[t.embryo_flushes.donor_id] : null;
         const donorGc = donor?.genetic_code ? ` <span style="color:var(--accent);font-weight:700;font-size:0.72rem">${donor.genetic_code}</span>` : '';
         const outcomeBadge = t.outcome==='Confirmed Pregnant'?'badge-green':t.outcome==='Lamb Born'?'badge-blue':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'badge-red':'badge-gray';
-        const dueDate = t.implant_date ? new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*24*60*60*1000).toISOString().slice(0,10) : null;
+        const dueDate = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*24*60*60*1000).toISOString().slice(0,10) : null;
         html += `<div class="card" style="margin-bottom:0.75rem">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
             <div style="flex:1">
@@ -4572,7 +4572,7 @@ async function renderBreeding() {
 
 async function showGestationList(filterType, filterOutcome, filterMinDay, filterMaxDay) {
   if (!window._allTransfers) {
-    const { data } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)');
+    const { data } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)');
     window._allTransfers = data || [];
   }
   if (!window._breedingAllRecs) {
@@ -4595,8 +4595,8 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
     ...transfers.map(t => {
       const recip = lambById[t.recipient_id];
       const donor = lambById[t.embryo_flushes?.donor_id];
-      const gd = gestDays(t.embryo_flushes?.flush_date || t.implant_date);
-      const due = t.implant_date ? new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
+      const gd = gestDays(etConceptionDate(t));
+      const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
       return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: donor?.name||'?', gd, due, outcome: t.outcome, type: 'ET', flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
     }),
   ].sort((a,b) => (b.gd||0) - (a.gd||0));
@@ -4721,6 +4721,26 @@ function printGestationList() {
   <tbody>${rowsHtml}</tbody></table></body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
+}
+
+function etConceptionDate(t) {
+  // breed_date = exact conception for MOET/LAI
+  // IVF: flush_date = conception
+  // MOET without breed_date: flush_date - 6 days
+  const f = t.embryo_flushes;
+  if (f?.breed_date) return f.breed_date;
+  const flushDate = f?.flush_date;
+  const flushType = (f?.flush_type || t.flush_type || 'MOET').toUpperCase();
+  if (!flushDate) return t.implant_date; // last resort
+  if (flushType === 'IVF') return flushDate;
+  // MOET/LAI: subtract 6 days from flush date
+  return new Date(new Date(flushDate+'T12:00:00').getTime() - 6*864e5).toISOString().slice(0,10);
+}
+
+function toggleBreedDateField(fieldId, flushType) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  el.style.display = flushType === 'IVF' ? 'none' : '';
 }
 
 function gestDays(breedOrImplantDate) {
@@ -5073,7 +5093,7 @@ async function renderFlushes() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const [{ data: flushes }, { data: allTransfers }] = await Promise.all([
     db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
   ]);
   window._flushAllRecs = flushes || [];
   window._flushAllTransfers = allTransfers || [];
@@ -5323,7 +5343,8 @@ function openAddFlushGlobal() {
     </select></div>
     <div class="row">
       <div class="field"><label>Flush Date *</label><input type="date" id="gfl-date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Flush Type</label><select id="gfl-type"><option>MOET</option><option>IVF</option></select></div>
+      <div class="field" id="gfl-breed-date-field"><label>Breed / Insemination Date <span style="color:var(--text3);font-size:0.72rem">(MOET/LAI — date donor was bred)</span></label><input type="date" id="gfl-breed-date"></div>
+      <div class="field"><label>Flush Type</label><select id="gfl-type" onchange="toggleBreedDateField('gfl-breed-date-field',this.value)"><option>MOET</option><option>IVF</option></select></div>
     </div>
     <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem">Embryo Results</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.35rem">
@@ -5405,7 +5426,7 @@ async function saveFlushGlobal() {
   const semenType = ai_sire_id ? (document.querySelector('input[name="gfl-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('gfl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('gfl-straws-used')) || 0) : 0;
-  const payload = { donor_id: donorId, flush_date: date, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, embryos_frozen: v('gfl-frozen') ? parseInt(v('gfl-frozen')) : null, embryos_unfertilized: v('gfl-unfertilized') ? parseInt(v('gfl-unfertilized')) : null, embryos_degenerate: v('gfl-degenerate') ? parseInt(v('gfl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { donor_id: donorId, flush_date: date, breed_date: v('gfl-breed-date')||null, flush_type: v('gfl-type')||'MOET', embryos_collected: parseInt(v('gfl-collected'))||0, embryos_transferred: v('gfl-transferred') ? parseInt(v('gfl-transferred')) : null, embryos_frozen: v('gfl-frozen') ? parseInt(v('gfl-frozen')) : null, embryos_unfertilized: v('gfl-unfertilized') ? parseInt(v('gfl-unfertilized')) : null, embryos_degenerate: v('gfl-degenerate') ? parseInt(v('gfl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('gfl-sire-text'), notes: v('gfl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
   const { data } = await db.from('embryo_flushes').insert(payload).select().single();
   if (ai_sire_id && data?.id && semenType === 'frozen') {
     if (semenLoc && strawsUsed > 0) await deductSemenInventory(ai_sire_id, semenLoc, strawsUsed, 'flush', data.id);
@@ -5456,7 +5477,7 @@ async function renderTransfersPage(filterFlushId) {
   mc.innerHTML = '<div style="padding:2rem;color:var(--text3)">Loading transfers…</div>';
 
   const [{ data: transfers }, { data: flushes }] = await Promise.all([
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,donor_id)').order('implant_date', {ascending:false}),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)').order('implant_date', {ascending:false}),
     db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
   ]);
 
@@ -5515,7 +5536,7 @@ function renderTransfersHTML(filterFlushId) {
       return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditTransferGlobal('${fid}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <td style="padding:0.6rem 1rem;font-weight:600;color:var(--text)">${recipName}</td>
         <td style="padding:0.6rem 1rem;color:var(--text2);font-size:0.82rem">${t.implant_date||'—'}</td>
-        <td style="padding:0.6rem 0.5rem;text-align:center">${(()=>{const o=t.outcome||'Pending';if(o!=='Confirmed Pregnant'&&o!=='Pending')return '<span style="color:var(--text3)">—</span>';const gd=gestDays(t.embryo_flushes?.flush_date || t.implant_date);const c=gd===null?'var(--text3)':gd>=140?'#dc2626':gd>=120?'#d97706':'#15803d';return gd!==null?`<span style="font-size:0.82rem;font-weight:700;color:${c}">${gd}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
+        <td style="padding:0.6rem 0.5rem;text-align:center">${(()=>{const o=t.outcome||'Pending';if(o!=='Confirmed Pregnant'&&o!=='Pending')return '<span style="color:var(--text3)">—</span>';const gd=gestDays(etConceptionDate(t));const c=gd===null?'var(--text3)':gd>=140?'#dc2626':gd>=120?'#d97706':'#15803d';return gd!==null?`<span style="font-size:0.82rem;font-weight:700;color:${c}">${gd}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
         <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.num_transferred||'—'}</td>
         <td style="padding:0.6rem 1rem"><span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.2rem 0.6rem;font-size:0.75rem;font-weight:600">${t.outcome||'Pending'}</span></td>
         <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.lamb_count||'—'}</td>
@@ -5895,7 +5916,8 @@ function refreshLambingReport() {
     const donor = flush ? lambById[ flush.donor_id] : null;
     const recip = lambById[ t.recipient_id];
     const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
-    const expectedDate = (flush?.flush_date||t.implant_date) ? new Date(new Date((flush?.flush_date||t.implant_date)+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
+    const conceptionDate = flush?.breed_date || ((flush?.flush_type||'MOET').toUpperCase()==='IVF' ? flush?.flush_date : (flush?.flush_date ? new Date(new Date(flush.flush_date+'T12:00:00').getTime()-6*864e5).toISOString().slice(0,10) : null)) || t.implant_date;
+    const expectedDate = conceptionDate ? new Date(new Date(conceptionDate+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
     const isPast = t.outcome === 'Lamb Born';
     rows.push({
       ewe: recipName,
@@ -6093,7 +6115,7 @@ function printFlushReport() {
       fts.forEach(t => {
         const recip = lambsMap[t.recipient_id];
         const recipName = recip?.name || t.recip_text || t.recipient_text || '—';
-        const anchor = f.flush_date || t.implant_date;
+        const anchor = f.breed_date || ((f.flush_type||'MOET').toUpperCase()==='IVF' ? f.flush_date : (f.flush_date ? new Date(new Date(f.flush_date+'T12:00:00').getTime()-6*864e5).toISOString().slice(0,10) : null)) || t.implant_date;
         const due = anchor ? new Date(new Date(anchor+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : '—';
         const isOverdue = (t.outcome==='Confirmed Pregnant'||t.outcome==='Pending') && due < today;
         const sc = t.outcome==='Lamb Born'?'s-lamb':t.outcome==='Confirmed Pregnant'?'s-preg':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'s-neg':'s-pend';
@@ -6185,7 +6207,7 @@ function refreshFlushReport() {
       const recip = lambById[ t.recipient_id];
       const recipName = recip?.name || t.recipient_text || t.recip_text || '—';
       const recipTag = recip?.ear_tag ? ` #${recip.ear_tag}` : '';
-      const dueDate = t.implant_date ? new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime()+147*24*60*60*1000).toISOString().slice(0,10) : '—';
+      const dueDate = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*24*60*60*1000).toISOString().slice(0,10) : '—';
       const today = new Date().toISOString().slice(0,10);
       const isOverdue = t.outcome !== 'Lamb Born' && t.outcome !== 'Not Pregnant' && t.outcome !== 'Failed' && dueDate < today;
       const outColor = t.outcome==='Lamb Born'?'#15803d':t.outcome==='Confirmed Pregnant'?'#1d4ed8':t.outcome==='Not Pregnant'||t.outcome==='Failed'?'#dc2626':'#92560a';
@@ -9054,7 +9076,7 @@ function closeModal() {
 // ── ADD/EDIT LAMB ─────────────────────────────────────
 async function addRecipToFlock(transferId, recipName) {
   // Load transfers for linkage dropdown (just this one pre-selected)
-  const { data: allTransfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date, donor_id)');
+  const { data: allTransfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)');
   const transfers = (allTransfers || []).filter(t => !t.recipient_id);
   const { data: flushes } = await db.from('embryo_flushes').select('*');
   window._allTransfersForLinkage = transfers || [];
@@ -9818,7 +9840,8 @@ function showFlushModal(flush) {
     <div class="modal-header"><div class="modal-title">${isEdit ? '🔬 Edit Flush' : '🔬 Log Flush'}${isEdit ? donorLabel : ''}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="row">
       <div class="field"><label>Flush Date *</label><input type="date" id="fl-date" value="${flush?.flush_date||new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Flush Type</label><select id="fl-type">
+      <div class="field" id="fl-breed-date-field" ${flush?.flush_type==='IVF'?'style="display:none"':''}><label>Breed / Insemination Date <span style="color:var(--text3);font-size:0.72rem">(MOET/LAI — date donor was bred)</span></label><input type="date" id="fl-breed-date" value="${flush?.breed_date||''}"></div>
+      <div class="field"><label>Flush Type</label><select id="fl-type" onchange="toggleBreedDateField('fl-breed-date-field',this.value)">
         <option ${(flush?.flush_type||'MOET')==='MOET'?'selected':''}>MOET</option>
         <option ${flush?.flush_type==='IVF'?'selected':''}>IVF</option>
       </select></div>
@@ -10183,7 +10206,7 @@ async function saveFlush(id) {
   const semenType = ai_sire_id ? (document.querySelector('input[name="fl-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('fl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('fl-straws-used')) || 0) : 0;
-  const payload = { donor_id: currentLambId, flush_date: date, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const payload = { donor_id: currentLambId, flush_date: date, breed_date: v('fl-breed-date')||null, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
 
   // Cross-check: transfer records must not exceed viable embryos (transferred + frozen)
   if (id) {
@@ -12447,7 +12470,7 @@ async function buildLambingCalendarHtml() {
 
   filteredTransfers.forEach(t => {
     if (!t.implant_date) return;
-    const expected = new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+    const expected = new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
     const recip = lambById[ t.recipient_id];
     const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
     events.push({
@@ -12900,6 +12923,16 @@ async function openCompletePlan(groupId) {
   const targetDate = g.target_date || new Date().toISOString().slice(0,10);
   const expectedLambDate = !isFlush ? new Date(new Date(targetDate + 'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10) : null;
 
+  // Pre-calculate breed date for MOET: look for breed/AI step in protocol steps
+  const planSteps = window._planSteps || [];
+  const breedKeywords = /breed|^AI$|ram in|semen|insem/i;
+  const breedStep = planSteps.find(s => breedKeywords.test(s.step_name) && s.day_offset >= 5 && s.day_offset <= 8);
+  const cpBreedDate = (isFlush && window._cpFlushType !== 'IVF' && targetDate)
+    ? (breedStep
+        ? new Date(new Date(targetDate+'T12:00:00').getTime() - breedStep.day_offset*864e5).toISOString().slice(0,10)
+        : new Date(new Date(targetDate+'T12:00:00').getTime() - 6*864e5).toISOString().slice(0,10))
+    : '';
+
   window._cpIsFlush = isFlush;
   window._cpFlushType = g.type === 'ivf' ? 'IVF' : 'MOET';
   const cpIsIVF = window._cpFlushType === 'IVF';
@@ -12976,6 +13009,10 @@ async function openCompletePlan(groupId) {
         </td>
         <td style="padding:0.5rem">
           <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}>
+          ${isFlush && !cpIsIVF ? `<div style="margin-top:0.3rem">
+            <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Breed Date *</span>
+            <input type="date" id="cp-breed-date-${i}" value="${cpBreedDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);margin-top:0.15rem">
+          </div>` : ''}
         </td>
         <td style="padding:0.5rem">
           ${!isFlush
@@ -13316,6 +13353,15 @@ function addCpRow() {
   const ivfSel = isIVF ? 'selected' : '';
   const targetDate = window._cpTargetDate || new Date().toISOString().slice(0,10);
   const expectedDate = window._cpExpectedDate || '';
+  // Pre-calculate breed date from protocol steps
+  const planSteps = window._planSteps || [];
+  const breedKeywords = /breed|^AI$|ram in|semen|insem/i;
+  const breedStep = planSteps.find(s => breedKeywords.test(s.step_name) && s.day_offset >= 5 && s.day_offset <= 8);
+  const cpBreedDate = (isFlush && !isIVF && targetDate)
+    ? (breedStep
+        ? new Date(new Date(targetDate+'T12:00:00').getTime() - breedStep.day_offset*864e5).toISOString().slice(0,10)
+        : new Date(new Date(targetDate+'T12:00:00').getTime() - 6*864e5).toISOString().slice(0,10))
+    : '';
   const sireOpts = sireOptions('');
   const ewes = allLambs.filter(l => l.sex === 'Ewe' && l.status === 'Active');
   const eweOpts = ewes.map(l => `<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
@@ -13352,6 +13398,10 @@ function addCpRow() {
     </td>
     <td style="padding:0.5rem">
       <input type="date" id="cp-date-${i}" value="${targetDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" ${!isFlush?`onchange="updateCpExpected('${i}')"`:''}>
+      ${isFlush && !isIVF ? `<div style="margin-top:0.3rem">
+        <span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Breed Date *</span>
+        <input type="date" id="cp-breed-date-${i}" value="${cpBreedDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);margin-top:0.15rem">
+      </div>` : ''}
     </td>
     ${!isFlush ? `<td style="padding:0.5rem">
       <input type="date" id="cp-due-${i}" value="${expectedDate}" style="width:125px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
@@ -13470,8 +13520,19 @@ async function confirmCompletePlanDom(groupId) {
         const flushSemenLocId = document.getElementById(`cp-semen-loc-${rowId}`)?.value || null;
         const flushStrawsUsed = parseFloat(document.getElementById(`cp-straws-${rowId}`)?.value) || 0;
         const flushIsShared = document.getElementById(`cp-shared-${rowId}`)?.checked || false;
+        const flushType = document.getElementById(`cp-type-${rowId}`)?.value || 'MOET';
+        // Breed date — required for MOET/LAI, not used for IVF
+        let breedDate = null;
+        if (flushType !== 'IVF') {
+          breedDate = document.getElementById(`cp-breed-date-${rowId}`)?.value || null;
+          if (!breedDate) {
+            const donor = lambById[lambId];
+            toast(`⚠️ Breed date required for ${donor?.name||'donor'} (MOET)`);
+            return;
+          }
+        }
         flushInserts.push({ donor_id: lambId, ai_sire_id: ai_sire_id||null, sire_id: sire_id||null,
-          flush_date: date, flush_type: document.getElementById(`cp-type-${rowId}`)?.value||'MOET',
+          flush_date: date, breed_date: breedDate, flush_type: flushType,
           semen_type: semenType, group_id: groupId,
           semen_location: flushSemenLocId||null, straws_used: flushStrawsUsed||null,
           embryos_collected: parseInt(document.getElementById(`cp-collected-${rowId}`)?.value)||0,
@@ -13678,7 +13739,7 @@ function openNewGroupInline() {
         <div class="field"><label>Name *</label><input id="ng-name" placeholder="e.g. Fall 2026 Flush"></div>
         <div class="field"><label>Type</label>
           <select id="ng-type" onchange="ngToggleRecipField()">
-            <option value="flush">🔬 Flush</option>
+            <option value="flush">🔬 Flush (MOET)</option>
             <option value="ivf">🧬 IVF</option>
             <option value="breeding">🐏 Breeding</option>
           </select>
@@ -13773,7 +13834,7 @@ function openNewProtocolInline() {
       <div style="font-size:0.78rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.75rem">New Protocol</div>
       <div class="row">
         <div class="field"><label>Name *</label><input id="np-name" placeholder="e.g. Standard MOET"></div>
-        <div class="field"><label>Type</label><select id="np-type"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
+        <div class="field"><label>Type</label><select id="np-type" onchange="onProtocolTypeChange(this.value)"><option value="flush">🔬 Flush (MOET)</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
       </div>
       <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin:0.75rem 0 0.4rem">Steps <span style="font-weight:400;color:var(--text3)">(Days Before = days before target/flush day)</span></div>
       <div id="np-steps"></div>
@@ -13783,6 +13844,8 @@ function openNewProtocolInline() {
         <button class="btn btn-primary btn-sm" onclick="saveNewProtocolPage()">Save Protocol</button>
       </div>
     </div>`;
+  // Pre-populate Breeding Day step for MOET by default
+  addProtocolStepRow('Breeding Day', 6);
 }
 
 async function saveNewProtocolPage() {
@@ -13961,7 +14024,7 @@ async function openPlanningManager() {
         <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Group</div>
         <div class="row">
           <div class="field" style="margin:0"><input id="ng-name" placeholder="Group name *" style="font-size:0.85rem"></div>
-          <div class="field" style="margin:0"><select id="ng-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
+          <div class="field" style="margin:0"><select id="ng-type" style="font-size:0.85rem"><option value="flush">🔬 Flush (MOET)</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
         </div>
         <div class="row" style="margin-top:0.5rem">
           <div class="field" style="margin:0"><label style="font-size:0.75rem">Target Date (Flush/AI Day)</label><input type="date" id="ng-date" style="font-size:0.85rem" onchange="previewGroupSchedule()"></div>
@@ -13984,7 +14047,7 @@ async function openPlanningManager() {
         <div style="font-size:0.75rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">New Protocol</div>
         <div class="row">
           <div class="field" style="margin:0"><input id="np-name" placeholder="Protocol name *" style="font-size:0.85rem"></div>
-          <div class="field" style="margin:0"><select id="np-type" style="font-size:0.85rem"><option value="flush">🔬 Flush</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
+          <div class="field" style="margin:0"><select id="np-type" style="font-size:0.85rem" onchange="onProtocolTypeChange(this.value)"><option value="flush">🔬 Flush (MOET)</option><option value="ivf">🧬 IVF</option><option value="breeding">🐏 Breeding</option></select></div>
         </div>
         <div id="np-steps" style="margin-top:0.5rem"></div>
         <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.35rem" onclick="addProtocolStepRow()">+ Add Step</button>
@@ -13993,6 +14056,8 @@ async function openPlanningManager() {
     </div>
 
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`, true);
+  // Pre-populate Breeding Day step
+  addProtocolStepRow('Breeding Day', 6);
 }
 
 function switchPlanTab(tab) {
@@ -14059,7 +14124,22 @@ function removeProduct2(btn) {
   if (addBtn) addBtn.style.display = '';
 }
 
-function addProtocolStepRow() {
+function onProtocolTypeChange(type) {
+  // Update the day offset on the first step (Breeding Day) based on type
+  const container = document.getElementById('np-steps');
+  if (!container) return;
+  const dayOffset = type === 'flush' ? 6 : 0;
+  const firstRow = container.querySelector('[data-step-row]');
+  if (firstRow) {
+    const dayInput = firstRow.querySelector('.ps-day');
+    if (dayInput) dayInput.value = dayOffset;
+  } else {
+    // No steps yet — add one
+    addProtocolStepRow('Breeding Day', dayOffset);
+  }
+}
+
+function addProtocolStepRow(prefillName, prefillDayOffset) {
   const container = document.getElementById('np-steps');
   if (!container) return;
   const idx = container.children.length;
@@ -14067,10 +14147,12 @@ function addProtocolStepRow() {
   row.style.cssText = 'display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.5rem;padding:0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)';
   row.setAttribute('data-step-row', '');
   const p2html = productFieldsHtml(2, {}, 'var(--surface)');
+  const stepNameVal = prefillName || '';
+  const stepDayVal = prefillDayOffset !== undefined ? prefillDayOffset : idx * 3;
   row.innerHTML = `
     <div style="display:flex;gap:0.35rem;align-items:flex-end;flex-wrap:wrap">
-      <div style="display:flex;flex-direction:column;gap:0.1rem;flex:1;min-width:140px"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Step Name</span><input placeholder="e.g. CIDR Insert" style="width:100%;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name"></div>
-      <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:80px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${idx*3}"></div>
+      <div style="display:flex;flex-direction:column;gap:0.1rem;flex:1;min-width:140px"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Step Name</span><input placeholder="e.g. CIDR Insert" value="${stepNameVal}" style="width:100%;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-name"></div>
+      <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Days Before</span><input type="number" placeholder="0" style="width:80px;padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-day" value="${stepDayVal}"></div>
       <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Time</span><input type="text" class="ps-step-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:80px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></div>
       <div style="display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Period</span><select style="width:75px;padding:0.3rem 0.4rem;font-size:0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)" class="ps-time"><option>AM</option><option>PM</option><option>Both</option></select></div>
       <button type="button" onclick="this.closest('[data-step-row]').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:0.3rem 0.4rem" title="Delete step">×</button>
@@ -14936,7 +15018,7 @@ async function loadCalendarEvents() {
       const recipName = recip?.name || t.recip_text || t.recipient_text || '?';
       calEvents.push({ date: t.implant_date, type: 'embryo', label: `🔀 Transfer`, lamb_id: t.recipient_id||t.donor_id, extra: `${recipName} · ${t.outcome||'Pending'}`, flush_id: t.flush_id, donor_id: t.donor_id });
       if (t.outcome !== 'Lamb Born' && t.outcome !== 'Not Pregnant' && t.outcome !== 'Failed') {
-        const lambDate = new Date(new Date((t.embryo_flushes?.flush_date||t.implant_date)+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
+        const lambDate = new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime() + 147*24*60*60*1000).toISOString().slice(0,10);
         calEvents.push({ date: lambDate, type: 'lambing', label: `📅 Due (ET)`, lamb_id: t.recipient_id, extra: recipName, flush_id: t.flush_id, donor_id: t.donor_id, source: 'transfer' });
       }
     }
