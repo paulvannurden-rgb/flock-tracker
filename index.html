@@ -1832,7 +1832,7 @@ function renderFlock() {
       const due = new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10);
       // ET takes priority if more recent than any natural record, otherwise keep natural
       if (!gestMap[rid] || t.implant_date > (gestMap[rid]._date||'')) {
-        gestMap[rid] = { gd: gestDays(t.implant_date), outcome: o, type: 'ET', due, _date: t.implant_date };
+        gestMap[rid] = { gd: (gestDays(t.implant_date) !== null ? gestDays(t.implant_date) + 7 : null), outcome: o, type: 'ET', due, _date: t.implant_date };
       }
     }
   }
@@ -4595,7 +4595,7 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
     ...transfers.map(t => {
       const recip = lambById[t.recipient_id];
       const donor = lambById[t.embryo_flushes?.donor_id];
-      const gd = gestDays(t.implant_date);
+      const gd = (gestDays(t.implant_date) !== null ? gestDays(t.implant_date) + 7 : null);
       const due = t.implant_date ? new Date(new Date(t.implant_date+'T12:00:00').getTime()+140*864e5).toISOString().slice(0,10) : null;
       return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: donor?.name||'?', gd, due, outcome: t.outcome, type: 'ET', flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
     }),
@@ -4900,7 +4900,7 @@ function renderBreedingTable(allRecs, filters) {
                 const outcome = r.outcome || 'Pending';
                 const oc = outcomeColors[outcome] || outcomeColors['Pending'];
                 const isOverdue = outcome === 'Pending' && r.expected_lamb_date && r.expected_lamb_date < today;
-                const gd = gestDays(r.breeding_date);
+                const gd = (outcome === 'Confirmed Pregnant' || outcome === 'Pending') ? gestDays(r.breeding_date) : null;
                 const gdColor = gd === null ? 'var(--text3)' : gd >= 140 ? '#dc2626' : gd >= 120 ? '#d97706' : '#15803d';
                 return `<tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
                   <td style="padding:0.75rem 1rem">
@@ -5534,7 +5534,7 @@ function renderTransfersHTML(filterFlushId) {
       return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openEditTransferGlobal('${fid}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <td style="padding:0.6rem 1rem;font-weight:600;color:var(--text)">${recipName}</td>
         <td style="padding:0.6rem 1rem;color:var(--text2);font-size:0.82rem">${t.implant_date||'—'}</td>
-        <td style="padding:0.6rem 0.5rem;text-align:center">${(()=>{const gd=gestDays(t.implant_date);const c=gd===null?'var(--text3)':gd>=133?'#dc2626':gd>=113?'#d97706':'#15803d';return gd!==null?`<span style="font-size:0.82rem;font-weight:700;color:${c}">${gd}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
+        <td style="padding:0.6rem 0.5rem;text-align:center">${(()=>{const o=t.outcome||'Pending';if(o!=='Confirmed Pregnant'&&o!=='Pending')return '<span style="color:var(--text3)">—</span>';const gd=(gestDays(t.implant_date) !== null ? gestDays(t.implant_date) + 7 : null);const c=gd===null?'var(--text3)':gd>=140?'#dc2626':gd>=120?'#d97706':'#15803d';return gd!==null?`<span style="font-size:0.82rem;font-weight:700;color:${c}">${gd}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
         <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.num_transferred||'—'}</td>
         <td style="padding:0.6rem 1rem"><span style="background:${outBg};color:${outColor};border-radius:1rem;padding:0.2rem 0.6rem;font-size:0.75rem;font-weight:600">${t.outcome||'Pending'}</span></td>
         <td style="padding:0.6rem 1rem;text-align:center;color:var(--text2)">${t.lamb_count||'—'}</td>
