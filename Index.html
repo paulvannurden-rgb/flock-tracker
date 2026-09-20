@@ -5463,7 +5463,7 @@ async function openEditFlushGlobal(flushId, donorId) {
     if (modal) {
       const btn = modal.querySelector('.btn-primary');
       if (btn) btn.onclick = async () => {
-        await saveFlush(flushId);
+        await saveFlush(flushId, donorId);
         currentLambId = prevLambId;
         renderFlushes();
       };
@@ -9814,17 +9814,25 @@ async function openEditFlush(id) {
     db.from('flush_costs').select('*').eq('flush_id', id).order('date'),
     db.from('embryo_inventory').select('location').eq('flush_id', id).limit(1).then(r => ({data: r.data?.[0]||null, error: r.error})),
   ]);
-  if (data) {
-    showFlushModal(data);
-    setTimeout(() => {
-      populateExistingCosts('fl-costs', costs || []);
-      updateFlushBalance();
-      if (invEntry?.location) {
-        const locEl = document.getElementById('fl-embryo-location');
-        if (locEl) locEl.value = invEntry.location;
-      }
-    }, 30);
-  }
+  if (!data) return;
+  showFlushModal(data);
+  setTimeout(() => {
+    populateExistingCosts('fl-costs', costs || []);
+    updateFlushBalance();
+    if (invEntry?.location) {
+      const locEl = document.getElementById('fl-embryo-location');
+      if (locEl) locEl.value = invEntry.location;
+    }
+    if (data?.id) loadInlineTransfers(data.id);
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const btn = modal.querySelector('.btn-primary');
+      if (btn) btn.onclick = async () => {
+        await saveFlush(id, currentLambId);
+        renderLambDetail();
+      };
+    }
+  }, 50);
 }
 
 function showFlushModal(flush) {
@@ -10199,14 +10207,15 @@ function updateFlushSemenOpts() {
   }
 }
 
-async function saveFlush(id) {
+async function saveFlush(id, donorId) {
   const date = v('fl-date');
   if (!date) { toast('Date required'); return; }
   const { sire_id, ai_sire_id } = parseSireSelection(v('fl-sire-id'));
   const semenType = ai_sire_id ? (document.querySelector('input[name="fl-semen-type"]:checked')?.value || 'frozen') : null;
   const semenLoc = semenType === 'frozen' ? v('fl-semen-loc') : null;
   const strawsUsed = semenType === 'frozen' ? (parseFloat(v('fl-straws-used')) || 0) : 0;
-  const payload = { donor_id: currentLambId, flush_date: date, breed_date: v('fl-breed-date')||null, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
+  const effectiveDonorId = donorId || currentLambId;
+  const payload = { donor_id: effectiveDonorId, flush_date: date, breed_date: v('fl-breed-date')||null, flush_type: v('fl-type')||'MOET', embryos_collected: parseInt(v('fl-count'))||0, embryos_transferred: v('fl-transferred') ? parseInt(v('fl-transferred')) : null, embryos_frozen: v('fl-frozen') ? parseInt(v('fl-frozen')) : null, embryos_unfertilized: v('fl-unfertilized') ? parseInt(v('fl-unfertilized')) : null, embryos_degenerate: v('fl-degenerate') ? parseInt(v('fl-degenerate')) : null, sire_id, ai_sire_id, sire_text: v('fl-sire-text'), notes: v('fl-notes'), semen_type: semenType, semen_location: semenLoc||null, straws_used: strawsUsed||null };
 
   // Cross-check: transfer records must not exceed viable embryos (transferred + frozen)
   if (id) {
