@@ -345,10 +345,10 @@
         <button class="sidebar-btn" onclick="showPage('sales')" data-page="sales"><span>💰</span>Sales</button>
         <button class="sidebar-btn" onclick="showPage('invoices')" data-page="invoices"><span>🧾</span>Invoices</button>
         <div style="height:1px;background:var(--border);margin:0.5rem 0"></div>
-        <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openFlockTreatment()"><span>💉</span>Flock Treatment</button>
+        <button class="sidebar-btn" id="sidebar-treatment-btn" onclick="openBulkEntry('treatment')"><span>💉</span>Flock Treatment</button>
         <button class="sidebar-btn" id="sidebar-bulk-breed-btn" onclick="openBulkBreeding()" style="display:none"><span>🐏</span>Bulk Breeding</button>
         <button class="sidebar-btn" id="sidebar-bulk-pregcheck-btn" onclick="openBulkPregCheck()" style="display:none"><span>🔍</span>Preg Check</button>
-        <button class="sidebar-btn" id="sidebar-bulk-weight-btn" onclick="openBulkWeight()" style="display:none"><span>⚖️</span>Bulk Weight</button>
+        <button class="sidebar-btn" id="sidebar-bulk-weight-btn" onclick="openBulkEntry('weight')" style="display:none"><span>⚖️</span>Bulk Weight</button>
       </nav>
 
       <!-- Bottom actions -->
@@ -1154,7 +1154,10 @@ async function openBulkPregCheck() {
   }).join('');
   showModal(`
     <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.75rem;color:var(--text3);margin-bottom:0.5rem">Green rows = 40–65 days post-breeding (ideal check window)</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+      <div style="font-size:0.75rem;color:var(--text3)">Green rows = 40–65 days post-breeding (ideal check window)</div>
+      <span id="pc-bulk-count" style="font-size:0.78rem;font-weight:700;color:var(--accent);background:var(--surface2);border:1px solid var(--accent);border-radius:1rem;padding:0.15rem 0.65rem">0 of ${pending.length} checked</span>
+    </div>
     <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
       <table style="width:100%;border-collapse:collapse">
         <thead style="position:sticky;top:0;background:var(--surface2);z-index:1"><tr>
@@ -1168,8 +1171,22 @@ async function openBulkPregCheck() {
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save All</button>
+      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save <span id="pc-bulk-save-count"></span></button>
     </div>`, true);
+  // Wire result selects to update count
+  setTimeout(() => {
+    document.querySelectorAll('.pc-bulk-result').forEach(s => s.addEventListener('change', updatePcBulkCount));
+  }, 50);
+}
+
+
+function updatePcBulkCount() {
+  const total = document.querySelectorAll('.pc-bulk-result').length;
+  const n = [...document.querySelectorAll('.pc-bulk-result')].filter(s => s.value).length;
+  const badge = document.getElementById('pc-bulk-count');
+  const saveCount = document.getElementById('pc-bulk-save-count');
+  if (badge) { badge.textContent = `${n} of ${total} checked`; badge.style.borderColor = n > 0 ? 'var(--accent)' : 'var(--border)'; }
+  if (saveCount) saveCount.textContent = `${n} Result${n!==1?'s':''}`;
 }
 
 async function saveBulkPregCheck() {
@@ -1193,6 +1210,28 @@ async function saveBulkPregCheck() {
 let _qeBatchMode = false;
 let _qeType = null;
 
+function updateBulkCount() {
+  const checked = document.querySelectorAll('.bulk-check:checked').length;
+  const badge = document.getElementById('bulk-count-badge');
+  const saveCount = document.getElementById('bulk-save-count');
+  if (badge) badge.textContent = `${checked} selected`;
+  if (saveCount) saveCount.textContent = `${checked} Animal${checked!==1?'s':''}`;
+}
+
+function filterBulkRows(q) {
+  const activeChips = [...document.querySelectorAll('.bulk-filter-chip.active')];
+  document.querySelectorAll('#bulk-tbody tr').forEach(row => {
+    const cb = row.querySelector('.bulk-check');
+    const text = row.textContent.toLowerCase();
+    const matchesSearch = !q || text.includes(q.toLowerCase());
+    if (activeChips.length > 0 && cb && !cb.checked && !matchesSearch) {
+      row.style.display = 'none';
+    } else {
+      row.style.display = matchesSearch ? '' : 'none';
+    }
+  });
+}
+
 function openBulkEntry(type) {
   const title = type === 'weight' ? '⚖️ Bulk Log Weight' : '💊 Bulk Log Treatment';
   const today = new Date().toISOString().slice(0,10);
@@ -1204,12 +1243,16 @@ function openBulkEntry(type) {
     sharedFields = `
       <div class="row">
         <div class="field"><label>Date (applies to all)</label><input type="date" id="bulk-date" value="${today}"></div>
+        <div class="field"><label>Time <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="time" id="bulk-time" style="max-width:140px"></div>
       </div>`;
   } else {
     const products = [...new Set([...(customProducts.vaccine||[]), ...(customProducts.medication||[]), ...BASE_VACCINES, ...BASE_MEDS])].sort();
     const productListHtml = products.map(p=>`<option value="${p}">`).join('');
     sharedFields = `
-      <div class="field"><label>Date (applies to all)</label><input type="date" id="bulk-date" value="${today}" style="max-width:180px"></div>
+      <div class="row">
+        <div class="field"><label>Date (applies to all)</label><input type="date" id="bulk-date" value="${today}" style="max-width:180px"></div>
+        <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="bulk-end-date" style="max-width:180px"></div>
+      </div>
       <div style="margin-top:0.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
           <label style="font-size:0.78rem;font-weight:600;color:var(--text2)">Products / Treatments</label>
@@ -1231,7 +1274,7 @@ function openBulkEntry(type) {
     <tr id="bulk-row-${l.id}">
       <td style="padding:0.35rem 0.5rem">
         <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.82rem;font-weight:600;color:var(--text)">
-          <input type="checkbox" class="bulk-check" data-id="${l.id}" style="accent-color:var(--accent);width:15px;height:15px" checked>
+          <input type="checkbox" class="bulk-check" data-id="${l.id}" style="accent-color:var(--accent);width:15px;height:15px" checked onchange="updateBulkCount()">
           ${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}${l.genetic_code?` <span style="color:var(--accent);font-size:0.7rem;font-weight:700">${l.genetic_code}</span>`:''}
         </label>
       </td>
@@ -1256,9 +1299,10 @@ function openBulkEntry(type) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin:0.5rem 0 0.25rem">
       <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Animals</div>
       <div style="display:flex;gap:0.5rem;align-items:center">
-        <button type="button" onclick="document.querySelectorAll('.bulk-check').forEach(c=>c.checked=true)" style="font-size:0.7rem;color:var(--accent);background:none;border:none;cursor:pointer">✓ All</button>
-        <button type="button" onclick="document.querySelectorAll('.bulk-check').forEach(c=>c.checked=false)" style="font-size:0.7rem;color:var(--text3);background:none;border:none;cursor:pointer">✕ None</button>
-        <input placeholder="Search…" oninput="filterBulkRows(this.value)" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:80px">
+        <button type="button" onclick="document.querySelectorAll('.bulk-check').forEach(c=>c.checked=true);updateBulkCount()" style="font-size:0.7rem;color:var(--accent);background:none;border:none;cursor:pointer">✓ All</button>
+        <button type="button" onclick="document.querySelectorAll('.bulk-check').forEach(c=>c.checked=false);updateBulkCount()" style="font-size:0.7rem;color:var(--text3);background:none;border:none;cursor:pointer">✕ None</button>
+        <input placeholder="Search…" oninput="filterBulkRows(this.value);updateBulkCount()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:80px">
+        <span id="bulk-count-badge" style="font-size:0.72rem;font-weight:700;color:var(--accent);background:var(--surface2);border:1px solid var(--border);border-radius:1rem;padding:0.1rem 0.5rem">0 selected</span>
       </div>
     </div>
     <!-- Flock filter chips -->
@@ -1287,24 +1331,9 @@ function openBulkEntry(type) {
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkEntry('${type}')">Save All Checked</button>
+      <button class="btn btn-primary" onclick="saveBulkEntry('${type}')">Save <span id="bulk-save-count"></span></button>
     </div>`, true);
-}
-
-function filterBulkRows(q) {
-  const activeChips = [...document.querySelectorAll('.bulk-filter-chip.active')];
-  document.querySelectorAll('#bulk-tbody tr').forEach(row => {
-    const cb = row.querySelector('.bulk-check');
-    const id = cb?.dataset.id;
-    const text = row.textContent.toLowerCase();
-    const matchesSearch = !q || text.includes(q.toLowerCase());
-    // If chips are active, respect their visibility too
-    if (activeChips.length > 0 && cb && !cb.checked && !matchesSearch) {
-      row.style.display = 'none';
-    } else {
-      row.style.display = matchesSearch ? '' : 'none';
-    }
-  });
+  setTimeout(updateBulkCount, 50);
 }
 
 function bulkSelectByFilter(field, value, btn) {
@@ -1322,6 +1351,7 @@ function bulkSelectByFilter(field, value, btn) {
   if (activeChips.length === 0) {
     document.querySelectorAll('#bulk-tbody tr').forEach(row => row.style.display = '');
     document.querySelectorAll('.bulk-check').forEach(c => c.checked = true);
+    updateBulkCount();
     return;
   }
 
@@ -1345,6 +1375,7 @@ function bulkSelectByFilter(field, value, btn) {
     row.style.display = matches ? '' : 'none';
     if (cb) cb.checked = matches;
   });
+  updateBulkCount();
 }
 
 function autoFillBulkWithdrawal(el) {
@@ -1387,10 +1418,11 @@ async function saveBulkEntry(type) {
   if (checked.length === 0) { toast('No animals selected'); return; }
 
   if (type === 'weight') {
+    const timeVal = document.getElementById('bulk-time')?.value || '';
     const inserts = checked.map(lambId => {
       const weight = parseFloat(document.querySelector(`.bulk-value[data-id="${lambId}"]`)?.value);
       const notes = document.querySelector(`.bulk-notes[data-id="${lambId}"]`)?.value || '';
-      return weight ? { lamb_id: lambId, weight, weigh_date: date, notes } : null;
+      return weight ? { lamb_id: lambId, weight, weigh_date: date, weigh_time: timeVal||null, notes } : null;
     }).filter(Boolean);
     if (inserts.length === 0) { toast('Enter at least one weight'); return; }
     await db.from('weight_records').insert(inserts);
@@ -1399,16 +1431,18 @@ async function saveBulkEntry(type) {
   } else if (type === 'treatment') {
     const prods = getBulkProducts();
     if (prods.length === 0) { toast('Enter at least one product'); return; }
+    const vaccineNames = new Set([...BASE_VACCINES, ...(customProducts.vaccine||[])].map(s=>s.toLowerCase()));
+    const endDate = document.getElementById('bulk-end-date')?.value || null;
     const inserts = [];
     checked.forEach(lambId => {
       prods.forEach(p => {
         const wdDate = p.withdrawalDays > 0 && date ? new Date(new Date(date+'T12:00:00').getTime()+p.withdrawalDays*864e5).toISOString().slice(0,10) : null;
         inserts.push({
-          lamb_id: lambId, date,
+          lamb_id: lambId, date, end_date: endDate,
           product: p.name, dose: p.dose, route: p.route,
           withdrawal_days: p.withdrawalDays||null, withdrawal_date: wdDate,
           notes: document.querySelector(`.bulk-notes[data-id="${lambId}"]`)?.value || '',
-          type: 'medication'
+          type: vaccineNames.has(p.name.toLowerCase()) ? 'vaccine' : 'medication'
         });
       });
     });
@@ -4344,7 +4378,7 @@ async function renderWeightsPage() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="openAddWeightGlobal()">+ Log Weight</button>
-        <button class="btn btn-secondary btn-sm" onclick="openBulkWeight()">⚖️ Bulk Log</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkEntry('weight')">⚖️ Bulk Log</button>
       </div>
       <div style="font-size:1.1rem;font-weight:700;color:var(--text)">⚖️ Weight Records</div>
     </div>
@@ -10545,189 +10579,6 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 // ── FLOCK TREATMENT ───────────────────────────────────
-function openFlockTreatment() {
-  const activelambs = allLambs.filter(l => l.status === 'Active');
-  const vaccines = [...BASE_VACCINES, ...customProducts.vaccine];
-  const meds = [...BASE_MEDS, ...customProducts.medication];
-  const allProducts = [...new Set([...vaccines, ...meds])].sort();
-  window._ftType = 'vaccine';
-  window._ftAllLambs = activelambs;
-  window._ftProducts = [{ name:'', dose:'', route:'', withdrawalDays:null }];
-
-  const groups = window._planGroups || [];
-  const members = window._planMembers || [];
-  const activeIds = new Set(activelambs.map(l => l.id));
-  const groupOpts = groups
-    .filter(g => g.status !== 'Cancelled')
-    .map(g => {
-      const groupMemberIds = members.filter(m => m.group_id === g.id && m.lamb_id && activeIds.has(m.lamb_id)).map(m => m.lamb_id);
-      return groupMemberIds.length > 0 ? `<option value="${g.id}" data-ids="${groupMemberIds.join(',')}">${g.name} (${groupMemberIds.length})</option>` : '';
-    }).filter(Boolean).join('');
-
-  showModal(`
-    <div class="modal-header">
-      <div class="modal-title">💉 Flock Treatment</div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="row">
-      <div class="field"><label>Date *</label><input type="date" id="ft-date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>End Date <span style="color:var(--text3);font-size:0.72rem">(optional)</span></label><input type="date" id="ft-end-date"></div>
-    </div>
-    <!-- Multi-product list -->
-    <div style="margin-bottom:0.75rem">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--text2)">Products / Treatments</label>
-        <button type="button" onclick="addFTProduct()" style="font-size:0.72rem;color:var(--accent);background:none;border:none;cursor:pointer;font-weight:600">+ Add Another</button>
-      </div>
-      <div id="ft-products-list"></div>
-    </div>
-    <div class="field"><label>Notes</label><input id="ft-notes" placeholder="Lot number, instructions…"></div>
-    <div class="field">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
-        <label style="margin:0">Select Animals *</label>
-        <div style="display:flex;gap:0.3rem;align-items:center">
-          <button class="btn-icon btn-sm" onclick="ftCheckVisible(true)">✓ All</button>
-          <button class="btn-icon btn-sm" onclick="ftCheckVisible(false)">✕ None</button>
-          <input id="ft-search" placeholder="Search…" oninput="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:80px">
-          <select id="ft-sex-filter" onchange="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All sex</option><option>Ewe</option><option>Ram</option><option>Wether</option></select>
-          <select id="ft-flock-filter" onchange="ftFilterList()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All type</option><option>Show</option><option>Breeding</option></select>
-          ${groupOpts ? `<select id="ft-group-filter" onchange="ftGroupSelected()" style="padding:0.2rem 0.4rem;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All groups</option>${groupOpts}</select>` : ''}
-        </div>
-      </div>
-      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.25rem 0.5rem">
-        ${activelambs.map(l => `
-          <label id="ft-row-${l.id}" data-flock="${l.flock_type||''}" data-sex="${l.sex||''}" data-name="${l.name.toLowerCase()}" data-tag="${(l.ear_tag||'').toLowerCase()}" style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;width:100%;box-sizing:border-box">
-            <input type="checkbox" class="ft-lamb-check" value="${l.id}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
-            <span style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap">${l.name}</span>
-            <span style="font-size:0.75rem;color:var(--text3);white-space:nowrap">${l.ear_tag?'#'+l.ear_tag:''} ${l.sex?'· '+l.sex:''} ${l.flock_type?'· '+l.flock_type:''}</span>
-          </label>`).join('')}
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveFlockTreatment()">Save Treatment</button>
-    </div>`, true);
-  renderFTProductsList();
-}
-
-
-function renderFTProductsList() {
-  const el = document.getElementById('ft-products-list');
-  if (!el) return;
-  el.innerHTML = (window._ftProducts||[]).map((p, i) => `
-    <div style="display:flex;gap:0.4rem;align-items:flex-end;margin-bottom:0.5rem;flex-wrap:wrap">
-      <div style="flex:2;min-width:160px">
-        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Product</div>`:''}
-        <select class="ft-prod-name" style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
-          onchange="window._ftProducts[${i}].name=this.value;autoFillFTWithdrawal(${i},this.value)">${buildProductDropdown(p.name||'')}</select>
-      </div>
-      <div style="width:65px">
-        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Dose ml</div>`:''}
-        <input placeholder="ml" value="${p.dose||''}"
-          style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
-          oninput="window._ftProducts[${i}].dose=this.value">
-      </div>
-      <div style="flex:1;min-width:90px">
-        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">Route</div>`:''}
-        <select style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
-          onchange="window._ftProducts[${i}].route=this.value">${ROUTES.map(r=>`<option ${p.route===r?'selected':''}>${r}</option>`).join('')}</select>
-      </div>
-      <div style="width:70px">
-        ${i===0?`<div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:0.2rem">WD Days</div>`:''}
-        <input type="number" min="0" placeholder="days" value="${p.withdrawalDays??''}"
-          style="width:100%;padding:0.3rem 0.4rem;font-size:0.82rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"
-          oninput="window._ftProducts[${i}].withdrawalDays=this.value?parseInt(this.value):null">
-      </div>
-      <div style="padding-bottom:0.2rem">
-        ${i>0?`<button type="button" onclick="window._ftProducts.splice(${i},1);renderFTProductsList()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem">✕</button>`:'<div style="width:1.2rem"></div>'}
-      </div>
-    </div>`).join('');
-}
-
-function addFTProduct() {
-  window._ftProducts = window._ftProducts || [];
-  window._ftProducts.push({ name:'', dose:'', route:'', withdrawalDays:null });
-  renderFTProductsList();
-}
-
-function autoFillFTWithdrawal(i, productName) {
-  const days = lookupWithdrawalDays(productName);
-  if (days !== null && window._ftProducts[i] && !window._ftProducts[i].withdrawalDays) {
-    window._ftProducts[i].withdrawalDays = days;
-    renderFTProductsList();
-  }
-}
-
-function ftGroupSelected() {
-  const sel = document.getElementById('ft-group-filter');
-  if (!sel?.value) { ftFilterList(); return; }
-  const opt = sel.options[sel.selectedIndex];
-  const ids = new Set((opt.getAttribute('data-ids') || '').split(',').filter(Boolean));
-  // Show only group members, hide others
-  (window._ftAllLambs || []).forEach(l => {
-    const row = document.getElementById(`ft-row-${l.id}`);
-    if (!row) return;
-    row.style.display = ids.has(l.id) ? 'flex' : 'none';
-  });
-  // Clear other filters visually
-  ['ft-flock-filter','ft-sex-filter','ft-role-filter'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  document.getElementById('ft-search').value = '';
-}
-
-function ftFilterList() {
-  const groupSel = document.getElementById('ft-group-filter');
-  if (groupSel) groupSel.value = '';
-  const q = document.getElementById('ft-search')?.value?.toLowerCase() || '';
-  const flock = document.getElementById('ft-flock-filter')?.value || '';
-  const sex = document.getElementById('ft-sex-filter')?.value || '';
-  const role = document.getElementById('ft-role-filter')?.value || '';
-  (window._ftAllLambs || []).forEach(l => {
-    const row = document.getElementById(`ft-row-${l.id}`);
-    if (!row) return;
-    const ft = l.flock_type || '';
-    let show = true;
-    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q) && !(l.alt_id||'').toLowerCase().includes(q)) show = false;
-    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) show = false;
-    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) show = false;
-    if (flock === 'Both' && ft !== 'Both') show = false;
-    if (sex && l.sex !== sex) show = false;
-    if (role && l.role !== role) show = false;
-    row.style.display = show ? 'flex' : 'none';
-  });
-}
-
-function ftCheckVisible(checked) {
-  document.querySelectorAll('.ft-lamb-check').forEach(cb => {
-    const label = cb.closest('label');
-    if (label && label.style.display !== 'none') cb.checked = checked;
-  });
-}
-
-async function saveFlockTreatment() {
-  const prods = (window._ftProducts||[]).filter(p => p.name?.trim());
-  if (prods.length === 0) { toast('Enter at least one product'); return; }
-  const selected = [...document.querySelectorAll('.ft-lamb-check:checked')].map(c => c.value);
-  if (selected.length === 0) { toast('Select at least one lamb'); return; }
-
-  const date = v('ft-date');
-  const endDate = v('ft-end-date') || null;
-  const notes = v('ft-notes');
-
-  const records = [];
-  selected.forEach(lambId => {
-    prods.forEach(p => {
-      const wdDays = p.withdrawalDays || null;
-      const wdDate = wdDays > 0 && date ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
-      const type = [...BASE_VACCINES, ...customProducts.vaccine].includes(p.name) ? 'vaccine' : 'medication';
-      records.push({ lamb_id: lambId, type, product: p.name.trim(), date, end_date: endDate, dose: p.dose||'', route: p.route||'', notes, withdrawal_days: wdDays, withdrawal_date: wdDate });
-    });
-  });
-  await db.from('health_records').insert(records);
-  toast(`Treatment logged: ${selected.length} animal${selected.length!==1?'s':''} × ${prods.length} product${prods.length!==1?'s':''}`);
-  closeModal();
-}
 
 // ── BULK BREEDING ─────────────────────────────────────
 let bulkBreedIncludeRecips = false;
@@ -10924,7 +10775,10 @@ async function openBulkPregCheck() {
 
   showModal(`
     <div class="modal-header"><div class="modal-title">🔍 Bulk Preg Check</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem">${pendingBreedings.length} breeding + ${pendingTransfers.length} transfer records pending.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+      <div style="font-size:0.8rem;color:var(--text3)">${pendingBreedings.length} breeding + ${pendingTransfers.length} transfer records pending.</div>
+      <span id="pc-bulk-count" style="font-size:0.78rem;font-weight:700;color:var(--accent);background:var(--surface2);border:1px solid var(--border);border-radius:1rem;padding:0.15rem 0.65rem">0 of ${pendingBreedings.length + pendingTransfers.length} checked</span>
+    </div>
     <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap">
       <span style="font-size:0.78rem;color:var(--text3);white-space:nowrap">Set all to:</span>
       <select id="pc-global-outcome" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem;flex:1">
@@ -10978,10 +10832,30 @@ async function openBulkPregCheck() {
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save Results</button>
+      <button class="btn btn-primary" onclick="saveBulkPregCheck()">Save <span id="pc-bulk-save-count"></span></button>
     </div>`, true);
 
+  // Wire checkboxes and outcome selects to update count
+  setTimeout(() => {
+    const total = document.querySelectorAll('[id^="pc-check-"]').length;
+    // Check all by default and update count
+    document.querySelectorAll('[id^="pc-check-"]').forEach(cb => {
+      cb.checked = true;
+      cb.addEventListener('change', () => updatePcBulkCount2(total));
+    });
+    document.querySelectorAll('[id^="pc-outcome-"]').forEach(s => s.addEventListener('change', () => updatePcBulkCount2(total)));
+    updatePcBulkCount2(total);
+  }, 50);
+
   renderFlock();
+}
+
+function updatePcBulkCount2(total) {
+  const checked = [...document.querySelectorAll('[id^="pc-check-"]')].filter(c => c.checked).length;
+  const badge = document.getElementById('pc-bulk-count');
+  const saveCount = document.getElementById('pc-bulk-save-count');
+  if (badge) { badge.textContent = `${checked} of ${total||checked} checked`; badge.style.borderColor = checked > 0 ? 'var(--accent)' : 'var(--border)'; }
+  if (saveCount) saveCount.textContent = `${checked} Result${checked!==1?'s':''}`;
 }
 
 function pcToggleFetal(sel, id) {
@@ -11002,12 +10876,11 @@ function pcFilterByGroup() {
 function applyGlobalPregOutcome() {
   const outcome = document.getElementById('pc-global-outcome')?.value;
   document.querySelectorAll('.pc-record-row').forEach(row => {
-    if (row.style.display === 'none') return;
-    const outcomeId = row.querySelector('[id^="pc-outcome-"]')?.id;
-    const checkId = row.querySelector('[id^="pc-check-"]')?.id;
-    if (outcomeId) document.getElementById(outcomeId).value = outcome;
-    if (checkId) document.getElementById(checkId).checked = true;
+    const sel = row.querySelector('[id^="pc-outcome-"]');
+    if (sel) { sel.value = outcome; pcToggleFetal(sel, sel.id.replace('pc-outcome-','')); }
   });
+  const total = document.querySelectorAll('[id^="pc-check-"]').length;
+  updatePcBulkCount2(total);
 }
 
 async function saveBulkPregCheck() {
@@ -11039,164 +10912,6 @@ async function saveBulkPregCheck() {
   const total = breedingUpdates.length + transferUpdates.length;
   toast(`${total} record${total!==1?'s':''} updated`);
   closeModal();
-}
-async function openBulkWeight() {
-  const defaultDate = new Date().toISOString().slice(0,10);
-  const active = allLambs.filter(l => l.status === 'Active');
-  window._bwAllLambs = active;
-  const showOpts = allShows.map(s => '<option value="' + s.id + '">' + s.name + '</option>').join('');
-  const { data: allShowEntries } = await db.from('show_entries').select('show_id, lamb_id');
-  const showLambMap = {};
-  (allShowEntries||[]).forEach(e => {
-    if (!showLambMap[e.show_id]) showLambMap[e.show_id] = new Set();
-    showLambMap[e.show_id].add(e.lamb_id);
-  });
-  window._bwShowLambMap = showLambMap;
-  const sireOpts = sireOptions('');
-  const groups = window._planGroups || [];
-  const members = window._planMembers || [];
-  const activeIds = new Set(active.map(l => l.id));
-  const groupOpts = groups
-    .filter(g => g.status !== 'Cancelled')
-    .map(g => {
-      const ids = members.filter(m => m.group_id === g.id && m.lamb_id && activeIds.has(m.lamb_id)).map(m => m.lamb_id);
-      if (!ids.length) return '';
-      return '<option value="' + g.id + '" data-ids="' + ids.join(',') + '">' + g.name + ' (' + ids.length + ')</option>';
-    }).filter(Boolean).join('');
-
-  showModal(`
-    <div class="modal-header"><div class="modal-title">⚖️ Bulk Weight</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-    <div style="font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem">Enter weights for multiple animals. Leave blank to skip.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;align-items:center">
-      <input type="date" id="bw-global-date" value="${defaultDate}" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.6rem;font-size:0.82rem">
-      <input type="text" id="bw-global-time" placeholder="HH:MM" onblur="fmtTimeInput(this)" style="width:80px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
-      <select id="bw-global-ampm" style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.45rem;font-size:0.82rem">
-        <option>AM</option><option>PM</option>
-      </select>
-      <button class="btn btn-secondary btn-sm" onclick="applyGlobalWeightDate()" title="Copy this date to all individual rows below" style="flex-shrink:0">Apply date to all</button>
-    </div>
-    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.5rem;align-items:center">
-      <input id="bw-search" placeholder="Search..." oninput="bwFilterList()" style="padding:0.3rem 0.5rem;font-size:0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);flex:1;min-width:100px">
-      <select id="bw-flock-filter" onchange="bwFilterList()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-        <option value="">All Flocks</option>
-        <option value="Show">Show</option>
-        <option value="Breeding">Breeding</option>
-        <option value="Both">Both</option>
-      </select>
-      <select id="bw-sex-filter" onchange="bwFilterList()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-        <option value="">All Sexes</option>
-        <option value="Ewe">Ewes</option>
-        <option value="Wether">Wethers</option>
-        <option value="Ram">Rams</option>
-      </select>
-      ${groupOpts ? '<select id="bw-group-filter" onchange="bwGroupSelected()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All Groups</option>' + groupOpts + '</select>' : ''}
-      ${showOpts ? '<select id="bw-show-filter" onchange="bwShowSelected()" style="font-size:0.8rem;padding:0.3rem 0.45rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"><option value="">All Shows</option>' + showOpts + '</select>' : ''}
-      <button class="btn-icon btn-sm" onclick="bwCheckVisible(true)">✓ All</button>
-    </div>
-    <div style="height:340px;overflow-y:scroll" id="bulk-weight-rows">
-      ${active.map(lamb => `
-        <div id="bw-row-${lamb.id}" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-          <input type="checkbox" id="bw-cb-${lamb.id}" checked style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
-          <div style="flex:1;min-width:120px">
-            <span style="font-size:0.85rem;font-weight:600;color:var(--text)">${lamb.name}</span>
-            <span style="font-size:0.75rem;color:var(--text3)">${lamb.ear_tag?' #'+lamb.ear_tag:''} ${lamb.flock_type?'· '+lamb.flock_type:''}</span>
-          </div>
-          <div style="display:flex;gap:0.35rem;flex-shrink:0">
-            <input type="number" step="0.1" id="bw-wt-${lamb.id}" placeholder="lbs" style="width:75px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
-            <input type="date" id="bw-date-${lamb.id}" value="${defaultDate}" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0.35rem 0.5rem;font-size:0.82rem">
-          </div>
-        </div>`).join('')}
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkWeight()">Save Weights</button>
-    </div>`, true);
-}
-
-function bwShowSelected() {
-  const sel = document.getElementById('bw-show-filter');
-  if (!sel?.value) { bwFilterList(); return; }
-  const showId = sel.value;
-  const ids = window._bwShowLambMap?.[showId] || new Set();
-  ['bw-search','bw-flock-filter','bw-sex-filter','bw-group-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  (window._bwAllLambs || []).forEach(l => {
-    const row = document.getElementById(`bw-row-${l.id}`);
-    if (row) row.style.display = ids.has(l.id) ? 'flex' : 'none';
-  });
-}
-
-function bwFilterList() {
-  const showSel = document.getElementById('bw-show-filter');
-  if (showSel) showSel.value = '';
-  const q = document.getElementById('bw-search')?.value?.toLowerCase() || '';
-  const flock = document.getElementById('bw-flock-filter')?.value || '';
-  const sex = document.getElementById('bw-sex-filter')?.value || '';
-  const groupSel = document.getElementById('bw-group-filter');
-  if (groupSel) groupSel.value = '';
-  (window._bwAllLambs || []).forEach(l => {
-    const row = document.getElementById(`bw-row-${l.id}`);
-    if (!row) return;
-    const ft = l.flock_type || '';
-    let show = true;
-    if (q && !l.name.toLowerCase().includes(q) && !(l.ear_tag||'').toLowerCase().includes(q)) show = false;
-    if (flock === 'Show' && !(ft==='Show'||ft==='Both')) show = false;
-    if (flock === 'Breeding' && !(ft==='Breeding'||ft==='Both')) show = false;
-    if (flock === 'Both' && ft !== 'Both') show = false;
-    if (sex && l.sex !== sex) show = false;
-    row.style.display = show ? 'flex' : 'none';
-  });
-}
-
-function bwGroupSelected() {
-  const sel = document.getElementById('bw-group-filter');
-  if (!sel?.value) { bwFilterList(); return; }
-  const ids = new Set((sel.options[sel.selectedIndex]?.getAttribute('data-ids')||'').split(',').filter(Boolean));
-  ['bw-search','bw-flock-filter','bw-sex-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  (window._bwAllLambs || []).forEach(l => {
-    const row = document.getElementById(`bw-row-${l.id}`);
-    if (row) row.style.display = ids.has(l.id) ? 'flex' : 'none';
-  });
-}
-
-function bwCheckVisible(checked) {
-  document.querySelectorAll('[id^="bw-cb-"]').forEach(cb => {
-    const id = cb.id.replace('bw-cb-','');
-    const row = document.getElementById(`bw-row-${id}`);
-    if (row && row.style.display !== 'none') cb.checked = checked;
-  });
-}
-
-function applyGlobalWeightDate() {
-  const date = document.getElementById('bw-global-date')?.value;
-  if (!date) return;
-  (window._bwAllLambs || []).forEach(lamb => {
-    const row = document.getElementById(`bw-row-${lamb.id}`);
-    const el = document.getElementById(`bw-date-${lamb.id}`);
-    if (el && row && row.style.display !== 'none') el.value = date;
-  });
-}
-
-async function saveBulkWeight() {
-  const active = window._bwAllLambs || allLambs.filter(l => l.status === 'Active');
-  const records = [];
-  for (const lamb of active) {
-    const cb = document.getElementById(`bw-cb-${lamb.id}`);
-    if (!cb?.checked) continue;
-    const wtEl = document.getElementById(`bw-wt-${lamb.id}`);
-    const dateEl = document.getElementById(`bw-date-${lamb.id}`);
-    const wt = wtEl?.value?.trim();
-    const date = dateEl?.value;
-    if (!wt || isNaN(parseFloat(wt))) continue;
-    if (!date) continue;
-    const bwTime = combineTimeAmPm('bw-global-time','bw-global-ampm');
-    records.push({ lamb_id: lamb.id, weight_lbs: parseFloat(wt), date, weigh_time: bwTime||null });
-  }
-  if (records.length === 0) { toast('No weights entered — fill in at least one weight field'); return; }
-  const { error } = await db.from('weight_records').insert(records);
-  if (error) { console.error('Save error:', error); toast('Error saving: ' + (error.message||'unknown')); return; }
-  toast(`${records.length} weight record${records.length!==1?'s':''} saved`);
-  closeModal();
-  if (currentPage === 'weights') renderWeightsPage();
 }
 let pedNodes = {};
 let pedCanvas = null;
