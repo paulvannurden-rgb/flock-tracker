@@ -5459,15 +5459,12 @@ async function openEditFlushGlobal(flushId, donorId) {
     }
     // Load transfers inline
     if (flush?.id) loadInlineTransfers(flush.id);
-    const modal = document.querySelector('.modal');
-    if (modal) {
-      const btn = modal.querySelector('.btn-primary');
-      if (btn) btn.onclick = async () => {
-        await saveFlush(flushId, donorId);
-        currentLambId = prevLambId;
-        renderFlushes();
-      };
-    }
+    const btn = document.getElementById('fl-save-btn');
+    if (btn) btn.onclick = async () => {
+      await saveFlush(flushId, donorId);
+      currentLambId = prevLambId;
+      renderFlushes();
+    };
   }, 50);
 }
 
@@ -9806,7 +9803,13 @@ async function saveBreeding(id) {
 }
 
 // ── EMBRYO ────────────────────────────────────────────
-function openAddFlush() { showFlushModal(null); }
+function openAddFlush() {
+  showFlushModal(null);
+  setTimeout(() => {
+    const btn = document.getElementById('fl-save-btn');
+    if (btn) btn.onclick = async () => { await saveFlush(null, currentLambId); loadLambTab(); };
+  }, 50);
+}
 
 async function openEditFlush(id) {
   const [{ data }, { data: costs }, { data: invEntry }] = await Promise.all([
@@ -9824,14 +9827,11 @@ async function openEditFlush(id) {
       if (locEl) locEl.value = invEntry.location;
     }
     if (data?.id) loadInlineTransfers(data.id);
-    const modal = document.querySelector('.modal');
-    if (modal) {
-      const btn = modal.querySelector('.btn-primary');
-      if (btn) btn.onclick = async () => {
-        await saveFlush(id, currentLambId);
-        renderLambDetail();
-      };
-    }
+    const btn = document.getElementById('fl-save-btn');
+    if (btn) btn.onclick = async () => {
+      await saveFlush(id, currentLambId);
+      renderLambDetail();
+    };
   }, 50);
 }
 
@@ -9842,7 +9842,7 @@ function showFlushModal(flush) {
   const currentSire = flush?.sire_id ? 'lamb:'+flush.sire_id : (flush?.ai_sire_id ? 'ai:'+flush.ai_sire_id : '');
   const aiSireId = flush?.ai_sire_id || '';
   const semenOpts = aiSireId ? getSemenOptionsForRam(aiSireId, flush?.semen_location) : '<option value="">— Select sire first —</option>';
-  const hasSemenInv = aiSireId && (allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0) || (rec?.semen_type === 'frozen' && rec?.semen_location));
+  const hasSemenInv = aiSireId && (allSemenInventory.some(i => i.ai_ram_id === aiSireId && i.straws > 0) || (flush?.semen_type === 'frozen' && flush?.semen_location));
 
   showModal(`
     <div class="modal-header"><div class="modal-title">${isEdit ? '🔬 Edit Flush' : '🔬 Log Flush'}${isEdit ? donorLabel : ''}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -9913,7 +9913,7 @@ function showFlushModal(flush) {
 
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveFlush('${flush?.id||''}')">${isEdit ? 'Save Changes' : 'Save Flush'}</button>
+      <button class="btn btn-primary" id="fl-save-btn">${isEdit ? 'Save Changes' : 'Save Flush'}</button>
     </div>`);
   addCostEntryRow('fl-costs');
   // Store flush ID for inline cross-checks
@@ -10259,7 +10259,7 @@ async function saveFlush(id, donorId) {
     if (savedId && payload.embryos_frozen > 0 && addToInv) await syncFrozenEmbryoInventory(savedId, payload, payload.embryos_frozen, document.getElementById('fl-embryo-location')?.value?.trim()||null);
     toast('Flush recorded');
   }
-  closeModal(); loadLambTab();
+  closeModal();
 }
 
 function confirmDeleteFlush(id) {
