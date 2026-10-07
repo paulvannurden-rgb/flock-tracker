@@ -336,6 +336,7 @@
         <button class="sidebar-btn" onclick="showPage('analytics')" data-page="analytics"><span>📈</span>Analytics</button>
         <button class="sidebar-btn" onclick="showPage('shows')" data-page="shows"><span>🏆</span>Shows</button>
         <button class="sidebar-btn" onclick="showPage('planning')" data-page="planning"><span>🗓</span>Planning</button>
+        <button class="sidebar-btn" onclick="showPage('lifecycle')" data-page="lifecycle"><span>📋</span>Protocols</button>
         <button class="sidebar-btn" onclick="showPage('costs')" data-page="costs"><span>💰</span>Costs</button>
         <button class="sidebar-btn" onclick="showPage('supplies')" data-page="supplies"><span>🌾</span>Supplies</button>
         <button class="sidebar-btn" onclick="showPage('embryo_inventory')" data-page="embryo_inventory"><span>❄️</span>Frozen</button>
@@ -723,6 +724,7 @@ function showPage(page) {
   else if (page === 'analytics') renderAnalytics();
   else if (page === 'shows') renderShows();
   else if (page === 'planning') renderPlanning();
+  else if (page === 'lifecycle') renderLifecycle();
   else if (page === 'embryo_inventory') renderEmbryoInventory();
   else if (page === 'costs') renderCosts();
   else if (page === 'supplies') renderSupplies();
@@ -851,6 +853,44 @@ function showDashPanel(type) {
     ].join('');
   }
 
+  if (type === 'activities') {
+    const acts = d.activitiesDue || [];
+    title = `📋 Activities Due (${acts.length})`;
+    const actRows = acts.map((a,i) => {
+      const overdueDiff = a.diff > 0;
+      const diffLabel = a.diff === 0 ? 'Today' : overdueDiff ? `${a.diff}d overdue` : `in ${Math.abs(a.diff)}d`;
+      const diffColor = overdueDiff ? '#dc2626' : a.diff === 0 ? '#92400e' : '#15803d';
+      return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.5rem" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" class="act-check" data-step="${a.step.id}" data-lamb="${a.lamb.id}" data-idx="${i}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0" onchange="updateActCount()">
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}')">
+          <div style="font-weight:600;font-size:0.85rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3)">#${a.lamb.ear_tag}</span>`:''}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} <span style="color:var(--text2)">· ${a.protocol.name}</span></div>
+        </div>
+        <span style="font-size:0.72rem;font-weight:700;color:${diffColor};white-space:nowrap;flex-shrink:0">${diffLabel}</span>
+      </div>`;
+    }).join('') || '<div style="padding:1rem;text-align:center;color:var(--text3);font-size:0.82rem">No activities due</div>';
+
+    panel.style.display = '';
+    panel.innerHTML = `
+      <div class="card" style="padding:0;overflow:hidden;border-color:var(--accent)">
+        <div style="padding:0.5rem 0.85rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span style="font-size:0.75rem;font-weight:700;color:var(--text)">${title}</span>
+            <span id="act-sel-count" style="font-size:0.7rem;color:var(--text3)">0 selected</span>
+          </div>
+          <div style="display:flex;gap:0.35rem;align-items:center">
+            <button onclick="document.querySelectorAll('.act-check').forEach(c=>c.checked=true);updateActCount()" style="font-size:0.68rem;color:var(--accent);background:none;border:none;cursor:pointer">✓ All</button>
+            <button onclick="document.querySelectorAll('.act-check').forEach(c=>c.checked=false);updateActCount()" style="font-size:0.68rem;color:var(--text3);background:none;border:none;cursor:pointer">✕ None</button>
+            <button id="act-bulk-skip" onclick="bulkSkipActivities()" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;display:none">Skip Selected</button>
+            <button id="act-bulk-log" onclick="bulkLogActivities()" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:var(--accent);border:none;border-radius:var(--radius-sm);color:#fff;cursor:pointer;display:none">Log Selected</button>
+            <button onclick="document.getElementById('dash-panel').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1;margin-left:0.25rem">✕</button>
+          </div>
+        </div>
+        <div style="max-height:340px;overflow-y:auto">${actRows}</div>
+      </div>`;
+    return;
+  }
+
   panel.style.display = '';
   panel.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden;border-color:var(--accent)">
@@ -871,12 +911,16 @@ async function renderDashboard() {
   const in7 = new Date(Date.now()+7*864e5).toISOString().slice(0,10);
   const in14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
 
-  const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }, { data: activeHealthRecsRaw }] = await Promise.all([
+  const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }, { data: activeHealthRecsRaw }, { data: lcProtocols }, { data: lcSteps }, { data: lcCompletions }, { data: lambingRecs }] = await Promise.all([
     db.from('breeding_records').select('*').order('expected_lamb_date'),
     db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
     db.from('weight_records').select('*').order('weigh_date', {ascending:false}).limit(50),
     db.from('health_records').select('*').order('date', {ascending:false}).limit(30),
     db.from('health_records').select('*').order('withdrawal_date'),
+    db.from('lifecycle_protocols').select('*').eq('active', true),
+    db.from('lifecycle_protocol_steps').select('*').order('day_offset'),
+    db.from('lifecycle_completions').select('*'),
+    db.from('breeding_records').select('lamb_id,actual_lamb_date'),
   ]);
   const activeHealthRecs = (activeHealthRecsRaw||[]).filter(h => h.withdrawal_date >= today);
 
@@ -917,6 +961,58 @@ async function renderDashboard() {
     ...(weights||[]).slice(0,5).map(w => { const l=lambById[w.lamb_id]; return { date:w.weigh_date, icon:'⚖️', text:`${l?.name||'?'} — ${w.weight} lbs`, lambId:w.lamb_id }; }),
     ...(healthRecs||[]).slice(0,5).map(h => { const l=lambById[h.lamb_id]; return { date:h.date, icon:'💊', text:`${l?.name||'?'} — ${h.product||h.type}`, lambId:h.lamb_id }; }),
   ].filter(a => a.date).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,8);
+
+  const completionSet = new Set((lcCompletions||[]).map(c => `${c.step_id}:${c.lamb_id}`));
+  const lambingMap = {}; // lambId -> actual_lamb_date
+  (lambingRecs||[]).filter(r => r.actual_lamb_date).forEach(r => { lambingMap[r.lamb_id] = r.actual_lamb_date; });
+
+  const activitiesDue = []; // { step, protocol, lamb, daysDiff, triggerDay }
+
+  (lcProtocols||[]).forEach(proto => {
+    const protoSteps = (lcSteps||[]).filter(s => s.protocol_id === proto.id);
+    if (!protoSteps.length) return;
+    const window_ = proto.window_days ?? 3;
+
+    // Determine which animals this protocol applies to
+    let candidates = allLambs.filter(l => l.status === 'Active');
+    if (proto.applies_to === 'ewes') candidates = candidates.filter(l => l.sex === 'Ewe');
+    else if (proto.applies_to === 'rams') candidates = candidates.filter(l => l.sex === 'Ram');
+    else if (proto.applies_to === 'show') candidates = candidates.filter(l => (l.flock_type||'Show') === 'Show');
+    else if (proto.applies_to === 'breeding') candidates = candidates.filter(l => (l.flock_type||'Breeding') === 'Breeding');
+    else if (proto.applies_to === 'group' && proto.group_id) {
+      const members = new Set((window._planMembers||[]).filter(m => m.group_id === proto.group_id).map(m => m.lamb_id));
+      candidates = candidates.filter(l => members.has(l.id));
+    }
+
+    candidates.forEach(lamb => {
+      // Get current day for each trigger type
+      let currentDay = null;
+      if (proto.trigger_type === 'gestation_day') {
+        const breedRec = (window._breedingAllRecs||[]).filter(r => r.lamb_id === lamb.id && (r.outcome === 'Confirmed Pregnant' || r.outcome === 'Pending') && r.breeding_date).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date))[0];
+        const xferRec = (window._allTransfers||[]).filter(t => t.recipient_id === lamb.id && (t.outcome === 'Confirmed Pregnant' || t.outcome === 'Pending') && t.implant_date).sort((a,b) => b.implant_date.localeCompare(a.implant_date))[0];
+        if (breedRec) currentDay = gestDays(breedRec.breeding_date);
+        else if (xferRec) currentDay = gestDays(etConceptionDate(xferRec));
+      } else if (proto.trigger_type === 'post_lamb_day') {
+        const lambDate = lambingMap[lamb.id];
+        if (lambDate) currentDay = Math.floor((Date.now() - new Date(lambDate+'T12:00:00').getTime()) / 864e5);
+      } else if (proto.trigger_type === 'age_days') {
+        if (lamb.dob) currentDay = Math.floor((Date.now() - new Date(lamb.dob+'T12:00:00').getTime()) / 864e5);
+      }
+      if (currentDay === null) return;
+
+      protoSteps.forEach(step => {
+        if (completionSet.has(`${step.id}:${lamb.id}`)) return; // already done
+        const diff = currentDay - step.day_offset; // positive = past due, negative = upcoming
+        if (diff >= 0 || diff >= -10) { // always show overdue, show upcoming within 10 days
+          activitiesDue.push({ step, protocol: proto, lamb, diff, currentDay });
+        }
+      });
+    });
+  });
+
+  // Sort: overdue first, then by abs diff
+  activitiesDue.sort((a,b) => b.diff - a.diff);
+  window._activitiesDue = activitiesDue;
 
   mc.innerHTML = `
       <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">⚡ Quick Entry</div>
@@ -975,6 +1071,10 @@ async function renderDashboard() {
         <div style="font-size:1.6rem;font-weight:700;color:${overdue.length+overdueTransfers.length>0?'#dc2626':'var(--text3)'}">${overdue.length+overdueTransfers.length}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Overdue</div>
       </div>
+      <div class="card dash-stat-card" id="dsc-activities" style="padding:0.85rem;text-align:center;cursor:pointer;${activitiesDue.length>0?'background:#fef3c7;border-color:#d97706':''}" onclick="showDashPanel('activities')">
+        <div style="font-size:1.6rem;font-weight:700;color:${activitiesDue.length>0?'#92400e':'var(--text3)'}">${activitiesDue.length}</div>
+        <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Due Tasks</div>
+      </div>
     </div>
     <!-- Expandable detail panel -->
     <div id="dash-panel" style="display:none;margin-bottom:1rem"></div>
@@ -1023,7 +1123,28 @@ async function renderDashboard() {
           </div>`; }).join('')}
         </div>` : ''}
 
-        ${overdue.length===0&&overdueTransfers.length===0&&dueSoon.length+dueTransfers.length===0&&pregCheckDue.length===0 ? `
+        ${activitiesDue.length > 0 ? `
+        <div style="font-size:0.72rem;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">📋 Activities Due</div>
+        <div class="card" style="padding:0;overflow:hidden;border-color:#fcd34d;margin-bottom:1rem">
+          ${activitiesDue.slice(0,8).map(a => {
+            const overdueDiff = a.diff > 0;
+            const diffLabel = a.diff === 0 ? 'Today' : overdueDiff ? `${a.diff}d overdue` : `in ${Math.abs(a.diff)}d`;
+            const diffColor = overdueDiff ? '#dc2626' : a.diff === 0 ? '#92400e' : '#15803d';
+            return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
+              <div style="min-width:0;flex:1;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}')">
+                <div style="font-weight:600;font-size:0.82rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3);font-weight:400">#${a.lamb.ear_tag}</span>`:''}</div>
+                <div style="font-size:0.7rem;color:var(--text3)">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} · ${a.protocol.name}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0">
+                <span style="font-size:0.7rem;font-weight:700;color:${diffColor};white-space:nowrap">${diffLabel}</span>
+                <button onclick="skipActivityDue('${a.step.id}','${a.lamb.id}')" title="Skip" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;font-size:0.68rem;padding:0.1rem 0.35rem">Skip</button>
+              </div>
+            </div>`;
+          }).join('')}
+          ${activitiesDue.length > 8 ? `<div style="padding:0.4rem 0.85rem;text-align:center;font-size:0.75rem;color:var(--accent);cursor:pointer" onclick="showDashPanel('activities')">+${activitiesDue.length-8} more →</div>` : ''}
+        </div>` : ''}
+
+        ${overdue.length===0&&overdueTransfers.length===0&&dueSoon.length+dueTransfers.length===0&&pregCheckDue.length===0&&activitiesDue.length===0 ? `
         <div class="card" style="padding:1.25rem;text-align:center;color:var(--text3)">
           <div style="font-size:1.5rem;margin-bottom:0.35rem">✅</div>
           <div style="font-size:0.82rem">No alerts — all clear!</div>
@@ -1080,7 +1201,9 @@ async function renderDashboard() {
     `;
 
   // Store for panel and preg check access
-  window._dash = { activeBreedRecs, activeTransfers, overdue, overdueTransfers, dueSoon, dueTransfers, pregCheckDue };
+  // ── Lifecycle protocol activities due ──────────────────
+
+  window._dash = { activeBreedRecs, activeTransfers, overdue, overdueTransfers, dueSoon, dueTransfers, pregCheckDue, activitiesDue };
 }
 // ── PREG CHECK ─────────────────────────────────────────
 function openPregCheck() {
@@ -11606,6 +11729,373 @@ async function confirmUseInventory(id, available, flushId, donorId) {
   }
   closeModal();
   renderEmbryoInventory();
+}
+
+// ── LIFECYCLE ACTIVITY DUE ─────────────────────────────
+function updateActCount() {
+  const checked = [...document.querySelectorAll('.act-check:checked')];
+  const n = checked.length;
+  const countEl = document.getElementById('act-sel-count');
+  const skipBtn = document.getElementById('act-bulk-skip');
+  const logBtn = document.getElementById('act-bulk-log');
+  if (countEl) countEl.textContent = n > 0 ? `${n} selected` : '0 selected';
+  if (skipBtn) skipBtn.style.display = n > 0 ? '' : 'none';
+  if (logBtn) logBtn.style.display = n > 0 ? '' : 'none';
+}
+
+async function bulkSkipActivities() {
+  const checked = [...document.querySelectorAll('.act-check:checked')];
+  if (!checked.length) return;
+  const today = new Date().toISOString().slice(0,10);
+  const upserts = checked.map(c => ({ step_id: c.dataset.step, lamb_id: c.dataset.lamb, completed_date: today, notes: 'Skipped' }));
+  await db.from('lifecycle_completions').upsert(upserts, { onConflict: 'step_id,lamb_id' });
+  toast(`Skipped ${upserts.length} activit${upserts.length!==1?'ies':'y'}`);
+  renderDashboard();
+}
+
+async function bulkLogActivities() {
+  const checked = [...document.querySelectorAll('.act-check:checked')];
+  if (!checked.length) return;
+  const d = window._dash;
+  const acts = (d?.activitiesDue||[]);
+  const selected = checked.map(c => acts.find(a => a.step.id === c.dataset.step && a.lamb.id === c.dataset.lamb)).filter(Boolean);
+  if (!selected.length) return;
+
+  // Group by step — each unique step gets one date/product/dose/route entry
+  const byStep = {};
+  selected.forEach(a => { (byStep[a.step.id] = byStep[a.step.id]||{step:a.step, protocol:a.protocol, lambs:[]}).lambs.push(a.lamb); });
+  const steps = Object.values(byStep);
+  const today = new Date().toISOString().slice(0,10);
+
+  // Build a simple bulk log modal
+  showModal(`
+    <div class="modal-header"><div class="modal-title">💊 Log ${selected.length} Activities</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Date</label><input type="date" id="bact-date" value="${today}" style="max-width:180px"></div>
+    ${steps.map((g,i) => `
+      <div style="margin-top:0.75rem;padding:0.6rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text);margin-bottom:0.4rem">Day ${g.step.day_offset} · ${g.protocol.name} <span style="color:var(--text3);font-weight:400">(${g.lambs.map(l=>l.name).join(', ')})</span></div>
+        <div class="row">
+          <div class="field"><label>Product</label><select id="bact-product-${i}" onchange="bactAutoWd(${i})">${buildProductDropdown(g.step.product||'')}</select></div>
+          <div class="field"><label>Dose</label><input id="bact-dose-${i}" value="${g.step.dose||''}" placeholder="ml" style="max-width:80px"></div>
+          <div class="field"><label>Route</label><select id="bact-route-${i}">${ROUTES.map(r=>`<option ${g.step.route===r?'selected':''}>${r}</option>`).join('')}</select></div>
+          <div class="field"><label>WD Days</label><input type="number" id="bact-wd-${i}" value="${g.step.withdrawal_days||''}" min="0" placeholder="auto" style="max-width:70px"></div>
+        </div>
+      </div>`).join('')}
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkActivityLog(${JSON.stringify(steps.map(g=>({stepId:g.step.id, lambIds:g.lambs.map(l=>l.id)})))})">Save ${selected.length} Records</button>
+    </div>`);
+}
+
+function bactAutoWd(i) {
+  const product = document.getElementById(`bact-product-${i}`)?.value;
+  const wdEl = document.getElementById(`bact-wd-${i}`);
+  if (!wdEl || !product) return;
+  const days = lookupWithdrawalDays(product);
+  if (days !== null) wdEl.value = days;
+}
+
+async function saveBulkActivityLog(groups) {
+  const date = document.getElementById('bact-date')?.value;
+  if (!date) { toast('Date required'); return; }
+  const healthInserts = [];
+  const completions = [];
+  groups.forEach((g, i) => {
+    const product = document.getElementById(`bact-product-${i}`)?.value;
+    const dose = document.getElementById(`bact-dose-${i}`)?.value;
+    const route = document.getElementById(`bact-route-${i}`)?.value;
+    const wdDays = parseInt(document.getElementById(`bact-wd-${i}`)?.value)||null;
+    const wdDate = wdDays ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
+    const type = BASE_VACCINES.includes(product) ? 'vaccine' : 'medication';
+    g.lambIds.forEach(lambId => {
+      healthInserts.push({ lamb_id: lambId, date, product: product==='— Select product —'?null:product, dose, route, withdrawal_days: wdDays, withdrawal_date: wdDate, type });
+      completions.push({ step_id: g.stepId, lamb_id: lambId, completed_date: date });
+    });
+  });
+  if (healthInserts.length) await db.from('health_records').insert(healthInserts);
+  if (completions.length) await db.from('lifecycle_completions').upsert(completions, { onConflict: 'step_id,lamb_id' });
+  toast(`✅ ${healthInserts.length} record${healthInserts.length!==1?'s':''} saved`);
+  closeModal();
+  renderDashboard();
+}
+
+async function skipActivityDue(stepId, lambId) {
+  await db.from('lifecycle_completions').upsert({
+    step_id: stepId, lamb_id: lambId,
+    completed_date: new Date().toISOString().slice(0,10),
+    notes: 'Skipped'
+  }, { onConflict: 'step_id,lamb_id' });
+  toast('Skipped');
+  renderDashboard();
+}
+
+function openActivityDue(stepId, lambId) {
+  const d = window._dash;
+  const act = (d?.activitiesDue||[]).find(a => a.step.id === stepId && a.lamb.id === lambId);
+  if (!act) return;
+  const { step, protocol, lamb } = act;
+
+  // Treatment — pre-fill health record modal
+  const today = new Date().toISOString().slice(0,10);
+  const wdDate = step.withdrawal_days && today ? new Date(new Date(today+'T12:00:00').getTime()+step.withdrawal_days*864e5).toISOString().slice(0,10) : null;
+
+  showModal(`
+    <div class="modal-header"><div class="modal-title">💊 Log Treatment</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div style="padding:0.5rem 0 0.75rem;font-size:0.85rem;color:var(--text2)"><strong>${lamb.name}</strong>${lamb.ear_tag?' #'+lamb.ear_tag:''} · ${protocol.name} Day ${step.day_offset}</div>
+    <div class="field"><label>Date</label><input type="date" id="act-date" value="${today}" style="max-width:180px"></div>
+    <div class="field"><label>Product</label><select id="act-product" onchange="actAutoWithdrawal()">${buildProductDropdown(step.product||'')}</select></div>
+    <div class="row">
+      <div class="field"><label>Dose (ml)</label><input id="act-dose" value="${step.dose||''}" placeholder="ml"></div>
+      <div class="field"><label>Route</label><select id="act-route">${ROUTES.map(r=>`<option ${step.route===r?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label>WD Days</label><input type="number" id="act-wd" value="${step.withdrawal_days||''}" min="0" placeholder="auto" oninput="actCalcWithdrawal()" style="max-width:80px"></div>
+    </div>
+    <div class="field"><label>Notes</label><input id="act-notes" value="${step.notes||''}" placeholder="Additional notes…"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveActivityDue('${stepId}','${lambId}','${lamb.id}')">Save &amp; Complete</button>
+    </div>`);
+}
+
+function actAutoWithdrawal() {
+  const product = document.getElementById('act-product')?.value;
+  const wdEl = document.getElementById('act-wd');
+  if (!wdEl || !product || product === '— Select product —') return;
+  const days = lookupWithdrawalDays(product);
+  if (days !== null) wdEl.value = days;
+}
+
+function actCalcWithdrawal() {}
+
+async function saveActivityDue(stepId, lambId, actualLambId) {
+  const date = document.getElementById('act-date')?.value;
+  if (!date) { toast('Date required'); return; }
+  const product = document.getElementById('act-product')?.value;
+  const dose = document.getElementById('act-dose')?.value;
+  const route = document.getElementById('act-route')?.value;
+  const wdDays = parseInt(document.getElementById('act-wd')?.value)||null;
+  const wdDate = wdDays && date ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
+  const notes = document.getElementById('act-notes')?.value || '';
+
+  // Save health record
+  const { data: hr, error } = await db.from('health_records').insert({
+    lamb_id: lambId,
+    date, product: product === '— Select product —' ? null : product,
+    dose, route,
+    withdrawal_days: wdDays, withdrawal_date: wdDate,
+    notes,
+    type: BASE_VACCINES.includes(product) ? 'vaccine' : 'medication'
+  }).select().single();
+  if (error) { toast('Error saving: ' + error.message); return; }
+
+  await completeActivityDue(stepId, lambId, hr?.id);
+}
+
+async function completeActivityDue(stepId, lambId, healthRecordId) {
+  const notes = document.getElementById('act-notes')?.value || '';
+  await db.from('lifecycle_completions').upsert({
+    step_id: stepId, lamb_id: lambId,
+    completed_date: new Date().toISOString().slice(0,10),
+    health_record_id: healthRecordId || null,
+    notes
+  }, { onConflict: 'step_id,lamb_id' });
+  toast('✅ Activity logged');
+  closeModal();
+  renderDashboard();
+}
+
+// ── LIFECYCLE PROTOCOLS ────────────────────────────────
+async function renderLifecycle() {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  const { data: protocols } = await db.from('lifecycle_protocols').select('*').order('name');
+  const { data: steps } = await db.from('lifecycle_protocol_steps').select('*').order('day_offset');
+  window._lcProtocols = protocols || [];
+  window._lcSteps = steps || [];
+
+  const stepsByProtocol = {};
+  (steps||[]).forEach(s => { (stepsByProtocol[s.protocol_id] = stepsByProtocol[s.protocol_id]||[]).push(s); });
+
+  const triggerLabel = t => ({ gestation_day:'🤰 Gestation Day', post_lamb_day:'🐣 Post-Lamb Day', post_wean_day:'🍼 Post-Wean Day', age_days:'📅 Age (days)', annual_date:'📆 Annual Date' })[t] || t;
+  const appliesToLabel = a => ({ all:'All Active', ewes:'Ewes', rams:'Rams', wethers:'Wethers', show:'Show Animals', breeding:'Breeding Animals', group:'Breeding Group' })[a] || a;
+
+  mc.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text)">📋 Lifecycle Protocols</div>
+      <button class="btn btn-primary btn-sm" onclick="openEditProtocolLc()">+ New Protocol</button>
+    </div>
+    ${(protocols||[]).length === 0 ? `<div class="empty"><div class="empty-icon">📋</div><h3>No protocols yet</h3><p>Create a protocol to define management activities by gestation day, age, or other triggers.</p></div>` :
+    (protocols||[]).map(p => {
+      const pSteps = stepsByProtocol[p.id] || [];
+      return `<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden">
+        <div style="padding:0.85rem 1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:var(--text)">${p.name}
+              <span style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:1rem;margin-left:0.4rem;${p.active?'background:#dcfce7;color:#15803d':'background:#f3f4f6;color:#6b7280'}">${p.active?'Active':'Inactive'}</span>
+            </div>
+            <div style="font-size:0.75rem;color:var(--text3);margin-top:0.2rem">${triggerLabel(p.trigger_type)} · ${appliesToLabel(p.applies_to)}${p.window_days?` · ±${p.window_days}d window`:''}</div>
+            ${p.description?`<div style="font-size:0.78rem;color:var(--text2);margin-top:0.2rem">${p.description}</div>`:''}
+          </div>
+          <div style="display:flex;gap:0.4rem">
+            <button class="btn btn-secondary btn-sm" onclick="openEditProtocolLc('${p.id}')">✏️ Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="openAddStepLc('${p.id}')">+ Step</button>
+            <button class="btn-icon btn-sm" onclick="deleteProtocolLc('${p.id}')" style="color:var(--danger)">🗑</button>
+          </div>
+        </div>
+        ${pSteps.length === 0 ? `<div style="padding:0.75rem 1rem;color:var(--text3);font-size:0.82rem">No steps yet — click + Step to add</div>` :
+        `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:0.4rem 1rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Day</th>
+            
+            <th style="padding:0.4rem 1rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Product / Notes</th>
+            <th style="padding:0.4rem 0.5rem"></th>
+          </tr></thead>
+          <tbody>${pSteps.map(s => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:0.45rem 1rem;font-weight:700;color:var(--accent)">Day ${s.day_offset}</td>
+            
+            <td style="padding:0.45rem 1rem;color:var(--text2)">${s.product||''}${s.dose?' · '+s.dose:''}${s.route?' · '+s.route:''}${s.notes?`<span style="color:var(--text3)"> — ${s.notes}</span>`:''}</td>
+            <td style="padding:0.45rem 0.5rem;text-align:center;white-space:nowrap">
+              <button class="btn-icon btn-sm" onclick="openAddStepLc('${p.id}','${s.id}')">✏️</button>
+              <button class="btn-icon btn-sm" onclick="deleteStepLc('${s.id}')" style="color:var(--danger)">🗑</button>
+            </td>
+          </tr>`).join('')}</tbody>
+        </table>`}
+      </div>`;
+    }).join('')}`;
+}
+
+function openEditProtocolLc(id) {
+  const p = id ? (window._lcProtocols||[]).find(x=>x.id===id) : null;
+  const groups = window._planGroups || [];
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${p?'✏️ Edit Protocol':'📋 New Protocol'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Protocol Name *</label><input id="lcp-name" value="${p?.name||''}" placeholder="e.g. Lambing Prep"></div>
+    <div class="field"><label>Description</label><input id="lcp-desc" value="${p?.description||''}" placeholder="Optional"></div>
+    <div class="row">
+      <div class="field"><label>Trigger Type</label>
+        <select id="lcp-trigger">
+          <option value="gestation_day" ${p?.trigger_type==='gestation_day'?'selected':''}>🤰 Gestation Day</option>
+          <option value="post_lamb_day" ${p?.trigger_type==='post_lamb_day'?'selected':''}>🐣 Post-Lamb Day</option>
+          <option value="post_wean_day" ${p?.trigger_type==='post_wean_day'?'selected':''}>🍼 Post-Wean Day</option>
+          <option value="age_days" ${p?.trigger_type==='age_days'?'selected':''}>📅 Age (days)</option>
+          <option value="annual_date" ${p?.trigger_type==='annual_date'?'selected':''}>📆 Annual Date</option>
+        </select>
+      </div>
+      <div class="field"><label>Window (±days)</label><input type="number" id="lcp-window" value="${p?.window_days??3}" min="0" max="14" style="max-width:100px"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Applies To</label>
+        <select id="lcp-applies" onchange="toggleLcGroup(this.value)">
+          <option value="all" ${(!p||p.applies_to==='all')?'selected':''}>All Active Animals</option>
+          <option value="ewes" ${p?.applies_to==='ewes'?'selected':''}>Ewes Only</option>
+          <option value="rams" ${p?.applies_to==='rams'?'selected':''}>Rams Only</option>
+          <option value="show" ${p?.applies_to==='show'?'selected':''}>Show Animals</option>
+          <option value="breeding" ${p?.applies_to==='breeding'?'selected':''}>Breeding Animals</option>
+          <option value="group" ${p?.applies_to==='group'?'selected':''}>Specific Group</option>
+        </select>
+      </div>
+      <div class="field" id="lcp-group-field" style="${p?.applies_to==='group'?'':'display:none'}"><label>Group</label>
+        <select id="lcp-group">${(groups).map(g=>`<option value="${g.id}" ${p?.group_id===g.id?'selected':''}>${g.name}</option>`).join('')}</select>
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-top:0.25rem">
+      <input type="checkbox" id="lcp-active" ${p?.active!==false?'checked':''} style="accent-color:var(--accent)">
+      <span style="font-size:0.85rem">Active</span>
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProtocolLc('${id||''}')">Save Protocol</button>
+    </div>`);
+}
+
+function toggleLcGroup(val) {
+  document.getElementById('lcp-group-field').style.display = val === 'group' ? '' : 'none';
+}
+
+async function saveProtocolLc(id) {
+  const name = document.getElementById('lcp-name')?.value?.trim();
+  if (!name) { toast('Name required'); return; }
+  const payload = {
+    name,
+    description: document.getElementById('lcp-desc')?.value?.trim() || null,
+    trigger_type: document.getElementById('lcp-trigger')?.value || 'gestation_day',
+    window_days: parseInt(document.getElementById('lcp-window')?.value) || 3,
+    applies_to: document.getElementById('lcp-applies')?.value || 'all',
+    group_id: document.getElementById('lcp-applies')?.value === 'group' ? (document.getElementById('lcp-group')?.value || null) : null,
+    active: document.getElementById('lcp-active')?.checked !== false,
+  };
+  if (id) {
+    await db.from('lifecycle_protocols').update(payload).eq('id', id);
+  } else {
+    await db.from('lifecycle_protocols').insert(payload);
+  }
+  toast('Protocol saved'); closeModal(); renderLifecycle();
+}
+
+async function deleteProtocolLc(id) {
+  if (!confirm('Delete this protocol and all its steps?')) return;
+  await db.from('lifecycle_protocols').delete().eq('id', id);
+  toast('Protocol deleted'); renderLifecycle();
+}
+
+function openAddStepLc(protocolId, stepId) {
+  const s = stepId ? (window._lcSteps||[]).find(x=>x.id===stepId) : null;
+  showModal(`
+    <div class="modal-header"><div class="modal-title">${s?'✏️ Edit Step':'+ Add Step'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="row">
+      <div class="field"><label>Day *</label><input type="number" id="lcs-day" value="${s?.day_offset??''}" placeholder="e.g. 100" style="max-width:100px"></div>
+<input type="hidden" id="lcs-type" value="treatment">
+    </div>
+    <div id="lcs-treatment-fields">
+      <div class="field"><label>Product</label>
+        <select id="lcs-product" onchange="autoFillLcWithdrawal()">${buildProductDropdown(s?.product||'')}</select>
+      </div>
+      <div class="row">
+        <div class="field"><label>Dose (ml)</label><input id="lcs-dose" value="${s?.dose||''}" placeholder="ml"></div>
+        <div class="field"><label>Route</label><select id="lcs-route">${ROUTES.map(r=>`<option ${s?.route===r?'selected':''}>${r}</option>`).join('')}</select></div>
+        <div class="field"><label>WD Days</label><input type="number" id="lcs-wd" value="${s?.withdrawal_days??''}" min="0" placeholder="auto" oninput="calcLcWithdrawal()" style="max-width:80px"></div>
+      </div>
+    </div>
+    <div class="field"><label>Notes</label><input id="lcs-notes" value="${s?.notes||''}" placeholder="Instructions, observations…"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStepLc('${protocolId}','${stepId||''}')">Save Step</button>
+    </div>`);
+}
+
+function autoFillLcWithdrawal() {
+  const product = document.getElementById('lcs-product')?.value;
+  const wdEl = document.getElementById('lcs-wd');
+  if (!wdEl || !product || product === '— Select product —') return;
+  const days = lookupWithdrawalDays(product);
+  if (days !== null) wdEl.value = days;
+}
+
+async function saveStepLc(protocolId, stepId) {
+  const day = parseInt(document.getElementById('lcs-day')?.value);
+  if (isNaN(day)) { toast('Day required'); return; }
+  const actionType = document.getElementById('lcs-type')?.value || 'treatment';
+  const product = actionType === 'treatment' ? (document.getElementById('lcs-product')?.value || null) : null;
+  const payload = {
+    protocol_id: protocolId,
+    day_offset: day,
+    action_type: actionType,
+    product: product === '— Select product —' ? null : product,
+    dose: actionType === 'treatment' ? (document.getElementById('lcs-dose')?.value || null) : null,
+    route: actionType === 'treatment' ? (document.getElementById('lcs-route')?.value || null) : null,
+    withdrawal_days: document.getElementById('lcs-wd')?.value ? parseInt(document.getElementById('lcs-wd').value) : null,
+    notes: document.getElementById('lcs-notes')?.value || null,
+  };
+  if (stepId) {
+    await db.from('lifecycle_protocol_steps').update(payload).eq('id', stepId);
+  } else {
+    await db.from('lifecycle_protocol_steps').insert(payload);
+  }
+  toast('Step saved'); closeModal(); renderLifecycle();
+}
+
+async function deleteStepLc(stepId) {
+  await db.from('lifecycle_protocol_steps').delete().eq('id', stepId);
+  toast('Step deleted'); renderLifecycle();
 }
 
 // ── PLANNING PAGE ─────────────────────────────────────
