@@ -4746,7 +4746,7 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
       const l = lambById[r.lamb_id];
       const sire = r.ai_sire_id ? aiRamById[r.ai_sire_id] : (r.sire_id ? lambById[r.sire_id] : null);
       const gd = gestDays(r.breeding_date);
-      const due = r.expected_lamb_date;
+      const due = r.breeding_date ? new Date(new Date(r.breeding_date+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : r.expected_lamb_date;
       return { name: l?.name||'?', tag: l?.ear_tag||'', sire: sire?.name||r.sire_text||'?', gd, due, outcome: r.outcome, type: 'Natural/AI', flockType: l?.flock_type||'', onclick: `openEditBreedingGlobal('${r.id}','${r.lamb_id}')` };
     }),
     ...transfers.map(t => {
@@ -15204,7 +15204,8 @@ async function loadCalendarEvents() {
   const { data: breeding } = await db.from('breeding_records').select('*');
   (breeding||[]).forEach(r => {
     if (r.breeding_date) calEvents.push({ date: r.breeding_date, type: 'breeding', label: `🐏 Bred`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
-    if (r.expected_lamb_date) calEvents.push({ date: r.expected_lamb_date, type: 'lambing', label: `📅 Due`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
+    const calcDue = r.breeding_date ? new Date(new Date(r.breeding_date+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : r.expected_lamb_date;
+    if (calcDue && r.outcome !== 'Lamb Born' && r.outcome !== 'Not Pregnant' && r.outcome !== 'Failed') calEvents.push({ date: calcDue, type: 'lambing', label: `📅 Due`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
     if (r.actual_lamb_date) calEvents.push({ date: r.actual_lamb_date, type: 'lambing', label: `🐑 Lambed`, lamb_id: r.lamb_id, sire_id: r.sire_id, ai_sire_id: r.ai_sire_id, sire_text: r.sire_text, record_id: r.id });
   });
 
@@ -15270,6 +15271,30 @@ async function loadCalendarEvents() {
       calEvents.push({ date: g.target_date, type: 'planned', label: `📋 ${g.name}`, group_id: g.id, group_name: g.name, extra: donorNames, group_type: g.type });
     }
   });
+
+  // Lifecycle protocol due dates — fetch if not already cached from dashboard
+  if (!window._activitiesDue) {
+    const [{ data: lcp }, { data: lcs }, { data: lcc }] = await Promise.all([
+      db.from('lifecycle_protocols').select('*').eq('active', true),
+      db.from('lifecycle_protocol_steps').select('*'),
+      db.from('lifecycle_completions').select('*'),
+    ]);
+    window._lcProtocols = lcp || [];
+    window._lcSteps = lcs || [];
+    window._lcCompletions = lcc || [];
+  }
+  const acts = window._activitiesDue || [];
+  acts.forEach(a => {
+    const dueDate = new Date(new Date().getTime() - a.diff * 864e5).toISOString().slice(0,10);
+    calEvents.push({
+      date: dueDate,
+      type: 'protocol',
+      label: `📋 ${a.step.product || 'Treatment'}`,
+      lamb_id: a.lamb.id,
+      extra: `${a.lamb.name}${a.lamb.ear_tag?' #'+a.lamb.ear_tag:''} · ${a.protocol.name} Day ${a.step.day_offset}`,
+      step_id: a.step.id,
+    });
+  });
 }
 
 function jumpToMostRecentEvent() {
@@ -15324,6 +15349,7 @@ function drawCalendar() {
     { key: 'treatment', label: '💉 Treatments' },
     { key: 'embryo', label: '🔬 Embryo' },
     { key: 'planned', label: '📋 Planned' },
+    { key: 'protocol', label: '💊 Protocols' },
   ].map(f => `<button class="filter-btn ${calFilter===f.key?'active':''}" onclick="calFilter='${f.key}';jumpToMostRecentEvent();drawCalendar()">${f.label}</button>`).join('');
 
   let html = `
@@ -15371,8 +15397,8 @@ function drawCalendar() {
         const lamb = lambById[ e.lamb_id];
         const sire = e.sire_id ? lambById[e.sire_id] : (e.ai_sire_id ? aiRamById[e.ai_sire_id] : null);
         const sireName = sire ? sire.name : (e.sire_text||'');
-        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':e.type==='planned'?(e.isRecip?'#0d3060':'#6b4500'):'#3a3010';
-        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':e.type==='planned'?(e.isRecip?'#90c8ff':'#fcd68a'):'#e8c040';
+        const color = e.type==='breeding'?'#3a5a20':e.type==='lambing'?'#103a60':e.type==='embryo'?'#2a1a50':e.type==='planned'?(e.isRecip?'#0d3060':'#6b4500'):e.type==='protocol'?'#4a1a00':'#3a3010';
+        const textColor = e.type==='breeding'?'#a8d88a':e.type==='lambing'?'#80b0f0':e.type==='embryo'?'#c090f0':e.type==='planned'?(e.isRecip?'#90c8ff':'#fcd68a'):e.type==='protocol'?'#ffb366':'#e8c040';
         return `<div onclick="${e.group_id ? `showPlanGroupDetail('${e.group_id}')` : `showCalEventDetail('${dateStr}')`}" style="font-size:0.68rem;background:${color};color:${textColor};border-radius:0.2rem;padding:0.1rem 0.3rem;margin-bottom:0.15rem;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.label}${e.group_name?' — '+e.group_name:''}${e.extra?' ('+e.extra+')':''}">
           ${e.label}${e.group_name?` <span style="opacity:0.8">${e.group_name}</span>`:(lamb?` <span style="opacity:0.8">${lamb.name}</span>`:'')}
         </div>`;
