@@ -15226,7 +15226,7 @@ async function loadCalendarEvents() {
   });
 
   // Embryo transfers — add implant date AND projected lambing (+140 days, embryos ~7 days old at transfer)
-  const { data: transfers } = await db.from('embryo_transfers').select('*');
+  const { data: transfers } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)');
   (transfers||[]).forEach(t => {
     if (t.implant_date) {
       const recip = lambById[ t.recipient_id];
@@ -15272,29 +15272,62 @@ async function loadCalendarEvents() {
     }
   });
 
-  // Lifecycle protocol due dates — fetch if not already cached from dashboard
-  if (!window._activitiesDue) {
-    const [{ data: lcp }, { data: lcs }, { data: lcc }] = await Promise.all([
+  // Lifecycle protocol due dates — computed here for ALL future steps (not just the dashboard's 10-day window)
+  {
+    const [{ data: lcp }, { data: lcs }, { data: lcc }, { data: grpMembers }] = await Promise.all([
       db.from('lifecycle_protocols').select('*').eq('active', true),
-      db.from('lifecycle_protocol_steps').select('*'),
+      db.from('lifecycle_protocol_steps').select('*').order('day_offset'),
       db.from('lifecycle_completions').select('*'),
+      db.from('breeding_group_members').select('*'),
     ]);
-    window._lcProtocols = lcp || [];
-    window._lcSteps = lcs || [];
-    window._lcCompletions = lcc || [];
-  }
-  const acts = window._activitiesDue || [];
-  acts.forEach(a => {
-    const dueDate = new Date(new Date().getTime() - a.diff * 864e5).toISOString().slice(0,10);
-    calEvents.push({
-      date: dueDate,
-      type: 'protocol',
-      label: `📋 ${a.step.product || 'Treatment'}`,
-      lamb_id: a.lamb.id,
-      extra: `${a.lamb.name}${a.lamb.ear_tag?' #'+a.lamb.ear_tag:''} · ${a.protocol.name} Day ${a.step.day_offset}`,
-      step_id: a.step.id,
+    const done = new Set((lcc||[]).map(c => `${c.step_id}:${c.lamb_id}`));
+    const addDays = (d, n) => new Date(new Date(d+'T12:00:00').getTime() + n*864e5).toISOString().slice(0,10);
+    const todayStr = new Date().toISOString().slice(0,10);
+    const oldestShown = addDays(todayStr, -30); // overdue items older than 30 days are left off the calendar
+    const lambingMap = {};
+    (breeding||[]).filter(r => r.actual_lamb_date).forEach(r => { lambingMap[r.lamb_id] = r.actual_lamb_date; });
+
+    (lcp||[]).forEach(proto => {
+      const protoSteps = (lcs||[]).filter(st => st.protocol_id === proto.id);
+      if (!protoSteps.length) return;
+      let cands = allLambs.filter(l => l.status === 'Active');
+      if (proto.applies_to === 'ewes') cands = cands.filter(l => l.sex === 'Ewe');
+      else if (proto.applies_to === 'rams') cands = cands.filter(l => l.sex === 'Ram');
+      else if (proto.applies_to === 'show') cands = cands.filter(l => (l.flock_type||'Show') === 'Show');
+      else if (proto.applies_to === 'breeding') cands = cands.filter(l => (l.flock_type||'Breeding') === 'Breeding');
+      else if (proto.applies_to === 'group' && proto.group_id) {
+        const members = new Set((grpMembers||[]).filter(m => m.group_id === proto.group_id).map(m => m.lamb_id));
+        cands = cands.filter(l => members.has(l.id));
+      }
+      cands.forEach(lamb => {
+        let anchor = null; // date of day 0 for this trigger
+        if (proto.trigger_type === 'gestation_day') {
+          const br = (breeding||[]).filter(r => r.lamb_id === lamb.id && (r.outcome === 'Confirmed Pregnant' || r.outcome === 'Pending') && r.breeding_date).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date))[0];
+          const xr = (transfers||[]).filter(t => t.recipient_id === lamb.id && (t.outcome === 'Confirmed Pregnant' || t.outcome === 'Pending') && t.implant_date).sort((a,b) => b.implant_date.localeCompare(a.implant_date))[0];
+          if (br) anchor = br.breeding_date;
+          else if (xr) anchor = etConceptionDate(xr);
+        } else if (proto.trigger_type === 'post_lamb_day') {
+          anchor = lambingMap[lamb.id] || null;
+        } else if (proto.trigger_type === 'age_days') {
+          anchor = lamb.dob || null;
+        }
+        if (!anchor) return;
+        protoSteps.forEach(step => {
+          if (done.has(`${step.id}:${lamb.id}`)) return;
+          const dueDate = addDays(anchor, step.day_offset);
+          if (dueDate < oldestShown) return;
+          calEvents.push({
+            date: dueDate,
+            type: 'protocol',
+            label: `📋 ${step.product || 'Treatment'}`,
+            lamb_id: lamb.id,
+            extra: `${lamb.name}${lamb.ear_tag?' #'+lamb.ear_tag:''} · ${proto.name} Day ${step.day_offset}`,
+            step_id: step.id,
+          });
+        });
+      });
     });
-  });
+  }
 }
 
 function jumpToMostRecentEvent() {
