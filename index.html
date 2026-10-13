@@ -862,8 +862,8 @@ function showDashPanel(type) {
       const diffLabel = a.diff === 0 ? 'Today' : overdueDiff ? `${a.diff}d overdue` : `in ${Math.abs(a.diff)}d`;
       const diffColor = overdueDiff ? '#dc2626' : a.diff === 0 ? '#92400e' : '#15803d';
       return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.5rem" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
-        <input type="checkbox" class="act-check" data-step="${a.step.id}" data-lamb="${a.lamb.id}" data-idx="${i}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0" onchange="updateActCount()">
-        <div style="flex:1;min-width:0;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}')">
+        <input type="checkbox" class="act-check" data-step="${a.step.id}" data-lamb="${a.lamb.id}" data-occ="${a.occ||0}" data-idx="${i}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0" onchange="updateActCount()">
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}',${a.occ||0})">
           <div style="font-weight:600;font-size:0.85rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3)">#${a.lamb.ear_tag}</span>`:''}</div>
           <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} <span style="color:var(--text2)">· ${a.protocol.name}</span></div>
         </div>
@@ -966,7 +966,7 @@ async function renderDashboard() {
     ...(healthRecs||[]).slice(0,5).map(h => { const l=lambById[h.lamb_id]; return { date:h.date, icon:'💊', text:`${l?.name||'?'} — ${h.product||h.type}`, lambId:h.lamb_id }; }),
   ].filter(a => a.date).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,8);
 
-  const completionSet = new Set((lcCompletions||[]).map(c => `${c.step_id}:${c.lamb_id}`));
+  const completionSet = new Set((lcCompletions||[]).map(c => `${c.step_id}:${c.lamb_id}:${c.occurrence_year||0}`));
   const lambingMap = {}; // lambId -> actual_lamb_date
   (lambingRecs||[]).filter(r => r.actual_lamb_date).forEach(r => { lambingMap[r.lamb_id] = r.actual_lamb_date; });
 
@@ -1002,13 +1002,29 @@ async function renderDashboard() {
       } else if (proto.trigger_type === 'age_days') {
         if (lamb.dob) currentDay = Math.floor((Date.now() - new Date(lamb.dob+'T12:00:00').getTime()) / 864e5);
       }
+      if (proto.trigger_type === 'annual_date') {
+        if (proto.annual_month && proto.annual_day) {
+          const yr = new Date().getFullYear();
+          protoSteps.forEach(step => {
+            [yr-1, yr, yr+1].forEach(y => {
+              if (completionSet.has(`${step.id}:${lamb.id}:${y}`)) return; // this year's occurrence already done
+              const lastDay = new Date(y, proto.annual_month, 0).getDate();
+              const anchor = `${y}-${String(proto.annual_month).padStart(2,'0')}-${String(Math.min(proto.annual_day, lastDay)).padStart(2,'0')}`;
+              const dayA = Math.floor((Date.now() - new Date(anchor+'T12:00:00').getTime()) / 864e5);
+              const diffA = dayA - step.day_offset;
+              if (diffA <= 30 && diffA >= -10) activitiesDue.push({ step, protocol: proto, lamb, diff: diffA, currentDay: dayA, occ: y });
+            });
+          });
+        }
+        return;
+      }
       if (currentDay === null) return;
 
       protoSteps.forEach(step => {
-        if (completionSet.has(`${step.id}:${lamb.id}`)) return; // already done
+        if (completionSet.has(`${step.id}:${lamb.id}:0`)) return; // already done
         const diff = currentDay - step.day_offset; // positive = past due, negative = upcoming
         if (diff >= 0 || diff >= -10) { // always show overdue, show upcoming within 10 days
-          activitiesDue.push({ step, protocol: proto, lamb, diff, currentDay });
+          activitiesDue.push({ step, protocol: proto, lamb, diff, currentDay, occ: 0 });
         }
       });
     });
@@ -1136,13 +1152,13 @@ async function renderDashboard() {
             const diffLabel = a.diff === 0 ? 'Today' : overdueDiff ? `${a.diff}d overdue` : `in ${Math.abs(a.diff)}d`;
             const diffColor = overdueDiff ? '#dc2626' : a.diff === 0 ? '#92400e' : '#15803d';
             return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
-              <div style="min-width:0;flex:1;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}')">
+              <div style="min-width:0;flex:1;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}',${a.occ||0})">
                 <div style="font-weight:600;font-size:0.82rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3);font-weight:400">#${a.lamb.ear_tag}</span>`:''}</div>
                 <div style="font-size:0.7rem;color:var(--text3)">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} · ${a.protocol.name}</div>
               </div>
               <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0">
                 <span style="font-size:0.7rem;font-weight:700;color:${diffColor};white-space:nowrap">${diffLabel}</span>
-                <button onclick="skipActivityDue('${a.step.id}','${a.lamb.id}')" title="Skip" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;font-size:0.68rem;padding:0.1rem 0.35rem">Skip</button>
+                <button onclick="skipActivityDue('${a.step.id}','${a.lamb.id}',${a.occ||0})" title="Skip" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;font-size:0.68rem;padding:0.1rem 0.35rem">Skip</button>
               </div>
             </div>`;
           }).join('')}
@@ -11757,8 +11773,8 @@ async function bulkSkipActivities() {
   const checked = [...document.querySelectorAll('.act-check:checked')];
   if (!checked.length) return;
   const today = new Date().toISOString().slice(0,10);
-  const upserts = checked.map(c => ({ step_id: c.dataset.step, lamb_id: c.dataset.lamb, completed_date: today, notes: 'Skipped' }));
-  await db.from('lifecycle_completions').upsert(upserts, { onConflict: 'step_id,lamb_id' });
+  const upserts = checked.map(c => ({ step_id: c.dataset.step, lamb_id: c.dataset.lamb, occurrence_year: parseInt(c.dataset.occ)||0, completed_date: today, notes: 'Skipped' }));
+  await db.from('lifecycle_completions').upsert(upserts, { onConflict: 'step_id,lamb_id,occurrence_year' });
   toast(`Skipped ${upserts.length} activit${upserts.length!==1?'ies':'y'}`);
   renderDashboard();
 }
@@ -11768,12 +11784,12 @@ async function bulkLogActivities() {
   if (!checked.length) return;
   const d = window._dash;
   const acts = (d?.activitiesDue||[]);
-  const selected = checked.map(c => acts.find(a => a.step.id === c.dataset.step && a.lamb.id === c.dataset.lamb)).filter(Boolean);
+  const selected = checked.map(c => acts.find(a => a.step.id === c.dataset.step && a.lamb.id === c.dataset.lamb && (a.occ||0) === (parseInt(c.dataset.occ)||0))).filter(Boolean);
   if (!selected.length) return;
 
   // Group by step — each unique step gets one date/product/dose/route entry
   const byStep = {};
-  selected.forEach(a => { (byStep[a.step.id] = byStep[a.step.id]||{step:a.step, protocol:a.protocol, lambs:[]}).lambs.push(a.lamb); });
+  selected.forEach(a => { const g = (byStep[a.step.id] = byStep[a.step.id]||{step:a.step, protocol:a.protocol, lambs:[], occs:[]}); g.lambs.push(a.lamb); g.occs.push(a.occ||0); });
   const steps = Object.values(byStep);
   const today = new Date().toISOString().slice(0,10);
 
@@ -11793,7 +11809,7 @@ async function bulkLogActivities() {
       </div>`).join('')}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkActivityLog(${JSON.stringify(steps.map(g=>({stepId:g.step.id, lambIds:g.lambs.map(l=>l.id)})))})">Save ${selected.length} Records</button>
+      <button class="btn btn-primary" onclick="saveBulkActivityLog(${JSON.stringify(steps.map(g=>({stepId:g.step.id, lambIds:g.lambs.map(l=>l.id), occs:g.occs})))})">Save ${selected.length} Records</button>
     </div>`);
 }
 
@@ -11817,31 +11833,32 @@ async function saveBulkActivityLog(groups) {
     const wdDays = parseInt(document.getElementById(`bact-wd-${i}`)?.value)||null;
     const wdDate = wdDays ? new Date(new Date(date+'T12:00:00').getTime()+wdDays*864e5).toISOString().slice(0,10) : null;
     const type = BASE_VACCINES.includes(product) ? 'vaccine' : 'medication';
-    g.lambIds.forEach(lambId => {
+    g.lambIds.forEach((lambId, li) => {
       healthInserts.push({ lamb_id: lambId, date, product: product==='— Select product —'?null:product, dose, route, withdrawal_days: wdDays, withdrawal_date: wdDate, type });
-      completions.push({ step_id: g.stepId, lamb_id: lambId, completed_date: date });
+      completions.push({ step_id: g.stepId, lamb_id: lambId, occurrence_year: (g.occs && g.occs[li]) || 0, completed_date: date });
     });
   });
   if (healthInserts.length) await db.from('health_records').insert(healthInserts);
-  if (completions.length) await db.from('lifecycle_completions').upsert(completions, { onConflict: 'step_id,lamb_id' });
+  if (completions.length) await db.from('lifecycle_completions').upsert(completions, { onConflict: 'step_id,lamb_id,occurrence_year' });
   toast(`✅ ${healthInserts.length} record${healthInserts.length!==1?'s':''} saved`);
   closeModal();
   renderDashboard();
 }
 
-async function skipActivityDue(stepId, lambId) {
+async function skipActivityDue(stepId, lambId, occ) {
   await db.from('lifecycle_completions').upsert({
-    step_id: stepId, lamb_id: lambId,
+    step_id: stepId, lamb_id: lambId, occurrence_year: occ||0,
     completed_date: new Date().toISOString().slice(0,10),
     notes: 'Skipped'
-  }, { onConflict: 'step_id,lamb_id' });
+  }, { onConflict: 'step_id,lamb_id,occurrence_year' });
   toast('Skipped');
   renderDashboard();
 }
 
-function openActivityDue(stepId, lambId) {
+function openActivityDue(stepId, lambId, occ) {
+  occ = occ || 0;
   const d = window._dash;
-  const act = (d?.activitiesDue||[]).find(a => a.step.id === stepId && a.lamb.id === lambId);
+  const act = (d?.activitiesDue||[]).find(a => a.step.id === stepId && a.lamb.id === lambId && (a.occ||0) === occ);
   if (!act) return;
   const { step, protocol, lamb } = act;
 
@@ -11862,7 +11879,7 @@ function openActivityDue(stepId, lambId) {
     <div class="field"><label>Notes</label><input id="act-notes" value="${step.notes||''}" placeholder="Additional notes…"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveActivityDue('${stepId}','${lambId}','${lamb.id}')">Save &amp; Complete</button>
+      <button class="btn btn-primary" onclick="saveActivityDue('${stepId}','${lambId}','${lamb.id}',${occ})">Save &amp; Complete</button>
     </div>`);
 }
 
@@ -11876,7 +11893,7 @@ function actAutoWithdrawal() {
 
 function actCalcWithdrawal() {}
 
-async function saveActivityDue(stepId, lambId, actualLambId) {
+async function saveActivityDue(stepId, lambId, actualLambId, occ) {
   const date = document.getElementById('act-date')?.value;
   if (!date) { toast('Date required'); return; }
   const product = document.getElementById('act-product')?.value;
@@ -11897,17 +11914,17 @@ async function saveActivityDue(stepId, lambId, actualLambId) {
   }).select().single();
   if (error) { toast('Error saving: ' + error.message); return; }
 
-  await completeActivityDue(stepId, lambId, hr?.id);
+  await completeActivityDue(stepId, lambId, hr?.id, occ);
 }
 
-async function completeActivityDue(stepId, lambId, healthRecordId) {
+async function completeActivityDue(stepId, lambId, healthRecordId, occ) {
   const notes = document.getElementById('act-notes')?.value || '';
   await db.from('lifecycle_completions').upsert({
-    step_id: stepId, lamb_id: lambId,
+    step_id: stepId, lamb_id: lambId, occurrence_year: occ||0,
     completed_date: new Date().toISOString().slice(0,10),
     health_record_id: healthRecordId || null,
     notes
-  }, { onConflict: 'step_id,lamb_id' });
+  }, { onConflict: 'step_id,lamb_id,occurrence_year' });
   toast('✅ Activity logged');
   closeModal();
   renderDashboard();
@@ -11982,7 +11999,7 @@ function openEditProtocolLc(id) {
     <div class="field"><label>Description</label><input id="lcp-desc" value="${p?.description||''}" placeholder="Optional"></div>
     <div class="row">
       <div class="field"><label>Trigger Type</label>
-        <select id="lcp-trigger">
+        <select id="lcp-trigger" onchange="toggleLcAnnual(this.value)">
           <option value="gestation_day" ${p?.trigger_type==='gestation_day'?'selected':''}>🤰 Gestation Day</option>
           <option value="post_lamb_day" ${p?.trigger_type==='post_lamb_day'?'selected':''}>🐣 Post-Lamb Day</option>
           <option value="post_wean_day" ${p?.trigger_type==='post_wean_day'?'selected':''}>🍼 Post-Wean Day</option>
@@ -11991,6 +12008,12 @@ function openEditProtocolLc(id) {
         </select>
       </div>
       <div class="field"><label>Window (±days)</label><input type="number" id="lcp-window" value="${p?.window_days??3}" min="0" max="14" style="max-width:100px"></div>
+    </div>
+    <div class="row" id="lcp-annual-field" style="${p?.trigger_type==='annual_date'?'':'display:none'}">
+      <div class="field"><label>Annual Date — Month</label>
+        <select id="lcp-annual-month">${['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=>`<option value="${i+1}" ${(p?.annual_month||1)===i+1?'selected':''}>${m}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Day</label><input type="number" id="lcp-annual-day" value="${p?.annual_day||1}" min="1" max="31" style="max-width:80px"></div>
     </div>
     <div class="row">
       <div class="field"><label>Applies To</label>
@@ -12017,6 +12040,11 @@ function openEditProtocolLc(id) {
     </div>`);
 }
 
+function toggleLcAnnual(val) {
+  const el = document.getElementById('lcp-annual-field');
+  if (el) el.style.display = val === 'annual_date' ? '' : 'none';
+}
+
 function toggleLcGroup(val) {
   document.getElementById('lcp-group-field').style.display = val === 'group' ? '' : 'none';
 }
@@ -12033,6 +12061,10 @@ async function saveProtocolLc(id) {
     group_id: document.getElementById('lcp-applies')?.value === 'group' ? (document.getElementById('lcp-group')?.value || null) : null,
     active: document.getElementById('lcp-active')?.checked !== false,
   };
+  if (payload.trigger_type === 'annual_date') {
+    payload.annual_month = parseInt(document.getElementById('lcp-annual-month')?.value) || 1;
+    payload.annual_day = Math.min(31, Math.max(1, parseInt(document.getElementById('lcp-annual-day')?.value) || 1));
+  }
   if (id) {
     await db.from('lifecycle_protocols').update(payload).eq('id', id);
   } else {
@@ -15315,7 +15347,7 @@ async function loadCalendarEvents() {
       db.from('lifecycle_completions').select('*'),
       db.from('breeding_group_members').select('*'),
     ]);
-    const done = new Set((lcc||[]).map(c => `${c.step_id}:${c.lamb_id}`));
+    const done = new Set((lcc||[]).map(c => `${c.step_id}:${c.lamb_id}:${c.occurrence_year||0}`));
     const addDays = (d, n) => new Date(new Date(d+'T12:00:00').getTime() + n*864e5).toISOString().slice(0,10);
     const todayStr = new Date().toISOString().slice(0,10);
     const oldestShown = addDays(todayStr, -30); // overdue items older than 30 days are left off the calendar
@@ -15335,21 +15367,29 @@ async function loadCalendarEvents() {
         cands = cands.filter(l => members.has(l.id));
       }
       cands.forEach(lamb => {
-        let anchor = null; // date of day 0 for this trigger
+        let anchors = []; // dates of day 0 for this trigger
         if (proto.trigger_type === 'gestation_day') {
           const br = (breeding||[]).filter(r => r.lamb_id === lamb.id && (r.outcome === 'Confirmed Pregnant' || r.outcome === 'Pending') && r.breeding_date).sort((a,b) => b.breeding_date.localeCompare(a.breeding_date))[0];
           const xr = (transfers||[]).filter(t => t.recipient_id === lamb.id && (t.outcome === 'Confirmed Pregnant' || t.outcome === 'Pending') && t.implant_date).sort((a,b) => b.implant_date.localeCompare(a.implant_date))[0];
-          if (br) anchor = br.breeding_date;
-          else if (xr) anchor = etConceptionDate(xr);
+          if (br) anchors = [br.breeding_date];
+          else if (xr) anchors = [etConceptionDate(xr)];
         } else if (proto.trigger_type === 'post_lamb_day') {
-          anchor = lambingMap[lamb.id] || null;
+          if (lambingMap[lamb.id]) anchors = [lambingMap[lamb.id]];
         } else if (proto.trigger_type === 'age_days') {
-          anchor = lamb.dob || null;
+          if (lamb.dob) anchors = [lamb.dob];
+        } else if (proto.trigger_type === 'annual_date' && proto.annual_month && proto.annual_day) {
+          const yr = new Date().getFullYear();
+          [yr-1, yr, yr+1].forEach(y => {
+            const lastDay = new Date(y, proto.annual_month, 0).getDate(); // handles Feb 29 / short months
+            const dd = Math.min(proto.annual_day, lastDay);
+            anchors.push(`${y}-${String(proto.annual_month).padStart(2,'0')}-${String(dd).padStart(2,'0')}`);
+          });
         }
-        if (!anchor) return;
-        protoSteps.forEach(step => {
-          if (done.has(`${step.id}:${lamb.id}`)) return;
+        if (!anchors.length) return;
+        protoSteps.forEach(step => anchors.forEach(anchor => {
+          const key = `${step.id}:${lamb.id}:${proto.trigger_type === 'annual_date' ? anchor.slice(0,4) : 0}`;
           const dueDate = addDays(anchor, step.day_offset);
+          if (done.has(key)) return;
           if (dueDate < oldestShown) return;
           calEvents.push({
             date: dueDate,
@@ -15359,7 +15399,7 @@ async function loadCalendarEvents() {
             extra: `${lamb.name}${lamb.ear_tag?' #'+lamb.ear_tag:''} · ${proto.name} Day ${step.day_offset}`,
             step_id: step.id,
           });
-        });
+        }));
       });
     });
   }
