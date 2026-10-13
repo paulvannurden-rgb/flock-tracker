@@ -12057,7 +12057,14 @@ function openAddStepLc(protocolId, stepId) {
     </div>
     <div id="lcs-treatment-fields">
       <div class="field"><label>Product</label>
-        <select id="lcs-product" onchange="autoFillLcWithdrawal()">${buildProductDropdown(s?.product||'')}</select>
+        <select id="lcs-product" onchange="onLcProductChange()">${buildProductDropdown(s?.product||'')}</select>
+      </div>
+      <div id="lcs-custom-wrap" style="display:none">
+        <div class="field"><label>Custom Product Name</label><input id="lcs-custom-name" placeholder="Enter product name"></div>
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;cursor:pointer">
+          <input type="checkbox" id="lcs-save-custom" checked style="accent-color:var(--accent);width:13px;height:13px">
+          <span style="font-size:0.78rem;color:var(--text2)">Save to my product list</span>
+        </label>
       </div>
       <div class="row">
         <div class="field"><label>Dose (ml)</label><input id="lcs-dose" value="${s?.dose||''}" placeholder="ml"></div>
@@ -12072,6 +12079,13 @@ function openAddStepLc(protocolId, stepId) {
     </div>`);
 }
 
+function onLcProductChange() {
+  const val = document.getElementById('lcs-product')?.value;
+  const wrap = document.getElementById('lcs-custom-wrap');
+  if (wrap) wrap.style.display = val === '__custom__' ? 'block' : 'none';
+  if (val !== '__custom__') autoFillLcWithdrawal();
+}
+
 function autoFillLcWithdrawal() {
   const product = document.getElementById('lcs-product')?.value;
   const wdEl = document.getElementById('lcs-wd');
@@ -12084,7 +12098,18 @@ async function saveStepLc(protocolId, stepId) {
   const day = parseInt(document.getElementById('lcs-day')?.value);
   if (isNaN(day)) { toast('Day required'); return; }
   const actionType = document.getElementById('lcs-type')?.value || 'treatment';
-  const product = actionType === 'treatment' ? (document.getElementById('lcs-product')?.value || null) : null;
+  let product = actionType === 'treatment' ? (document.getElementById('lcs-product')?.value || null) : null;
+  if (product === '__custom__') {
+    const customName = (document.getElementById('lcs-custom-name')?.value || '').trim();
+    if (!customName) { toast('Enter a product name'); return; }
+    product = customName;
+    if (document.getElementById('lcs-save-custom')?.checked) {
+      const vaccineNames = new Set([...BASE_VACCINES, ...customProducts.vaccine].map(x=>x.toLowerCase()));
+      const ptype = vaccineNames.has(customName.toLowerCase()) ? 'vaccine' : 'medication';
+      await db.from('custom_products').insert({ type: ptype, name: customName });
+      await loadCustomProducts();
+    }
+  }
   const payload = {
     protocol_id: protocolId,
     day_offset: day,
