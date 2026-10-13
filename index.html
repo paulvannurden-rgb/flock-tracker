@@ -1162,7 +1162,7 @@ async function renderDashboard() {
               </div>
             </div>`;
           }).join('')}
-          ${activitiesDue.length > 8 ? `<div style="padding:0.4rem 0.85rem;text-align:center;font-size:0.75rem;color:var(--accent);cursor:pointer" onclick="showDashPanel('activities')">+${activitiesDue.length-8} more →</div>` : ''}
+          ${activitiesDue.length > 8 ? `<div style="padding:0.4rem 0.85rem;text-align:center;font-size:0.75rem;color:var(--accent);cursor:pointer" onclick="const p=document.getElementById('dash-panel'); if(!(p._activeType==='activities'&&p.style.display!=='none')) showDashPanel('activities'); p.scrollIntoView({behavior:'smooth',block:'start'})">+${activitiesDue.length-8} more →</div>` : ''}
         </div>` : ''}
 
         ${overdue.length===0&&overdueTransfers.length===0&&dueSoon.length+dueTransfers.length===0&&pregCheckDue.length===0&&activitiesDue.length===0 ? `
