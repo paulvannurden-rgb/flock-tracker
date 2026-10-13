@@ -11809,7 +11809,7 @@ async function bulkLogActivities() {
       </div>`).join('')}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkActivityLog(${JSON.stringify(steps.map(g=>({stepId:g.step.id, lambIds:g.lambs.map(l=>l.id), occs:g.occs})))})">Save ${selected.length} Records</button>
+      <button class="btn btn-primary" onclick="saveBulkActivityLog(${JSON.stringify(steps.map(g=>({stepId:g.step.id, lambIds:g.lambs.map(l=>l.id), occs:g.occs}))).replace(/"/g,'&quot;')})">Save ${selected.length} Records</button>
     </div>`);
 }
 
