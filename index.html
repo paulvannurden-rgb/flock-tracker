@@ -4747,14 +4747,14 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
       const sire = r.ai_sire_id ? aiRamById[r.ai_sire_id] : (r.sire_id ? lambById[r.sire_id] : null);
       const gd = gestDays(r.breeding_date);
       const due = r.breeding_date ? new Date(new Date(r.breeding_date+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : r.expected_lamb_date;
-      return { name: l?.name||'?', tag: l?.ear_tag||'', sire: sire?.name||r.sire_text||'?', gd, due, outcome: r.outcome, type: 'Natural/AI', flockType: l?.flock_type||'', onclick: `openEditBreedingGlobal('${r.id}','${r.lamb_id}')` };
+      return { name: l?.name||'?', tag: l?.ear_tag||'', sire: sire?.name||r.sire_text||'?', gd, due, outcome: r.outcome, type: 'Natural/AI', fetal: r.fetal_count||null, flockType: l?.flock_type||'', onclick: `openEditBreedingGlobal('${r.id}','${r.lamb_id}')` };
     }),
     ...transfers.map(t => {
       const recip = lambById[t.recipient_id];
       const donor = lambById[t.embryo_flushes?.donor_id];
       const gd = gestDays(etConceptionDate(t));
       const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
-      return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: donor?.name||'?', gd, due, outcome: t.outcome, type: 'ET', flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
+      return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: donor?.name||'?', gd, due, outcome: t.outcome, type: 'ET', fetal: t.fetal_count||null, flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
     }),
   ].sort((a,b) => (b.gd||0) - (a.gd||0));
 
@@ -4785,6 +4785,7 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
       <td style="padding:0.5rem 0.5rem;text-align:center"><span style="font-size:0.7rem;background:${item.type==='ET'?'#ede9fe':'#dcfce7'};color:${item.type==='ET'?'#7c3aed':'#15803d'};border-radius:1rem;padding:0.15rem 0.45rem;font-weight:600">${item.type}</span></td>
       <td style="padding:0.5rem 0.85rem;color:var(--text2);font-size:0.82rem;white-space:nowrap">${item.due||'—'}</td>
       <td style="padding:0.5rem 0.85rem;font-weight:600;font-size:0.82rem;white-space:nowrap;color:${daysLeft!==null&&daysLeft<=7?'#dc2626':daysLeft!==null&&daysLeft<=14?'#d97706':'var(--text2)'}">${daysLeft!==null?daysLeft+'d':''}</td>
+      <td style="padding:0.5rem 0.85rem;text-align:center;font-weight:600;font-size:0.85rem;color:var(--text2)">${item.fetal??'—'}</td>
       <td style="padding:0.5rem 0.85rem"><span style="font-size:0.72rem;color:${item.outcome==='Confirmed Pregnant'?'#15803d':'#d97706'}">${item.outcome}</span></td>
     </tr>`;
   }).join('');
@@ -4825,9 +4826,9 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
             <th style="padding:0.4rem 0.5rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Type</th>
             <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Due</th>
             <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">In</th>
-            <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+            <th style="padding:0.4rem 0.85rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Fetuses</th><th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
           </tr></thead>
-          <tbody>${rows||'<tr><td colspan="7" style="padding:1.5rem;text-align:center;color:var(--text3)">No records match filters</td></tr>'}</tbody>
+          <tbody>${rows||'<tr><td colspan="8" style="padding:1.5rem;text-align:center;color:var(--text3)">No records match filters</td></tr>'}</tbody>
         </table>
       </div>
       <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`;
@@ -4847,9 +4848,9 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
           <th style="padding:0.4rem 0.5rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Type</th>
           <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Due</th>
           <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">In</th>
-          <th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
+          <th style="padding:0.4rem 0.85rem;text-align:center;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Fetuses</th><th style="padding:0.4rem 0.85rem;text-align:left;font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text3)">Status</th>
         </tr></thead>
-        <tbody>${rows||'<tr><td colspan="7" style="padding:1.5rem;text-align:center;color:var(--text3)">No active breeding or transfer records</td></tr>'}</tbody>
+        <tbody>${rows||'<tr><td colspan="8" style="padding:1.5rem;text-align:center;color:var(--text3)">No active breeding or transfer records</td></tr>'}</tbody>
       </table>
     </div>
     <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`, true);
@@ -4861,11 +4862,11 @@ function printGestationList() {
   let rowsHtml = '';
   table.querySelectorAll('tbody tr').forEach(row => {
     const cells = row.querySelectorAll('td');
-    if (cells.length < 7) return;
+    if (cells.length < 8) return;
     const day = cells[0].textContent.trim();
     const d = parseInt(day);
     const cls = d >= 140 ? 'day-red' : d >= 120 ? 'day-amber' : 'day-green';
-    rowsHtml += `<tr><td class="${cls}">${day}</td><td>${cells[1].textContent.trim()}</td><td>${cells[2].textContent.trim()}</td><td>${cells[3].textContent.trim()}</td><td>${cells[4].textContent.trim()}</td><td>${cells[5].textContent.trim()}</td><td>${cells[6].textContent.trim()}</td></tr>`;
+    rowsHtml += `<tr><td class="${cls}">${day}</td><td>${cells[1].textContent.trim()}</td><td>${cells[2].textContent.trim()}</td><td>${cells[3].textContent.trim()}</td><td>${cells[4].textContent.trim()}</td><td>${cells[5].textContent.trim()}</td><td>${cells[6].textContent.trim()}</td><td>${cells[7].textContent.trim()}</td></tr>`;
   });
   const win = window.open('', '_blank');
   if (!win) return;
@@ -4874,7 +4875,7 @@ function printGestationList() {
   </head><body>
   <h2>Hidden Creek Lambs — Gestation List</h2>
   <div class="sub">Printed ${new Date().toLocaleDateString()} · Green &lt;120d · Amber 120-139d · Red 140d+</div>
-  <table><thead><tr><th>Day</th><th>Animal</th><th>Sire/Donor</th><th>Type</th><th>Due Date</th><th>Days Until</th><th>Status</th></tr></thead>
+  <table><thead><tr><th>Day</th><th>Animal</th><th>Sire/Donor</th><th>Type</th><th>Due Date</th><th>Days Until</th><th>Fetuses</th><th>Status</th></tr></thead>
   <tbody>${rowsHtml}</tbody></table></body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
