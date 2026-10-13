@@ -4754,15 +4754,14 @@ async function renderBreeding() {
 }
 
 async function showGestationList(filterType, filterOutcome, filterMinDay, filterMaxDay) {
-  if (!window._allTransfers) {
-    const { data } = await db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)');
-    window._allTransfers = data || [];
-  }
-  if (!window._breedingAllRecs) {
-    const { data } = await db.from('breeding_records').select('*');
-    window._breedingAllRecs = data || [];
+  // Always load fresh so edits (fetal counts, outcomes, dates) show up — cached copies went stale after saves
+  const [{ data: freshTransfers }, { data: freshBreeding }] = await Promise.all([
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
+    db.from('breeding_records').select('*'),
+  ]);
+  window._allTransfers = freshTransfers || [];
+  window._breedingAllRecs = freshBreeding || [];
   window._gestMap = null; // invalidate so renderFlock rebuilds it
-  }
 
   const breedRecs = (window._breedingAllRecs||[]).filter(r => r.outcome === 'Confirmed Pregnant' || r.outcome === 'Pending');
   const transfers = (window._allTransfers||[]).filter(t => t.outcome === 'Confirmed Pregnant' || t.outcome === 'Pending');
