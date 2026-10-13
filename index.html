@@ -779,6 +779,11 @@ function showLamb(id) {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────
+function actDueLabel(a) {
+  const d = new Date(Date.now() - (a.diff||0) * 864e5);
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+
 function showDashPanel(type) {
   const panel = document.getElementById('dash-panel');
   if (!panel) return;
@@ -865,7 +870,7 @@ function showDashPanel(type) {
         <input type="checkbox" class="act-check" data-step="${a.step.id}" data-lamb="${a.lamb.id}" data-occ="${a.occ||0}" data-idx="${i}" style="accent-color:var(--accent);width:15px;height:15px;flex-shrink:0" onchange="updateActCount()">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}',${a.occ||0})">
           <div style="font-weight:600;font-size:0.85rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3)">#${a.lamb.ear_tag}</span>`:''}</div>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} <span style="color:var(--text2)">· ${a.protocol.name}</span></div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} <span style="color:var(--text2)">· ${a.protocol.name}</span> <span style="color:var(--text2);font-weight:600">· Due ${actDueLabel(a)}</span></div>
         </div>
         <span style="font-size:0.72rem;font-weight:700;color:${diffColor};white-space:nowrap;flex-shrink:0">${diffLabel}</span>
       </div>`;
@@ -1154,7 +1159,7 @@ async function renderDashboard() {
             return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
               <div style="min-width:0;flex:1;cursor:pointer" onclick="openActivityDue('${a.step.id}','${a.lamb.id}',${a.occ||0})">
                 <div style="font-weight:600;font-size:0.82rem;color:var(--text)">${a.lamb.name}${a.lamb.ear_tag?` <span style="color:var(--text3);font-weight:400">#${a.lamb.ear_tag}</span>`:''}</div>
-                <div style="font-size:0.7rem;color:var(--text3)">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} · ${a.protocol.name}</div>
+                <div style="font-size:0.7rem;color:var(--text3)">Day ${a.step.day_offset} · ${a.step.product||a.step.notes||'Observation'} · ${a.protocol.name} · Due ${actDueLabel(a)}</div>
               </div>
               <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0">
                 <span style="font-size:0.7rem;font-weight:700;color:${diffColor};white-space:nowrap">${diffLabel}</span>
@@ -11931,6 +11936,27 @@ async function completeActivityDue(stepId, lambId, healthRecordId, occ) {
 }
 
 // ── LIFECYCLE PROTOCOLS ────────────────────────────────
+function lcFmtDate(d) { return d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }); }
+
+// Date of an annual protocol step (annual date + day offset). Shows this year's, or next year's once this year's is >30 days past.
+function lcAnnualDate(p, offset, year) {
+  if (!p || p.trigger_type !== 'annual_date' || !p.annual_month || !p.annual_day) return null;
+  const mk = y => {
+    const last = new Date(y, p.annual_month, 0).getDate();
+    return new Date(y, p.annual_month - 1, Math.min(p.annual_day, last), 12).getTime() + offset * 864e5;
+  };
+  if (year) return new Date(mk(year));
+  const now = new Date(); now.setHours(12,0,0,0);
+  let t = mk(now.getFullYear());
+  if (t < now.getTime() - 30 * 864e5) t = mk(now.getFullYear() + 1);
+  return new Date(t);
+}
+
+function lcStepDateHtml(p, s) {
+  const d = lcAnnualDate(p, s.day_offset);
+  return d ? `<div style="font-size:0.7rem;font-weight:400;color:var(--text3)">${lcFmtDate(d)}</div>` : '';
+}
+
 async function renderLifecycle() {
   const mc = document.getElementById('main-content');
   mc.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
@@ -11959,7 +11985,7 @@ async function renderLifecycle() {
             <div style="font-weight:700;font-size:0.95rem;color:var(--text)">${p.name}
               <span style="font-size:0.7rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:1rem;margin-left:0.4rem;${p.active?'background:#dcfce7;color:#15803d':'background:#f3f4f6;color:#6b7280'}">${p.active?'Active':'Inactive'}</span>
             </div>
-            <div style="font-size:0.75rem;color:var(--text3);margin-top:0.2rem">${triggerLabel(p.trigger_type)} · ${appliesToLabel(p.applies_to)}${p.window_days?` · ±${p.window_days}d window`:''}</div>
+            <div style="font-size:0.75rem;color:var(--text3);margin-top:0.2rem">${triggerLabel(p.trigger_type)}${lcAnnualDate(p,0)?` (${lcFmtDate(lcAnnualDate(p,0))})`:''} · ${appliesToLabel(p.applies_to)}${p.window_days?` · ±${p.window_days}d window`:''}</div>
             ${p.description?`<div style="font-size:0.78rem;color:var(--text2);margin-top:0.2rem">${p.description}</div>`:''}
           </div>
           <div style="display:flex;gap:0.4rem">
@@ -11977,7 +12003,7 @@ async function renderLifecycle() {
             <th style="padding:0.4rem 0.5rem"></th>
           </tr></thead>
           <tbody>${pSteps.map(s => `<tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:0.45rem 1rem;font-weight:700;color:var(--accent)">Day ${s.day_offset}</td>
+            <td style="padding:0.45rem 1rem;font-weight:700;color:var(--accent)">Day ${s.day_offset}${lcStepDateHtml(p, s)}</td>
             
             <td style="padding:0.45rem 1rem;color:var(--text2)">${s.product||''}${s.dose?' · '+s.dose:''}${s.route?' · '+s.route:''}${s.notes?`<span style="color:var(--text3)"> — ${s.notes}</span>`:''}</td>
             <td style="padding:0.45rem 0.5rem;text-align:center;white-space:nowrap">
