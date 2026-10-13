@@ -815,7 +815,8 @@ function showDashPanel(type) {
     title = `Active Ewes (${allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').length})`;
     rows = allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').map(l => animalRow(l, l.flock_type||'')).join('');
   } else if (type === 'pregnant') {
-    title = 'Confirmed Pregnant';
+    const _cp = [...(d.activeBreedRecs||[]), ...(d.activeTransfers||[])].filter(x => x.outcome === 'Confirmed Pregnant');
+    title = `Confirmed Pregnant (${_cp.length} ewes · ${_cp.reduce((n,x)=>n+(x.fetal_count||0),0)} fetuses)`;
     const breedRows = (d.activeBreedRecs||[]).filter(r=>r.outcome==='Confirmed Pregnant').map(r => {
       const l = lambById[r.lamb_id]; if (!l) return '';
       const sire = r.ai_sire_id ? aiRamById[r.ai_sire_id] : (r.sire_id ? lambById[r.sire_id] : null);
@@ -824,7 +825,7 @@ function showDashPanel(type) {
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span>
           <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}${r.expected_lamb_date?' · Due '+r.expected_lamb_date:''}</div>
         </div>
-        <span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span>
+        <span style="display:flex;gap:0.35rem;align-items:center">${r.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${r.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span></span>
       </div>`;
     }).join('');
     const etRows = (d.activeTransfers||[]).filter(t=>t.outcome==='Confirmed Pregnant').map(t => {
@@ -835,7 +836,7 @@ function showDashPanel(type) {
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
           <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${due?' · Due '+due:''}</div>
         </div>
-        <span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span>
+        <span style="display:flex;gap:0.35rem;align-items:center">${t.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${t.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span></span>
       </div>`;
     }).join('');
     rows = breedRows + etRows;
@@ -955,6 +956,9 @@ async function renderDashboard() {
   const active = allLambs.filter(l=>l.status==='Active').length;
   const ewes = allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').length;
   const pregnant = activeBreedRecs.filter(r=>r.outcome==='Confirmed Pregnant').length + activeTransfers.filter(t=>t.outcome==='Confirmed Pregnant').length;
+  const confirmedPregRecs = [...activeBreedRecs, ...activeTransfers].filter(x => x.outcome === 'Confirmed Pregnant');
+  const projectedFetuses = confirmedPregRecs.reduce((sum, x) => sum + (x.fetal_count || 0), 0);
+  const fetusUncounted = confirmedPregRecs.filter(x => !x.fetal_count).length;
 
   // Recent activity (last 5 weights + health)
   const recentActivity = [
@@ -1062,6 +1066,7 @@ async function renderDashboard() {
       <div class="card dash-stat-card" id="dsc-pregnant" style="padding:0.85rem;text-align:center;cursor:pointer" onclick="showDashPanel('pregnant')">
         <div style="font-size:1.6rem;font-weight:700;color:#15803d">${pregnant}</div>
         <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;margin-top:0.15rem">Pregnant</div>
+        <div style="font-size:0.68rem;color:var(--text2);margin-top:0.2rem;font-weight:600">${projectedFetuses} fetuses${fetusUncounted?` <span style="font-weight:400;color:var(--text3)">(${fetusUncounted} uncounted)</span>`:''}</div>
       </div>
       <div class="card dash-stat-card" id="dsc-due7" style="padding:0.85rem;text-align:center;cursor:pointer;${dueSoon.length+dueTransfers.length>0?'background:#fef9c3;border-color:#ca8a04':''}" onclick="showDashPanel('due7')">
         <div style="font-size:1.6rem;font-weight:700;color:${dueSoon.length+dueTransfers.length>0?'#92400e':'var(--text3)'}">${dueSoon.length+dueTransfers.length}</div>
