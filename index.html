@@ -4885,9 +4885,17 @@ function printGestationList() {
   const table = document.getElementById('gl-table');
   if (!table) return;
   let rowsHtml = '';
+  let totalHead = 0, totalFetuses = 0, uncounted = 0;
+  const byType = {};
   table.querySelectorAll('tbody tr').forEach(row => {
     const cells = row.querySelectorAll('td');
     if (cells.length < 8) return;
+    const fetusN = parseInt(cells[6].textContent.trim());
+    const typeKey = cells[3].textContent.trim() || 'Other';
+    totalHead++;
+    byType[typeKey] = byType[typeKey] || { head: 0, fetuses: 0 };
+    byType[typeKey].head++;
+    if (isNaN(fetusN)) uncounted++; else { totalFetuses += fetusN; byType[typeKey].fetuses += fetusN; }
     const day = cells[0].textContent.trim();
     const d = parseInt(day);
     const cls = d >= 140 ? 'day-red' : d >= 120 ? 'day-amber' : 'day-green';
@@ -4900,8 +4908,14 @@ function printGestationList() {
   </head><body>
   <h2>Hidden Creek Lambs — Gestation List</h2>
   <div class="sub">Printed ${new Date().toLocaleDateString()} · Green &lt;120d · Amber 120-139d · Red 140d+</div>
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:0 0 1rem;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb">
+    <div><div style="font-size:9px;text-transform:uppercase;color:#666">Total Head</div><div style="font-size:18px;font-weight:700">${totalHead}</div></div>
+    <div><div style="font-size:9px;text-transform:uppercase;color:#666">Total Fetuses</div><div style="font-size:18px;font-weight:700">${totalFetuses}</div>${uncounted?`<div style="font-size:9px;color:#666">${uncounted} ewe${uncounted===1?'':'s'} not yet counted</div>`:''}</div>
+    ${Object.entries(byType).map(([k,v]) => `<div><div style="font-size:9px;text-transform:uppercase;color:#666">${k}</div><div style="font-size:13px;font-weight:600">${v.head} head · ${v.fetuses} fetuses</div></div>`).join('')}
+  </div>
   <table><thead><tr><th>Day</th><th>Animal</th><th>Sire/Donor</th><th>Type</th><th>Due Date</th><th>Days Until</th><th>Fetuses</th><th>Status</th></tr></thead>
-  <tbody>${rowsHtml}</tbody></table></body></html>`);
+  <tbody>${rowsHtml}</tbody>
+  <tfoot><tr style="font-weight:700;background:#f3f4f6"><td colspan="2">Total: ${totalHead} head</td><td colspan="4"></td><td>${totalFetuses}</td><td>${uncounted?uncounted+' uncounted':''}</td></tr></tfoot></table></body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
 }
