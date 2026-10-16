@@ -410,6 +410,7 @@ let flockRoleFilter = new Set();
 let flockSexFilter = new Set();
 let flockGeneticFilter = new Set();
 let flockReproFilter = new Set();
+let flockGestMin = null, flockGestMax = null; // gestation-day range filter
 let flockSearch = '';
 let confirmingDelete = null;
 
@@ -784,6 +785,37 @@ function actDueLabel(a) {
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 }
 
+function printDashPanel() {
+  const panel = document.getElementById('dash-panel');
+  if (!panel) return;
+  const type = panel._activeType;
+  const clean = t => (t || '').replace(/\s+/g, ' ').trim();
+  const esc = t => String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const title = clean(panel.querySelector('[style*="font-weight:700"]')?.textContent) || 'Dashboard List';
+  const body = panel.querySelector('[style*="overflow-y:auto"]');
+  const isChecklist = type === 'activities';
+  const rows = [...(body ? body.children : [])].map(el => {
+    const nameEl = el.querySelector('[style*="font-weight:600"]');
+    if (!nameEl) return null; // placeholder / empty-state row
+    const subEl = el.querySelector('[style*="font-size:0.72rem;color:var(--text3)"]');
+    const extras = [...el.querySelectorAll('span')]
+      .filter(sp => !sp.querySelector('span') && !nameEl.contains(sp) && !(subEl && subEl.contains(sp)) && clean(sp.textContent) && clean(sp.textContent) !== '→')
+      .map(sp => clean(sp.textContent));
+    return { name: clean(nameEl.textContent), sub: clean(subEl?.textContent), extra: extras.join(' · ') };
+  }).filter(Boolean);
+  if (!rows.length) { toast('Nothing to print'); return; }
+
+  const tr = rows.map(r => `<tr>${isChecklist ? '<td class="box">☐</td>' : ''}<td><b>${esc(r.name)}</b></td><td>${esc(r.sub)}</td><td>${esc(r.extra)}</td></tr>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:1.5rem}h2{margin:0 0 0.25rem;font-size:16px}.sub{font-size:10px;color:#666;margin-bottom:1rem}
+  table{width:100%;border-collapse:collapse}th{background:#f3f4f6;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;padding:5px 8px;text-align:left;border-bottom:2px solid #d1d5db}
+  td{padding:5px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}td.box{width:18px;font-size:15px}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>
+  <h2>Hidden Creek Lambs — ${esc(title)}</h2>
+  <div class="sub">Printed ${new Date().toLocaleDateString()} · ${rows.length} record${rows.length === 1 ? '' : 's'}</div>
+  <table><thead><tr>${isChecklist ? '<th></th>' : ''}<th>Animal</th><th>Details</th><th>${isChecklist ? 'Due' : 'Status'}</th></tr></thead><tbody>${tr}</tbody></table></body></html>`;
+  openPrintWindow(html, title);
+}
+
 function showDashPanel(type) {
   const panel = document.getElementById('dash-panel');
   if (!panel) return;
@@ -889,6 +921,7 @@ function showDashPanel(type) {
             <button onclick="document.querySelectorAll('.act-check').forEach(c=>c.checked=false);updateActCount()" style="font-size:0.68rem;color:var(--text3);background:none;border:none;cursor:pointer">✕ None</button>
             <button id="act-bulk-skip" onclick="bulkSkipActivities()" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;display:none">Skip Selected</button>
             <button id="act-bulk-log" onclick="bulkLogActivities()" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:var(--accent);border:none;border-radius:var(--radius-sm);color:#fff;cursor:pointer;display:none">Log Selected</button>
+            <button onclick="printDashPanel()" title="Print this list" style="font-size:0.72rem;padding:0.2rem 0.5rem;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);cursor:pointer">🖨 Print</button>
             <button onclick="document.getElementById('dash-panel').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1;margin-left:0.25rem">✕</button>
           </div>
         </div>
@@ -902,7 +935,8 @@ function showDashPanel(type) {
     <div class="card" style="padding:0;overflow:hidden;border-color:var(--accent)">
       <div style="padding:0.5rem 0.85rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:0.75rem;font-weight:700;color:var(--text)">${title}</div>
-        <button onclick="document.getElementById('dash-panel').style.display='none';document.querySelectorAll('.dash-stat-card').forEach(c=>c.style.outline='')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1">✕</button>
+        <div style="display:flex;align-items:center;gap:0.5rem"><button onclick="printDashPanel()" title="Print this list" style="font-size:0.72rem;padding:0.2rem 0.5rem;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);cursor:pointer">🖨 Print</button>
+        <button onclick="document.getElementById('dash-panel').style.display='none';document.querySelectorAll('.dash-stat-card').forEach(c=>c.style.outline='')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:1rem;line-height:1">✕</button></div>
       </div>
       <div style="max-height:300px;overflow-y:auto">
         ${rows || '<div style="padding:1rem;text-align:center;color:var(--text3);font-size:0.82rem">None</div>'}
@@ -1955,6 +1989,63 @@ function clearAllAiRamFilters() {
   renderAiRams();
 }
 
+function printFlockReport() {
+  const list = window._flockFiltered || [];
+  if (!list.length) { toast('No animals to print'); return; }
+  const esc = t => String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Describe active filters
+  const parts = [];
+  if (flockFilter.size) parts.push('Status: ' + [...flockFilter].join(', '));
+  if (flockTypeFilter.size) parts.push('Flock: ' + [...flockTypeFilter].join(', '));
+  if (flockRoleFilter.size) parts.push('Role: ' + [...flockRoleFilter].join(', '));
+  if (flockSexFilter.size) parts.push('Sex: ' + [...flockSexFilter].join(', '));
+  if (flockGeneticFilter.size) parts.push('Genetic: ' + [...flockGeneticFilter].join(', '));
+  if (flockReproFilter.size) parts.push('Repro: ' + [...flockReproFilter].join(', '));
+  if (flockGestMin !== null || flockGestMax !== null) parts.push(`Gest day: ${flockGestMin ?? 0}–${flockGestMax ?? '∞'}`);
+  if (flockSearch) parts.push(`Search: "${flockSearch}"`);
+  const filterText = parts.length ? parts.join(' · ') : 'All animals (no filters)';
+
+  const gestMap = window._gestMap || {}, reproMap = window._reproMap || {};
+  let preg = 0, fetuses = 0, uncounted = 0;
+  const bySex = {};
+  const rows = list.map(l => {
+    const flockType = l.flock_type || (l.sex === 'Wether' ? 'Show' : 'Breeding');
+    bySex[l.sex || '—'] = (bySex[l.sex || '—'] || 0) + 1;
+    const g = gestMap[l.id], r = reproMap[l.id];
+    let repro = '—', due = '—', fet = '—';
+    if (g) {
+      preg++;
+      repro = `Day ${g.gd}${g.outcome === 'Pending' ? ' (pending)' : ''}`;
+      due = g.due || '—';
+      if (g.fetal) { fet = g.fetal; fetuses += g.fetal; } else if (g.outcome === 'Confirmed Pregnant') uncounted++;
+    } else if (r) repro = r.outcome;
+    return `<tr><td><b>${esc(l.name)}</b></td><td>${l.ear_tag ? '#' + esc(l.ear_tag) : '—'}</td><td>${esc(l.scrapie_id || '—')}</td><td>${esc(l.genetic_code || '—')}</td><td>${esc(l.sex || '—')}</td><td>${esc(flockType)}</td><td>${esc(l.status || 'Active')}</td><td>${esc(repro)}</td><td>${esc(due)}</td><td style="text-align:center">${esc(fet)}</td></tr>`;
+  }).join('');
+
+  const sexText = Object.entries(bySex).map(([k, n]) => `${n} ${k}`).join(' · ');
+  const pregBox = preg ? `<div><div class="lbl">Pregnant</div><div class="val">${preg}</div></div><div><div class="lbl">Fetuses</div><div class="val">${fetuses}</div>${uncounted ? `<div class="note">${uncounted} not yet counted</div>` : ''}</div>` : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Flock Report</title>
+  <style>body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:1.5rem}h2{margin:0 0 0.2rem;font-size:16px}.sub{font-size:10px;color:#666;margin-bottom:0.6rem}
+  .sum{display:flex;gap:1.5rem;flex-wrap:wrap;margin:0.6rem 0 1rem;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb}
+  .lbl{font-size:9px;text-transform:uppercase;color:#666}.val{font-size:18px;font-weight:700}.note{font-size:9px;color:#666}
+  table{width:100%;border-collapse:collapse}th{background:#f3f4f6;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;padding:5px 7px;text-align:left;border-bottom:2px solid #d1d5db}
+  td{padding:4px 7px;border-bottom:1px solid #e5e7eb}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>
+  <h2>Hidden Creek Lambs — Flock Report</h2>
+  <div class="sub">Printed ${new Date().toLocaleDateString()} · Filters: ${esc(filterText)}</div>
+  <div class="sum"><div><div class="lbl">Total Head</div><div class="val">${list.length}</div><div class="note">${esc(sexText)}</div></div>${pregBox}</div>
+  <table><thead><tr><th>Name</th><th>Tag</th><th>Scrapie ID</th><th>Genetic</th><th>Sex</th><th>Flock</th><th>Status</th><th>Repro</th><th>Due</th><th>Fetuses</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  openPrintWindow(html, 'Flock Report');
+}
+
+function setFlockGestRange() {
+  const mn = parseInt(document.getElementById('flock-gest-min')?.value);
+  const mx = parseInt(document.getElementById('flock-gest-max')?.value);
+  flockGestMin = isNaN(mn) ? null : mn;
+  flockGestMax = isNaN(mx) ? null : mx;
+  renderFlock();
+}
+
 function clearAllFlockFilters() {
   flockFilter.clear();
   flockTypeFilter.clear();
@@ -1962,6 +2053,7 @@ function clearAllFlockFilters() {
   flockSexFilter.clear();
   flockGeneticFilter.clear();
   flockReproFilter.clear();
+  flockGestMin = null; flockGestMax = null;
   flockSearch = '';
   renderFlock();
 }
@@ -1998,7 +2090,7 @@ function renderFlock() {
     for (const [lambId, r] of Object.entries(byLamb)) {
       const o = r.outcome || 'Pending';
       if (o !== 'Confirmed Pregnant' && o !== 'Pending') continue; // resolved — no badge
-      gestMap[lambId] = { gd: gestDays(r.breeding_date), outcome: o, type: 'Natural/AI', due: r.expected_lamb_date };
+      gestMap[lambId] = { gd: gestDays(r.breeding_date), outcome: o, type: 'Natural/AI', due: r.expected_lamb_date, fetal: r.fetal_count || null };
     }
   }
   if (window._allTransfers) {
@@ -2015,7 +2107,7 @@ function renderFlock() {
       const due = new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10);
       // ET takes priority if more recent than any natural record, otherwise keep natural
       if (!gestMap[rid] || t.implant_date > (gestMap[rid]._date||'')) {
-        gestMap[rid] = { gd: gestDays(etConceptionDate(t)), outcome: o, type: 'ET', due, _date: t.implant_date };
+        gestMap[rid] = { gd: gestDays(etConceptionDate(t)), outcome: o, type: 'ET', due, fetal: t.fetal_count || null, _date: t.implant_date };
       }
     }
   }
@@ -2095,11 +2187,17 @@ function renderFlock() {
       const repro = (window._reproMap||{})[l.id]?.outcome || null;
       matchRepro = flockReproFilter.has(repro);
     }
-    return matchStatus && matchType && matchRole && matchSex && matchGenetic && matchSearch && matchRepro;
+    let matchGest = true;
+    if (flockGestMin !== null || flockGestMax !== null) {
+      const g = (window._gestMap||{})[l.id];
+      matchGest = !!g && (flockGestMin === null || g.gd >= flockGestMin) && (flockGestMax === null || g.gd <= flockGestMax);
+    }
+    return matchStatus && matchType && matchRole && matchSex && matchGenetic && matchSearch && matchRepro && matchGest;
   });
+  window._flockFiltered = filtered;
 
   // Count of active filters (excluding search) for the "clear filters" indicator
-  const activeFilterCount = flockFilter.size + flockTypeFilter.size + flockRoleFilter.size + flockSexFilter.size + flockGeneticFilter.size + flockReproFilter.size;
+  const activeFilterCount = flockFilter.size + flockTypeFilter.size + flockRoleFilter.size + flockSexFilter.size + flockGeneticFilter.size + flockReproFilter.size + ((flockGestMin !== null || flockGestMax !== null) ? 1 : 0);
 
   const viewToggle = `
     <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0">
@@ -2116,13 +2214,20 @@ function renderFlock() {
         ${flockMultiSelectHtml('role', 'Role', 'All Roles', flockRoleFilter, roleOpts)}
         ${flockMultiSelectHtml('sex', 'Sex', 'All Sexes', flockSexFilter, sexOpts)}
         ${geneticOpts.length > 0 ? flockMultiSelectHtml('genetic', 'Genetic', 'All Codes', flockGeneticFilter, geneticOpts) : ''}
-        ${flockMultiSelectHtml('repro', 'Repro', 'All Repro', flockReproFilter, ['Confirmed Pregnant','Pending','Open','Lamb Born'])}
+        ${flockMultiSelectHtml('repro', 'Repro', 'All Repro', flockReproFilter, [{value:'Confirmed Pregnant', label:'Confirmed Pregnant'}, {value:'Pending', label:'Pending Check'}, {value:'Open', label:'Open'}, {value:'Lamb Born', label:'Lamb Born'}, {value:'Failed', label:'Failed'}])}
+        <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.82rem;color:var(--text2);background:${(flockGestMin!==null||flockGestMax!==null)?'var(--accent-glow)':'var(--surface)'};border:1px solid ${(flockGestMin!==null||flockGestMax!==null)?'var(--accent)':'var(--border)'};border-radius:var(--radius-sm);padding:0.25rem 0.6rem">
+          <span>Gest day</span>
+          <input id="flock-gest-min" type="number" min="0" max="160" placeholder="Min" value="${flockGestMin??''}" onchange="setFlockGestRange()" style="width:52px;padding:0.2rem 0.3rem;font-size:0.8rem">
+          <span>–</span>
+          <input id="flock-gest-max" type="number" min="0" max="160" placeholder="Max" value="${flockGestMax??''}" onchange="setFlockGestRange()" style="width:52px;padding:0.2rem 0.3rem;font-size:0.8rem">
+        </div>
         ${(activeFilterCount > 0 || flockSearch) ? `<button type="button" onclick="clearAllFlockFilters()" style="font-size:0.78rem;padding:0.35rem 0.7rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:500" title="Clear all filters and search">✕ Clear All</button>` : ''}
         ${viewToggle}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="openAddLamb()">+ Add Animal</button>
+      <button class="btn btn-secondary btn-sm" onclick="printFlockReport()">🖨 Print Report</button>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.9rem;display:flex;align-items:center;gap:0.5rem">
         <span style="font-size:1.1rem;font-weight:700;color:var(--accent)">${filtered.length}</span>
         <span style="font-size:0.75rem;color:var(--text3);font-weight:500">${filtered.length === 1 ? 'animal' : 'animals'}</span>
