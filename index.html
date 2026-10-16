@@ -287,7 +287,7 @@
   <div class="login-box">
     <div class="login-logo">🐑</div>
     <h1>Flock Health Ledger</h1>
-    <p id="login-farm-name">Hidden Creek Lambs</p>
+    <p id="login-farm-name">Van Nurden Family Genetics</p>
     <div class="login-error" id="login-error"></div>
     <div id="biometric-btn-wrap" style="display:none;margin-bottom:0.75rem">
       <button class="btn btn-primary" id="biometric-btn" style="width:100%;justify-content:center;background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:1rem" onclick="loginWithBiometric()">
@@ -570,13 +570,13 @@ function openFarmSettings() {
 
     <div id="fs-personal-section" style="${p.type==='business'?'display:none':''}">
       <div class="row">
-        <div class="field"><label>Farm / Operation Name</label><input id="fs-name" value="${p.name||''}" placeholder="e.g. Hidden Creek Lambs"></div>
+        <div class="field"><label>Farm / Operation Name</label><input id="fs-name" value="${p.name||''}" placeholder="e.g. Van Nurden Family Genetics"></div>
         <div class="field"><label>Owner Name</label><input id="fs-owner-personal" value="${p.owner||''}" placeholder="e.g. Paul VanNurden"></div>
       </div>
     </div>
     <div id="fs-business-section" style="${p.type==='business'?'':'display:none'}">
       <div class="row">
-        <div class="field"><label>Business Name</label><input id="fs-bizname" value="${p.bizname||''}" placeholder="e.g. Hidden Creek Lambs LLC"></div>
+        <div class="field"><label>Business Name</label><input id="fs-bizname" value="${p.bizname||''}" placeholder="e.g. Van Nurden Family Genetics LLC"></div>
         <div class="field"><label>Contact Name</label><input id="fs-owner-business" value="${p.owner||''}" placeholder="e.g. Paul VanNurden"></div>
       </div>
       <div class="field"><label>EIN / Tax ID</label><input id="fs-ein" value="${p.ein||''}" placeholder="XX-XXXXXXX"></div>
@@ -593,7 +593,7 @@ function openFarmSettings() {
       <div class="field"><label>Email</label><input id="fs-email" value="${p.email||''}" placeholder="email@example.com"></div>
     </div>
     <div class="field"><label>Website</label><input id="fs-website" value="${p.website||''}" placeholder="www.example.com"></div>
-    <div class="field"><label>Invoice Notes / Payment Terms</label><textarea id="fs-terms" rows="2" placeholder="e.g. Payment due within 30 days. Checks payable to Hidden Creek Lambs.">${p.terms||''}</textarea></div>
+    <div class="field"><label>Invoice Notes / Payment Terms</label><textarea id="fs-terms" rows="2" placeholder="e.g. Payment due within 30 days. Checks payable to Van Nurden Family Genetics.">${p.terms||''}</textarea></div>
 
     ${window.PublicKeyCredential ? `<div style="border-top:1px solid var(--border);margin-top:0.75rem;padding-top:0.75rem">
       <div style="font-size:0.7rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.5rem">Biometric Login</div>
@@ -810,7 +810,7 @@ function printDashPanel() {
   <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:1.5rem}h2{margin:0 0 0.25rem;font-size:16px}.sub{font-size:10px;color:#666;margin-bottom:1rem}
   table{width:100%;border-collapse:collapse}th{background:#f3f4f6;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;padding:5px 8px;text-align:left;border-bottom:2px solid #d1d5db}
   td{padding:5px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}td.box{width:18px;font-size:15px}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>
-  <h2>Hidden Creek Lambs — ${esc(title)}</h2>
+  <h2>Van Nurden Family Genetics — ${esc(title)}</h2>
   <div class="sub">Printed ${new Date().toLocaleDateString()} · ${rows.length} record${rows.length === 1 ? '' : 's'}</div>
   <table><thead><tr>${isChecklist ? '<th></th>' : ''}<th>Animal</th><th>Details</th><th>${isChecklist ? 'Due' : 'Status'}</th></tr></thead><tbody>${tr}</tbody></table></body></html>`;
   openPrintWindow(html, title);
@@ -2031,7 +2031,7 @@ function printFlockReport() {
   .lbl{font-size:9px;text-transform:uppercase;color:#666}.val{font-size:18px;font-weight:700}.note{font-size:9px;color:#666}
   table{width:100%;border-collapse:collapse}th{background:#f3f4f6;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;padding:5px 7px;text-align:left;border-bottom:2px solid #d1d5db}
   td{padding:4px 7px;border-bottom:1px solid #e5e7eb}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>
-  <h2>Hidden Creek Lambs — Flock Report</h2>
+  <h2>Van Nurden Family Genetics — Flock Report</h2>
   <div class="sub">Printed ${new Date().toLocaleDateString()} · Filters: ${esc(filterText)}</div>
   <div class="sum"><div><div class="lbl">Total Head</div><div class="val">${list.length}</div><div class="note">${esc(sexText)}</div></div>${pregBox}</div>
   <table><thead><tr><th>Name</th><th>Tag</th><th>Scrapie ID</th><th>Genetic</th><th>Sex</th><th>Flock</th><th>Status</th><th>Repro</th><th>Due</th><th>Fetuses</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
@@ -5011,7 +5011,7 @@ function printGestationList() {
   win.document.write(`<!DOCTYPE html><html><head><title>Gestation List</title>
   <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:1.5rem}h2{margin:0 0 0.25rem;font-size:16px}.sub{font-size:10px;color:#666;margin-bottom:1rem}table{width:100%;border-collapse:collapse}th{background:#f3f4f6;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;padding:5px 8px;text-align:left;border-bottom:2px solid #d1d5db}td{padding:5px 8px;border-bottom:1px solid #e5e7eb}.day-red{color:#dc2626;font-weight:700}.day-amber{color:#d97706;font-weight:700}.day-green{color:#15803d;font-weight:700}@media print{body{padding:0}}</style>
   </head><body>
-  <h2>Hidden Creek Lambs — Gestation List</h2>
+  <h2>Van Nurden Family Genetics — Gestation List</h2>
   <div class="sub">Printed ${new Date().toLocaleDateString()} · Green &lt;120d · Amber 120-139d · Red 140d+</div>
   <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:0 0 1rem;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb">
     <div><div style="font-size:9px;text-transform:uppercase;color:#666">Total Head</div><div style="font-size:18px;font-weight:700">${totalHead}</div></div>
@@ -6424,7 +6424,7 @@ function printFlushReport() {
     }
     body += '</div>';
   });
-  const html = `<!DOCTYPE html><html><head><title>Flush Report — Hidden Creek Lambs</title>
+  const html = `<!DOCTYPE html><html><head><title>Flush Report — Van Nurden Family Genetics</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:11px;color:#111;padding:1.5cm}
     h1{font-size:16px;font-weight:700;margin-bottom:0.25rem}.subtitle{font-size:10px;color:#666;margin-bottom:1rem}
@@ -6444,7 +6444,7 @@ function printFlushReport() {
     .s-pend{background:#fef3cd;color:#92560a}.s-neg{background:#fee2e2;color:#dc2626}
     .overdue{color:#dc2626;font-weight:600}@media print{body{padding:1cm}}
   </style></head><body>
-  <h1>&#x1F52C; Flush Report — Hidden Creek Lambs</h1>
+  <h1>&#x1F52C; Flush Report — Van Nurden Family Genetics</h1>
   <div class="subtitle">Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
   ${body}
   </body></html>`;
@@ -9071,7 +9071,7 @@ function openHealthPapers() {
       <div class="field"><label>Travel Date To</label><input type="date" id="hp-date-to" value="${weekOut}"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Owner / Farm Name</label><input id="hp-owner" value="Hidden Creek Lambs" placeholder="Farm name"></div>
+      <div class="field"><label>Owner / Farm Name</label><input id="hp-owner" value="Van Nurden Family Genetics" placeholder="Farm name"></div>
       <div class="field"><label>Owner Address</label><input id="hp-owner-address" placeholder="Farm address"></div>
     </div>
     <div class="field"><label>Veterinarian</label><input id="hp-vet" placeholder="Dr. Name, Clinic"></div>
@@ -9120,7 +9120,7 @@ async function generateHealthPapers() {
   const address = document.getElementById('hp-address')?.value?.trim() || '';
   const dateFrom = document.getElementById('hp-date-from')?.value || '';
   const dateTo = document.getElementById('hp-date-to')?.value || '';
-  const owner = document.getElementById('hp-owner')?.value?.trim() || 'Hidden Creek Lambs';
+  const owner = document.getElementById('hp-owner')?.value?.trim() || 'Van Nurden Family Genetics';
   const ownerAddress = document.getElementById('hp-owner-address')?.value?.trim() || '';
   const vet = document.getElementById('hp-vet')?.value?.trim() || '';
 
@@ -9248,7 +9248,7 @@ async function generateHealthPapers() {
   </div>
 
   <div class="footer">
-    Generated ${printDate} · ${getFarmProfile().name||getFarmProfile().bizname||'Hidden Creek Lambs'} · Flock Health Ledger
+    Generated ${printDate} · ${getFarmProfile().name||getFarmProfile().bizname||'Van Nurden Family Genetics'} · Flock Health Ledger
   </div>
 </body>
 </html>`;
@@ -13306,7 +13306,7 @@ async function printPlan(groupId) {
   ${scheduleSection(donorSteps, `🐑 Donor Protocol${prot?' — '+prot.name:''}`, '#2e7d4f')}
   ${isFlush ? scheduleSection(recipSteps, `🐄 Recip Protocol${recipProt?' — '+recipProt.name:''}`, '#1d4ed8') : ''}
 
-  <div class="footer">${getFarmProfile().name||getFarmProfile().bizname||'Hidden Creek Lambs'} · Flock Health Ledger · ${printDate}</div>
+  <div class="footer">${getFarmProfile().name||getFarmProfile().bizname||'Van Nurden Family Genetics'} · Flock Health Ledger · ${printDate}</div>
 </body>
 </html>`;
 
