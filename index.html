@@ -857,26 +857,26 @@ function showDashPanel(type) {
     const breedRows = (d.activeBreedRecs||[]).filter(r=>r.outcome==='Confirmed Pregnant').map(r => {
       const l = lambById[r.lamb_id]; if (!l) return '';
       const sire = r.ai_sire_id ? aiRamById[r.ai_sire_id] : (r.sire_id ? lambById[r.sire_id] : null);
-      return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      return { due: r.expected_lamb_date || '9999-12-31', html: `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span>
           <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}${r.expected_lamb_date?' · Due '+r.expected_lamb_date:''}</div>
         </div>
         <span style="display:flex;gap:0.35rem;align-items:center">${r.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${r.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span></span>
-      </div>`;
-    }).join('');
+      </div>` };
+    }).filter(Boolean);
     const etRows = (d.activeTransfers||[]).filter(t=>t.outcome==='Confirmed Pregnant').map(t => {
       const recip = lambById[t.recipient_id]; const donor = lambById[t.embryo_flushes?.donor_id];
       const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
-      return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      return { due: due || '9999-12-31', html: `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
           <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${due?' · Due '+due:''}</div>
         </div>
         <span style="display:flex;gap:0.35rem;align-items:center">${t.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${t.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span></span>
-      </div>`;
-    }).join('');
-    rows = breedRows + etRows;
+      </div>` };
+    }).filter(Boolean);
+    rows = [...breedRows, ...etRows].sort((x, y) => x.due.localeCompare(y.due)).map(x => x.html).join('');
   } else if (type === 'due7') {
     title = 'Due This Week';
     rows = [
