@@ -785,6 +785,20 @@ function actDueLabel(a) {
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 }
 
+// "in 58d" / "today" / "3d overdue" relative to a YYYY-MM-DD due date
+function dueInText(due) {
+  if (!due) return '';
+  const days = Math.round((new Date(due + 'T12:00:00').getTime() - Date.now()) / 864e5);
+  return days > 0 ? `in ${days}d` : days === 0 ? 'today' : `${Math.abs(days)}d overdue`;
+}
+
+// Gestation-day badge, colored like the Gestation List (green <120d, amber 120-139d, red 140d+)
+function pregDayBadge(gd) {
+  if (gd == null || isNaN(gd)) return '';
+  const color = gd >= 140 ? '#dc2626' : gd >= 120 ? '#b45309' : '#15803d';
+  return `<span style="font-size:0.72rem;font-weight:700;color:${color}">Day ${gd}</span>`;
+}
+
 // Sire of an embryo transfer (from the flush record): returns ' × Name' or '' if unknown
 function etSireText(t) {
   const f = t && t.embryo_flushes;
@@ -869,9 +883,9 @@ function showDashPanel(type) {
       return { due: r.expected_lamb_date || '9999-12-31', html: `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}${r.expected_lamb_date?' · Due '+r.expected_lamb_date:''}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}${r.expected_lamb_date?' · Due '+r.expected_lamb_date+' · '+dueInText(r.expected_lamb_date):''}</div>
         </div>
-        <span style="display:flex;gap:0.35rem;align-items:center">${r.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${r.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span></span>
+        <span style="display:flex;gap:0.35rem;align-items:center">${pregDayBadge(gestDays(r.breeding_date))}${r.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${r.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#dcfce7;color:#15803d;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">Natural/AI</span></span>
       </div>` };
     }).filter(Boolean);
     const etRows = (d.activeTransfers||[]).filter(t=>t.outcome==='Confirmed Pregnant').map(t => {
@@ -880,9 +894,9 @@ function showDashPanel(type) {
       return { due: due || '9999-12-31', html: `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${etSireText(t)}${due?' · Due '+due:''}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${etSireText(t)}${due?' · Due '+due+' · '+dueInText(due):''}</div>
         </div>
-        <span style="display:flex;gap:0.35rem;align-items:center">${t.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${t.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span></span>
+        <span style="display:flex;gap:0.35rem;align-items:center">${pregDayBadge(gestDays(etConceptionDate(t)))}${t.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${t.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span></span>
       </div>` };
     }).filter(Boolean);
     rows = [...breedRows, ...etRows].sort((x, y) => x.due.localeCompare(y.due)).map(x => x.html).join('');
