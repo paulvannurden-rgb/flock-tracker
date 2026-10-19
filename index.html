@@ -661,7 +661,7 @@ async function init() {
 async function loadBreedingAndTransfers() {
   const [{ data: breedData }, { data: transferData }] = await Promise.all([
     db.from('breeding_records').select('*').order('breeding_date'),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id,sire_id,ai_sire_id,sire_text)'),
   ]);
   window._breedingAllRecs = breedData || [];
   window._allTransfers = transferData || [];
@@ -785,6 +785,15 @@ function actDueLabel(a) {
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 }
 
+// Sire of an embryo transfer (from the flush record): returns ' × Name' or '' if unknown
+function etSireText(t) {
+  const f = t && t.embryo_flushes;
+  if (!f) return '';
+  const sire = f.ai_sire_id ? aiRamById[f.ai_sire_id] : (f.sire_id ? lambById[f.sire_id] : null);
+  const name = (sire && sire.name) || f.sire_text || '';
+  return name ? ` × ${name}` : '';
+}
+
 function printDashPanel() {
   const panel = document.getElementById('dash-panel');
   if (!panel) return;
@@ -871,7 +880,7 @@ function showDashPanel(type) {
       return { due: due || '9999-12-31', html: `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
         <div>
           <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span>
-          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${due?' · Due '+due:''}</div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${etSireText(t)}${due?' · Due '+due:''}</div>
         </div>
         <span style="display:flex;gap:0.35rem;align-items:center">${t.fetal_count?`<span style="font-size:0.72rem;color:var(--text2);font-weight:600">${t.fetal_count} 🐑</span>`:''}<span style="font-size:0.7rem;background:#ede9fe;color:#7c3aed;border-radius:1rem;padding:0.15rem 0.5rem;font-weight:600">ET</span></span>
       </div>` };
@@ -881,13 +890,13 @@ function showDashPanel(type) {
     title = 'Due This Week';
     rows = [
       ...(d.dueSoon||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; const sire=r.ai_sire_id?aiRamById[r.ai_sire_id]:(r.sire_id?lambById[r.sire_id]:null); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">× ${sire?.name||r.sire_text||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${r.expected_lamb_date}</span></div>`; }),
-      ...(d.dueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${due}</span></div>`; })
+      ...(d.dueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.5rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:0.5rem" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"><div><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'}</span><div style="font-size:0.72rem;color:var(--text3);margin-top:0.1rem">← ${donor?.name||'?'}${etSireText(t)}</div></div><span style="font-size:0.72rem;color:#92400e;font-weight:600">${due}</span></div>`; })
     ].join('');
   } else if (type === 'overdue') {
     title = 'Overdue';
     rows = [
       ...(d.overdue||[]).map(r => { const l=lambById[r.lamb_id]; if(!l) return ''; return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditBreedingGlobal('${r.id}','${r.lamb_id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${l.name}${l.ear_tag?` <span style="color:var(--text3);font-weight:400">#${l.ear_tag}</span>`:''}</span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">Due ${r.expected_lamb_date}</div></div><button onclick="openQuickLambing('${r.lamb_id}','${r.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐣 Record</button></div>`; }),
-      ...(d.overdueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">ET Due ${due}</div></div><button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button></div>`; })
+      ...(d.overdueTransfers||[]).map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem"><div style="flex:1;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')"><span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}${etSireText(t)}</span></span><div style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-top:0.1rem">ET Due ${due}</div></div><button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button></div>`; })
     ].join('');
   }
 
@@ -953,7 +962,7 @@ async function renderDashboard() {
 
   const [{ data: breedRecs }, { data: transfers }, { data: weights }, { data: healthRecs }, { data: activeHealthRecsRaw }, { data: lcProtocols }, { data: lcSteps }, { data: lcCompletions }, { data: lambingRecs }] = await Promise.all([
     db.from('breeding_records').select('*').order('expected_lamb_date'),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id,sire_id,ai_sire_id,sire_text)'),
     db.from('weight_records').select('*').order('weigh_date', {ascending:false}).limit(50),
     db.from('health_records').select('*').order('date', {ascending:false}).limit(30),
     db.from('health_records').select('*').order('withdrawal_date'),
@@ -1154,7 +1163,7 @@ async function renderDashboard() {
           </div>`; }).join('')}
           ${overdueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.45rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">
             <div style="flex:1;cursor:pointer;min-width:0" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
-              <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}</span></span>
+              <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem;font-weight:400">← ${donor?.name||'?'}${etSireText(t)}</span></span>
               <span style="font-size:0.72rem;color:#dc2626;font-weight:600;margin-left:0.5rem">ET Due ${due}</span>
             </div>
             <button onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')" style="background:#dc2626;color:#fff;border:none;border-radius:var(--radius-sm);padding:0.2rem 0.5rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">🐑 Record</button>
@@ -1169,7 +1178,7 @@ async function renderDashboard() {
             <span style="font-size:0.72rem;color:#92400e">${r.expected_lamb_date}</span>
           </div>`; }),
           ...dueTransfers.map(t => { const recip=lambById[t.recipient_id]; const donor=lambById[t.embryo_flushes?.donor_id]; const due=new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10); return `<div style="padding:0.55rem 0.85rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="openEditTransferGlobal('${t.flush_id}','${t.id}')">
-            <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem">← ${donor?.name||'?'}</span></span>
+            <span style="font-weight:600;color:var(--text);font-size:0.85rem">${recip?.name||t.recipient_text||'?'} <span style="color:var(--text3);font-size:0.72rem">← ${donor?.name||'?'}${etSireText(t)}</span></span>
             <span style="font-size:0.72rem;color:#92400e">${due}</span>
           </div>`; })].join('')}
         </div>` : ''}
@@ -4861,7 +4870,7 @@ async function renderBreeding() {
 async function showGestationList(filterType, filterOutcome, filterMinDay, filterMaxDay) {
   // Always load fresh so edits (fetal counts, outcomes, dates) show up — cached copies went stale after saves
   const [{ data: freshTransfers }, { data: freshBreeding }] = await Promise.all([
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id,sire_id,ai_sire_id,sire_text)'),
     db.from('breeding_records').select('*'),
   ]);
   window._allTransfers = freshTransfers || [];
@@ -4884,7 +4893,7 @@ async function showGestationList(filterType, filterOutcome, filterMinDay, filter
       const donor = lambById[t.embryo_flushes?.donor_id];
       const gd = gestDays(etConceptionDate(t));
       const due = t.implant_date ? new Date(new Date(etConceptionDate(t)+'T12:00:00').getTime()+147*864e5).toISOString().slice(0,10) : null;
-      return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: donor?.name||'?', gd, due, outcome: t.outcome, type: 'ET', fetal: t.fetal_count||null, flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
+      return { name: recip?.name||t.recipient_text||'?', tag: recip?.ear_tag||'', sire: (donor?.name||'?') + etSireText(t), gd, due, outcome: t.outcome, type: 'ET', fetal: t.fetal_count||null, flockType: recip?.flock_type||'', onclick: `openEditTransferGlobal('${t.flush_id}','${t.id}')` };
     }),
   ].sort((a,b) => (b.gd||0) - (a.gd||0));
 
@@ -5395,7 +5404,7 @@ async function renderFlushes() {
   document.getElementById('main-content').innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
   const [{ data: flushes }, { data: allTransfers }] = await Promise.all([
     db.from('embryo_flushes').select('*').order('flush_date', {ascending:false}),
-    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id)'),
+    db.from('embryo_transfers').select('*, embryo_flushes(flush_date,breed_date,flush_type,donor_id,sire_id,ai_sire_id,sire_text)'),
   ]);
   window._flushAllRecs = flushes || [];
   window._flushAllTransfers = allTransfers || [];
