@@ -201,6 +201,9 @@
       padding: 1rem;
       max-height: 100vh;
       height: 100vh;
+      max-height: 100dvh;
+      height: 100dvh;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
       max-width: 100% !important;
       border-radius: 0;
     }
@@ -1756,8 +1759,8 @@ function openQuickEntry(type) {
   _qeBatchMode = false;
   const titles = { weight:'⚖️ Log Weight', treatment:'💊 Log Treatment', lambing:'🐣 Record Lambing' };
   const lambOpts = type === 'lambing'
-    ? allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe').map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('')
-    : allLambs.filter(l=>l.status==='Active').map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+    ? allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe')
+    : allLambs.filter(l=>l.status==='Active');
 
   showModal(`
     <div class="modal-header">
@@ -1766,11 +1769,16 @@ function openQuickEntry(type) {
     </div>
     <div class="field">
       <label>Animal</label>
-      <input id="qe-search" placeholder="Type name or ear tag…" oninput="filterQeAnimals(this.value,'${type}')" autocomplete="off"
-        style="margin-bottom:0.35rem">
-      <select id="qe-animal" size="5" style="width:100%;padding:0.3rem;font-size:0.85rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);height:130px">
-        ${lambOpts}
-      </select>
+      <input type="hidden" id="qe-animal" value="">
+      <div id="qe-chosen" style="display:none;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.7rem 0.85rem;min-height:48px;background:var(--accent-glow);border:1px solid var(--accent);border-radius:var(--radius-sm)">
+        <span id="qe-chosen-name" style="font-weight:700;font-size:1rem;color:var(--text)"></span>
+        <button type="button" onclick="clearQeAnimal()" style="background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:0.45rem 0.8rem;min-height:36px;color:var(--text2);font-size:0.85rem;cursor:pointer">Change</button>
+      </div>
+      <div id="qe-picker">
+        <input id="qe-search" type="search" inputmode="search" placeholder="Search name or ear tag…" oninput="filterQeAnimals(this.value,'${type}')" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          style="margin-bottom:0.5rem;font-size:16px;min-height:44px">
+        <div id="qe-animal-list" style="max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)">${qeAnimalRows(lambOpts)}</div>
+      </div>
     </div>
     <div id="qe-form-fields">${renderQeFields(type)}</div>
     <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
@@ -1789,7 +1797,7 @@ function renderQeFields(type) {
   const today = new Date().toISOString().slice(0,10);
   if (type === 'weight') return `
     <div class="row">
-      <div class="field"><label>Weight (lbs)</label><input type="number" id="qe-weight" placeholder="e.g. 85.5" step="0.1" min="0" style="font-size:1.1rem;font-weight:600"></div>
+      <div class="field"><label>Weight (lbs)</label><input type="number" inputmode="decimal" id="qe-weight" placeholder="e.g. 85.5" step="0.1" min="0" style="font-size:1.1rem;font-weight:600"></div>
       <div class="field"><label>Date</label><input type="date" id="qe-date" value="${today}"></div>
     </div>
     <div class="field"><label>Notes</label><input id="qe-notes" placeholder="Optional"></div>`;
@@ -1822,15 +1830,47 @@ function renderQeFields(type) {
   return '';
 }
 
+// Tap-friendly animal rows for Quick Entry (big touch targets, sorted by name)
+function qeAnimalRows(animals) {
+  const esc = t => String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const sorted = [...animals].sort((a, b) => (a.name||'').localeCompare(b.name||'', undefined, { numeric:true, sensitivity:'base' }));
+  if (!sorted.length) return `<div style="padding:1rem;text-align:center;color:var(--text3);font-size:0.9rem">No matching animals</div>`;
+  return sorted.map(l => `<div onclick="selectQeAnimal('${l.id}')" style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.75rem 0.85rem;min-height:48px;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,0.08)">
+      <span style="font-size:1rem;font-weight:600;color:var(--text)">${esc(l.name)}</span>
+      <span style="font-size:0.85rem;color:var(--text3)">${l.ear_tag ? '#' + esc(l.ear_tag) : ''}${l.sex ? ' · ' + esc(l.sex) : ''}</span>
+    </div>`).join('');
+}
+
+function selectQeAnimal(id) {
+  const l = allLambs.find(x => x.id === id);
+  if (!l) return;
+  document.getElementById('qe-animal').value = id;
+  document.getElementById('qe-chosen-name').textContent = l.name + (l.ear_tag ? ' #' + l.ear_tag : '');
+  document.getElementById('qe-chosen').style.display = 'flex';
+  document.getElementById('qe-picker').style.display = 'none';
+  // Jump straight to the main field so the keyboard comes up ready to type
+  const next = document.getElementById('qe-weight') || document.getElementById('qe-born');
+  if (next) setTimeout(() => next.focus(), 50);
+}
+
+function clearQeAnimal() {
+  const hidden = document.getElementById('qe-animal');
+  if (hidden) hidden.value = '';
+  const chosen = document.getElementById('qe-chosen');
+  const picker = document.getElementById('qe-picker');
+  if (chosen) chosen.style.display = 'none';
+  if (picker) picker.style.display = '';
+  setTimeout(() => document.getElementById('qe-search')?.focus(), 50);
+}
+
 function filterQeAnimals(query, type) {
-  const sel = document.getElementById('qe-animal');
-  if (!sel) return;
+  const list = document.getElementById('qe-animal-list');
+  if (!list) return;
   const pool = type === 'lambing'
     ? allLambs.filter(l=>l.status==='Active'&&l.sex==='Ewe')
     : allLambs.filter(l=>l.status==='Active');
-  const q = query.toLowerCase();
-  sel.innerHTML = pool.filter(l => !q || l.name.toLowerCase().includes(q) || (l.ear_tag||'').toLowerCase().includes(q))
-    .map(l=>`<option value="${l.id}">${l.name}${l.ear_tag?' #'+l.ear_tag:''}</option>`).join('');
+  const q = (query || '').toLowerCase().trim();
+  list.innerHTML = qeAnimalRows(pool.filter(l => !q || (l.name||'').toLowerCase().includes(q) || (l.ear_tag||'').toLowerCase().includes(q)));
 }
 
 async function saveQuickEntry() {
@@ -1875,6 +1915,7 @@ async function saveQuickEntry() {
   if (_qeBatchMode) {
     // Clear inputs, keep animal list and type, ready for next entry
     if (_qeType === 'treatment') { window._qeProducts = [{ name:'', dose:'', route:'', withdrawalDays:null }]; renderQeProductsList(); }
+    const weightEl = document.getElementById('qe-weight');
     const bornEl = document.getElementById('qe-born');
     const aliveEl = document.getElementById('qe-alive');
     const malesEl = document.getElementById('qe-males');
@@ -1888,6 +1929,7 @@ async function saveQuickEntry() {
     if (femalesEl) femalesEl.value = '';
     if (notesEl) notesEl.value = '';
     if (searchEl) searchEl.value = '';
+    clearQeAnimal();
     filterQeAnimals('', _qeType);
     // Focus back on search
     setTimeout(() => document.getElementById('qe-search')?.focus(), 50);
