@@ -190,7 +190,21 @@
     .mobile-nav { display: none !important; }
     nav { display: none; }
     div[style*="margin-left:220px"] { margin-left: 0 !important; padding-top: 56px; }
-    main { padding: 0.75rem; padding-top: 1rem; }
+    main { padding: 0.75rem; padding-top: 1rem; min-width: 0; max-width: 100%; overflow-x: hidden; }
+    div[style*="margin-left:220px"] { min-width: 0; }
+    /* iOS Safari zooms the whole page when you tap a form field smaller than 16px, and stays zoomed afterwards */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+    /* Let the page shell shrink to the phone screen instead of growing to fit the widest content */
+    #app > div { min-width: 0; max-width: 100%; }
+    /* Header / toolbar rows wrap onto a second line instead of running off-screen */
+    main div[style*="display:flex"]:not([style*="flex-direction:column"]):not([style*="nowrap"]) { flex-wrap: wrap; }
+    main select, main input:not([type="checkbox"]):not([type="radio"]) { max-width: 100%; }
+    /* Calendar: seven narrow columns on a phone, so chips shrink and truncate (full details are in the Upcoming Events list) */
+    main div[style*="repeat(7,1fr)"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+    #cal-grid > div { min-width: 0; min-height: 56px !important; padding: 0.2rem !important; }
+    #cal-grid > div > div:not(:first-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6rem !important; padding: 0.05rem 0.2rem !important; }
+    .dash-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .dash-two-col { grid-template-columns: minmax(0, 1fr) !important; }
     .flock-grid { grid-template-columns: 1fr 1fr; }
     header { flex-wrap: wrap; gap: 0.5rem; }
 
@@ -1101,7 +1115,7 @@ async function renderDashboard() {
 
   mc.innerHTML = `
       <div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem">⚡ Quick Entry</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:0.75rem">
+      <div class="dash-quick-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:0.75rem">
         <!-- Weight -->
         <div style="display:flex;flex-direction:column;gap:0.3rem">
           <button onclick="openQuickEntry('weight')" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem 0.5rem;cursor:pointer;text-align:center;transition:all 0.15s;flex:1" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
@@ -1165,7 +1179,7 @@ async function renderDashboard() {
     <!-- Expandable detail panel -->
     <div id="dash-panel" style="display:none;margin-bottom:1rem"></div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div class="dash-two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
       <!-- Alerts column -->
       <div>
         ${overdue.length+overdueTransfers.length > 0 ? `
